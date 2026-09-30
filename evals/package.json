@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "A two-eval automated benchmark measuring whether a model reasons or mimics.",
+  "description": "A two-eval automated benchmark probing induction and sound solver code.",
   "engines": {
     "node": ">=20"
   },

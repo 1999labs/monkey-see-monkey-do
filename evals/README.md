@@ -1,14 +1,18 @@
 # MONKEY SEE / MONKEY DO
 
-Two automated evals that measure whether a language model **reasons** or merely
-**mimics**. No human scoring, no rubrics, no runtime dependencies.
+Two automated evals that probe two narrow skills: **induction** — generalizing a
+rule from examples instead of copying their surface — and **sound solver code,
+plus knowing when you don't know**. No human scoring, no rubrics, no runtime
+dependencies.
 
 | Eval | Question | Score |
 |---|---|---|
 | **MONKEY SEE** | Given 8 examples of an unknown function, does the model infer the rule, or copy the surface? | 50 points + the Monkey Index |
 | **MONKEY DO** | Given a Minesweeper position, does the model write a solver that only ever makes proven moves, and stops when nothing can be proven? | 50 points |
 
-The full design, and the reasoning behind every number, is in [`../guide.md`](../guide.md).
+A working design document covering the reasoning behind every number in here
+existed alongside the code; it was removed from the working tree and remains in
+the git history.
 
 ## Quickstart
 
