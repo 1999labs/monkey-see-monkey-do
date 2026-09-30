@@ -5,8 +5,8 @@
 // WHY THIS EXISTS RATHER THAN TWO SEPARATE RUNS.
 //
 // The two evals share a model, a key and a reproducibility verdict, and they are
-// only interesting TOGETHER: SEE asks whether a model induces a rule, DO asks
-// whether it deduces under constraints. Run separately, the two JSON files
+// only interesting TOGETHER: SEE scores rule induction from examples, DO scores
+// the soundness of a solver's moves. Run separately, the two JSON files
 // could legitimately disagree — different provider fallback, a different run
 // count, one sampled at temperature 0 and one not — and there would be no way
 // to tell a model difference from a setup difference.
@@ -67,10 +67,15 @@ const pct = (r) => `${Math.round(r * 100)}%`;
 /**
  * The combined reading.
  *
- * The one comparison the suite exists to make, and deliberately blunt. SEE's
- * Monkey Index measures mimicry on held-out inputs; DO's confident-error rate
- * (detonations plus lucky guesses) measures acting without proof. A model high
- * on both has found a way to look right without reasoning.
+ * The one comparison the suite exists to make, and deliberately blunt. Both
+ * numbers are facts about what the model emitted: SEE's Monkey Index is the gap
+ * between its score on the examples it was shown and on inputs it was not; DO's
+ * confident-error rate is how often the solver it wrote moved without proof.
+ *
+ * High on both means the model scored well on what it was shown and then its
+ * solver acted beyond what the position supported. That is a real pattern in
+ * the artefacts and worth flagging. It is not evidence about how the model
+ * reached either result — see the limitations, which every report carries.
  */
 export const summarise = (see, doo) => {
   const index = Math.round(see.index.index * 100);
@@ -85,16 +90,17 @@ export const summarise = (see, doo) => {
   lines.push(`  SEE ${seeTotal}/50  ·  DO ${doo.score.total}/50  ·  combined ${seeTotal + doo.score.total}/100`);
   lines.push("");
   if (index >= 30 && unproven >= 0.1) {
-    lines.push("  This model mimics on SEE and guesses on DO. That is the pattern");
-    lines.push("  the suite is built to detect: passing the examples it was shown,");
-    lines.push("  then acting without proof once the examples run out.");
+    lines.push("  High Monkey Index with confident errors on DO: it scored well on the");
+    lines.push("  examples it was shown, and the solver it wrote then moved without");
+    lines.push("  proof. Both are properties of the output; neither names a cause.");
   } else if (index <= 10 && unproven === 0) {
-    lines.push("  This model deduced on both evals. That is rare, and worth");
-    lines.push("  checking the run was reproducible before believing it.");
+    lines.push("  Generalizes on SEE, and the solver it wrote never moved without proof");
+    lines.push("  on DO. Both results are also consistent with recall of a known approach");
+    lines.push("  rather than derivation — check the run was reproducible first.");
   } else {
     lines.push("  Mixed: the two evals disagree. Worth reading the per-tier DO");
     lines.push("  breakdown — a model that only handles small boards has learned");
-    lines.push("  to look at small boards, not to deduce.");
+    lines.push("  to look at small boards.");
   }
   return lines.join("\n");
 };

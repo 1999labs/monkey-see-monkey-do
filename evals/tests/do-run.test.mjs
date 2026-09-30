@@ -25,7 +25,7 @@ const seeFixture = (index, points = 20) => ({
   points,
   noCrash: 5,
   index: { index: index / 100 },
-  reading: index <= 10 ? "reasoned" : "MIMIC — copied the visible examples, understood nothing",
+  reading: index <= 10 ? "generalizes — held-out performance matches shown performance" : "SURFACE FIT — shown performance carried no information about held-out",
   seen: { rate: 0.6 },
 });
 
@@ -37,25 +37,32 @@ const doFixture = (detonations, total = 10) => ({
   score: { total: 30, poolA: {}, poolB: {} },
 });
 
-test("a model that mimics on SEE and guesses on DO is called out", () => {
-  // The comparison the suite exists to make. A high index plus detonations is
-  // the signature: it passes what it was shown, then acts without proof.
+test("a high index plus confident errors is called out, without naming a cause", () => {
+  // The comparison the suite exists to make. A high index plus confident errors
+  // is a real pattern in the output. The summary must describe the pattern and
+  // must NOT assert the model "mimics" or "guesses" — those are claims about a
+  // process the harness never observes.
   const s = summarise(seeFixture(55), doFixture(4));
-  assert.match(s, /mimics on SEE and guesses on DO/);
+  assert.match(s, /High Monkey Index with confident errors/);
+  assert.match(s, /neither names a cause/);
+  assert.doesNotMatch(s, /\bmimics\b|\bguesses\b|\breasoned\b|\bdeduced\b/i);
 });
 
-test("a model that deduces on both is flagged as worth verifying", () => {
+test("a clean sweep is not celebrated as deduction", () => {
   // Not celebrated outright — an unusually good result is exactly when a
-  // reproducibility bug is most likely to have crept in.
+  // reproducibility bug is most likely to have crept in, and recall of a known
+  // algorithm is equally consistent with the numbers.
   const s = summarise(seeFixture(0), doFixture(0));
-  assert.match(s, /deduced on both evals/);
+  assert.match(s, /never moved without proof/);
+  assert.match(s, /consistent with recall of a known approach/);
   assert.match(s, /reproducible/, "should prompt a reproducibility check");
+  assert.doesNotMatch(s, /\bdeduced\b|\breasoned\b/i, "must not claim deduction from output alone");
 });
 
 test("disagreement between the evals is reported as mixed, not forced", () => {
   const s = summarise(seeFixture(50), doFixture(0));
   assert.match(s, /Mixed/);
-  assert.ok(!/mimics on SEE and guesses/.test(s), "must not overclaim from one axis");
+  assert.ok(!/High Monkey Index with confident errors/.test(s), "must not overclaim from one axis");
 });
 
 test("the summary reports both headline numbers", () => {

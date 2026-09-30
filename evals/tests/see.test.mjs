@@ -88,16 +88,23 @@ test("monkey index pools seen and held-out across all three tasks", () => {
   assert.equal(m.index, 0);
 });
 
-test("a mimic scores materially above zero on the index", () => {
+test("a surface-fit strategy scores materially above zero on the index", () => {
   const naiveById = Object.fromEntries(tasks.map((t) => [t.id, t.naive]));
   const results = tasks.map((t) => scoreTask(t, t.naive));
   const m = monkeyIndex(scoreSeen(naiveById), results);
   assert.ok(m.index > 0.05, `index was ${m.index}`);
 });
 
-test("index interpretation bands", () => {
-  assert.match(readIndex(5), /reasoned/);
-  assert.match(readIndex(70), /MIMIC/);
+test("index interpretation bands describe the metric, not a mental state", () => {
+  // The wording is deliberate: these label a difference in pass rates, and
+  // never claim to have observed reasoning. A regression to "reasoned" here
+  // re-introduces the overclaim the suite already walked back.
+  assert.match(readIndex(5), /generalizes/);
+  assert.match(readIndex(70), /SURFACE FIT/);
+  for (const idx of [0, 5, 10, 30, 60, 70]) {
+    assert.doesNotMatch(readIndex(idx), /\breasoned\b|\bmimic|\bMIMIC\b|understood/i,
+      `band ${idx} asserts a mental state: ${readIndex(idx)}`);
+  }
 });
 
 // --- data format ---------------------------------------------------------

@@ -153,5 +153,5 @@ test("the acceptance gate rehearses end to end and tells a strong model from a w
   assert.equal(byName["guide.md 9.1 requires three runs per model"], false, "two runs must be flagged as short of the requirement");
   assert.equal(r.code, 1, "an unmet criterion fails the rehearsal too");
   assert.deepEqual(report.models.strong.see, [50, 50]);
-  assert.ok(report.models.weak.see.every((t) => t < 30), `a mimic should land near the naive band: ${report.models.weak.see}`);
+  assert.ok(report.models.weak.see.every((t) => t < 30), `a surface-fit strategy should land near the naive band: ${report.models.weak.see}`);
 });

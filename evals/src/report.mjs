@@ -22,12 +22,19 @@ import { fingerprint } from "./see/fingerprint.mjs";
 import { temperatureStatus } from "./adapters/registry.mjs";
 
 /**
- * guide.md 10.3: "A report omitting the limitations is invalid, regardless of
- * the scores." So every report — SEE, DO and combined — carries all of them,
- * and the console prints them after every run.
+ * A report omitting the limitations is invalid, regardless of the scores. So
+ * every report — SEE, DO and combined — carries all of them, and the console
+ * prints them after every run.
+ *
+ * These are the load-bearing ones. Two in particular constrain how far any
+ * score can be read: DO scores a program rather than a chain of thought, and a
+ * low Monkey Index is evidence of generalization but not of abstraction.
  */
 export const LIMITATIONS = [
-  "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and constraint deduction (DO), not software engineering.",
+  "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and solver soundness (DO), not software engineering.",
+  "DO scores a program, not a chain of thought. The model writes solve(board, mines) in a single call and never sees an individual board, so a DO score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
+  "A low Monkey Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
+  "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
   "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
   "Not comparable to SWE-bench, HumanEval, or any external leaderboard. Different scale, different construction; never present these numbers alongside one.",
   "DO has residual contamination risk. Constraint propagation with search is a textbook algorithm, so a high DO score shows the model can produce a correct solver, not that it deduced one afresh.",

@@ -121,14 +121,14 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     check(`Task ${task.id} totals 50 held-out cases`, cases.length === 50);
   }
 
-  // --- 6. A mimic produces a high Monkey Index ----------------------------
-  log("\n6. A pure mimic is detected (naive as stand-in)");
+  // --- 6. A surface-fit strategy produces a high Monkey Index ---------------
+  log("\n6. A surface-fit strategy is detected (naive as stand-in)");
   const mimicResults = tasks.map((t) => scoreTask(t, t.naive));
   const mimicSeen = scoreSeen(Object.fromEntries(tasks.map((t) => [t.id, t.naive])));
   const mimic = monkeyIndex(mimicSeen, mimicResults);
   log(`        SEEN ${(mimic.seen * 100).toFixed(0)}%  HELD-OUT ${(mimic.heldOut * 100).toFixed(0)}%  INDEX ${(mimic.index * 100).toFixed(0)}`);
   check(
-    "Mimic index is meaningfully above zero",
+    "Surface-fit index is meaningfully above zero",
     mimic.index > 0.05,
     `index ${(mimic.index * 100).toFixed(0)}`
   );

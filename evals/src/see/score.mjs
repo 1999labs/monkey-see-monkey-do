@@ -134,11 +134,27 @@ export const monkeyIndex = (seen, taskResults) => {
   };
 };
 
+/**
+ * Read a Monkey Index as a statement about two score sets.
+ *
+ * Deliberately descriptive, never interpretive. The index is a difference in
+ * pass rates, so the most it can support is a claim about how far performance
+ * on the shown examples predicted performance on unseen inputs.
+ *
+ * What a LOW index does NOT establish: that the model induced a general rule.
+ * A shallow heuristic fitted to this generator's held-out input shapes would
+ * score identically to a principled induction. Telling those apart needs a
+ * held-out task family — a task the model provably could not have seen — and
+ * the suite does not have one.
+ *
+ * What a HIGH index does establish, and it is worth stating plainly: the shown
+ * score carried no information about the held-out score. That much is arithmetic.
+ */
 export const readIndex = (index) => {
-  if (index <= 10) return "reasoned";
-  if (index <= 30) return "mostly reasoned, with gaps on edge cases";
-  if (index <= 60) return "partial mimicry — got the common case, missed the rule";
-  return "MIMIC — copied the visible examples, understood nothing";
+  if (index <= 10) return "generalizes — held-out performance matches shown performance";
+  if (index <= 30) return "mostly generalizes — held-out trails shown on some cases";
+  if (index <= 60) return "partial — fits the shown examples better than new ones";
+  return "SURFACE FIT — shown performance carried no information about held-out";
 };
 
 // --- Robustness bonus ----------------------------------------------------
