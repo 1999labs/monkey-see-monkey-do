@@ -142,9 +142,34 @@ Changing a prompt changes its digest: update `src/prompt-digests.mjs` and bump t
 Changing the oracle or pool classification: bump `GENERATOR_VERSION` in `pool.mjs` and run
 `npm run gen-pool`; loading a pool built by a different generator fails loudly.
 
+Every number the suite asserts — the naive baselines, the 0% random baseline, the
+effort cap and how it was derived, the pool's shape and acceptance rates — is
+recorded in [`docs/calibration.md`](docs/calibration.md), with the commands that
+re-derive each one. Read it before changing a held-out set, the pool, the oracle
+or the cap.
+
+### The publication gate
+
+`npm run acceptance` runs every criterion below and writes
+`results/acceptance-<date>.json`. `--quick` rehearses on a subset and can never
+report a pass.
+
+| Criterion | Requirement |
+|---|---|
+| Discriminates strong from weak | A known-strong model outscores a 7B model on both evals |
+| Naive baseline lands in band | 20–45% on every SEE task |
+| Random baseline lands in band | DO random survival is 0% on every tier |
+| Oracle reaches 100% | The reference solver wins every Pool A board and stops correctly on every Pool B board — a dry run scores 50/50 |
+| Variance is low | Three runs at `temperature: 0` differ by ≤ 2 points |
+| Self-test passes | Every self-test check, including full pool regeneration |
+
+If any criterion fails, the eval is not published. An eval that does not
+discriminate is worse than no eval, because it manufactures false confidence.
+
 ```
 evals/
 ├── config/models.example.json   model registry template
+├── docs/calibration.md          every asserted number, and how it was measured
 ├── src/
 │   ├── adapters/                openai.mjs, ollama.mjs, registry.mjs
 │   ├── sandbox.mjs              node:vm execution, per-call timeout, code extraction
