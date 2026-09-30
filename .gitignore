@@ -1,0 +1,19 @@
+# Secrets — NEVER commit these.
+.env
+.env.local
+*.env
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Results may contain model output; local by default.
+results/
+prompts.txt
+
+# OS
+.DS_Store
+
+# Backgrounded run logs
+nohup.out
+*.log

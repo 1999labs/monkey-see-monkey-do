@@ -1,0 +1,26 @@
+{
+  "name": "monkey-see-monkey-do",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "A two-eval automated benchmark measuring whether a model reasons or mimics.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "self-test": "node scripts/self-test.mjs",
+    "self-test:full": "node scripts/self-test.mjs --full",
+    "prompts": "node scripts/show-prompts.mjs",
+    "see": "node src/see/run.mjs",
+    "do": "node src/do/run.mjs",
+    "dry-run": "node src/do/run.mjs --dry-run",
+    "all": "node src/run-all.mjs",
+    "gen-pool": "node scripts/gen-pool.mjs",
+    "check-pool": "node scripts/gen-pool.mjs --check",
+    "acceptance": "node scripts/acceptance.mjs",
+    "providers": "node scripts/providers.mjs",
+    "diagnose": "node scripts/diagnose.mjs",
+    "setup-key": "bash setup-key.sh"
+  }
+}

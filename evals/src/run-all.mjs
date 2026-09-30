@@ -1,0 +1,245 @@
+// MONKEY SEE / MONKEY DO — run both evals against one model.
+//
+//   node src/run-all.mjs --model openrouter/dots-3-note-preview:free
+//
+// WHY THIS EXISTS RATHER THAN TWO SEPARATE RUNS.
+//
+// The two evals share a model, a key and a reproducibility verdict, and they are
+// only interesting TOGETHER: SEE asks whether a model induces a rule, DO asks
+// whether it deduces under constraints. Run separately, the two JSON files
+// could legitimately disagree — different provider fallback, a different run
+// count, one sampled at temperature 0 and one not — and there would be no way
+// to tell a model difference from a setup difference.
+//
+// So this resolves the model and the key ONCE, runs both evals against that
+// same config, and writes both reports plus a combined one (guide.md 10.3).
+
+import { runSee, printSeeRun } from "./see/run.mjs";
+import { reproducibility } from "./see/fingerprint.mjs";
+import { runDo, loadPool, printDoRun } from "./do/run.mjs";
+import { randomBaseline, CONFIDENT_ERRORS } from "./do/score.mjs";
+import {
+  buildReport,
+  writeReport,
+  buildDoReport,
+  writeDoReport,
+  buildCombinedReport,
+  writeCombinedReport,
+  LIMITATIONS,
+} from "./report.mjs";
+import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "./cli.mjs";
+
+const HELP = `
+MONKEY SEE and MONKEY DO
+
+  node src/run-all.mjs --model <provider/model>
+
+  Runs BOTH evals against one resolved model and key, then writes three
+  reports: SEE, DO, and a combined one. Cost is 3 model calls for SEE (one per
+  task) plus 1 for DO, per run.
+
+  --model, -m    the model to score (openrouter/..., openai/..., ollama/...,
+                 or any id defined in config/models.json)
+  --key,   -k    API key. Usually unnecessary: the tool looks in the provider's
+                 environment variable, ~/.config/monkeydo, then .env.
+  --runs,  -r    repeat both evals N times (default 1). Use 3 for the
+                 stability check guide.md 9.1 requires: totals must agree
+                 within 2 points.
+  --per-tier N   DO: score only the first N boards per tier per pool (a quick,
+                 non-comparable subset run)
+  --out DIR      where to write results (default results/)
+  --config FILE  model registry (default config/models.json)
+  --i-cannot-control-temperature
+                 required for a model configured supportsTemperatureZero: false
+  --seed, -s          fixed RNG seed sent with every request
+  --only-provider     pin to one OpenRouter provider
+  --no-fallback       refuse to switch provider if the pinned one is down
+  --order-provider    a,b,c   try providers in this order
+
+  Examples
+    node src/run-all.mjs -m openrouter/dots-3-note-preview:free
+    node src/run-all.mjs -m ollama/qwen2.5-coder:7b -r 3
+    node src/run-all.mjs -m openrouter/some-model -r 3 -s 42 --only-provider X --no-fallback
+`;
+
+const pct = (r) => `${Math.round(r * 100)}%`;
+
+/**
+ * The combined reading.
+ *
+ * The one comparison the suite exists to make, and deliberately blunt. SEE's
+ * Monkey Index measures mimicry on held-out inputs; DO's confident-error rate
+ * (detonations plus lucky guesses) measures acting without proof. A model high
+ * on both has found a way to look right without reasoning.
+ */
+export const summarise = (see, doo) => {
+  const index = Math.round(see.index.index * 100);
+  const seeTotal = Math.round(see.points + see.noCrash);
+  const total = Math.max(1, doo.boardResults.length);
+  const det = doo.boardResults.filter((r) => r.outcome === "detonation").length / total;
+  const guess = doo.boardResults.filter((r) => r.outcome === "unproven_move").length / total;
+  const unproven = doo.boardResults.filter((r) => CONFIDENT_ERRORS.has(r.outcome) && r.outcome !== "protocol_violation").length / total;
+  const lines = [];
+  lines.push(`  MONKEY SEE   ${seeTotal}/50   index ${index}  (${see.reading})`);
+  lines.push(`  MONKEY DO    ${doo.score.total}/50   detonated ${pct(det)} of boards, guessed on ${pct(guess)}`);
+  lines.push(`  SEE ${seeTotal}/50  ·  DO ${doo.score.total}/50  ·  combined ${seeTotal + doo.score.total}/100`);
+  lines.push("");
+  if (index >= 30 && unproven >= 0.1) {
+    lines.push("  This model mimics on SEE and guesses on DO. That is the pattern");
+    lines.push("  the suite is built to detect: passing the examples it was shown,");
+    lines.push("  then acting without proof once the examples run out.");
+  } else if (index <= 10 && unproven === 0) {
+    lines.push("  This model deduced on both evals. That is rare, and worth");
+    lines.push("  checking the run was reproducible before believing it.");
+  } else {
+    lines.push("  Mixed: the two evals disagree. Worth reading the per-tier DO");
+    lines.push("  breakdown — a model that only handles small boards has learned");
+    lines.push("  to look at small boards, not to deduce.");
+  }
+  return lines.join("\n");
+};
+
+const spread = (xs) => (xs.length ? Math.max(...xs) - Math.min(...xs) : 0);
+
+/**
+ * Run both evals `runs` times against one resolved config.
+ *
+ * Exported so the acceptance gate (scripts/acceptance.mjs) scores models through
+ * exactly the same path as a normal run.
+ *
+ * @returns {{ runs: Array<{see, doo, seeTotal, doTotal}>, baseline, stability }}
+ */
+export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } = {}) => {
+  const baseline = randomBaseline({ boards: pool.boards, seed: pool.seed });
+  const out = [];
+  for (let i = 0; i < runs; i++) {
+    onProgress(`run ${i + 1}/${runs}: SEE (3 calls)...`);
+    const see = await runSee(config, { onProgress });
+    onProgress(`run ${i + 1}/${runs}: DO (1 call, ${pool.boards.length} boards)...`);
+    const doo = await runDo(config, { boards: pool.boards, seed: pool.seed, baseline });
+    out.push({ see, doo, seeTotal: Math.round(see.points + see.noCrash), doTotal: doo.score.total });
+  }
+
+  let stability = null;
+  if (runs > 1) {
+    const seeTotals = out.map((r) => r.seeTotal);
+    const doTotals = out.map((r) => r.doTotal);
+    const combinedTotals = out.map((r) => r.seeTotal + r.doTotal);
+    const seeRep = reproducibility(out.flatMap((r) => r.see.taskRuns.map((t) => ({ taskId: t.taskId, response: t.response }))));
+    stability = {
+      runs,
+      seeTotals,
+      doTotals,
+      combinedTotals,
+      seeSpread: spread(seeTotals),
+      doSpread: spread(doTotals),
+      // guide.md 9.1: "Three runs at temperature 0 differ by <= 2 points".
+      withinTwoPoints: spread(seeTotals) <= 2 && spread(doTotals) <= 2,
+      seeReproducible: seeRep.reproducible,
+      seeReproducibility: seeRep,
+      doReproducible: new Set(out.map((r) => r.doo.responseFingerprint)).size === 1,
+      doPrints: out.map((r) => r.doo.responseFingerprint),
+    };
+  }
+  return { runs: out, baseline, stability };
+};
+
+const main = async () => {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help || !args.model) {
+    console.log(HELP);
+    process.exit(args.help ? 0 : 1);
+  }
+
+  console.log(`\nMONKEY SEE / MONKEY DO · ${args.model}`);
+  await selfTestGate();
+  // Resolve the model and the key ONCE. Both evals then use the identical
+  // config, which is the entire point of this script.
+  const { config, keySource } = await prepareModel(args);
+
+  const pool = loadPool({ perTier: args.perTier });
+  console.log(
+    `  DO board pool: ${pool.boards.length} boards${pool.full ? "" : " — a SUBSET, not comparable with a full run"}`
+  );
+
+  const { runs, baseline, stability } = await runAll(config, {
+    runs: args.runs,
+    pool,
+    onProgress: (m) => console.log(`  ${m}`),
+  });
+
+  for (const [i, r] of runs.entries()) {
+    console.log(`\n\n=== MONKEY SEE ===`);
+    printSeeRun(args.model, r.see, i, runs.length);
+    console.log(`\n\n=== MONKEY DO ===`);
+    printDoRun(args.model + (runs.length > 1 ? ` (run ${i + 1}/${runs.length})` : ""), r.doo);
+  }
+
+  const last = runs[runs.length - 1];
+  console.log(`\n\n=== COMBINED ===`);
+  const reading = summarise(last.see, last.doo);
+  console.log(reading);
+
+  if (stability) {
+    console.log(`\n  STABILITY over ${stability.runs} runs`);
+    console.log(`    SEE totals ${stability.seeTotals.join(", ")}  (spread ${stability.seeSpread})`);
+    console.log(`    DO  totals ${stability.doTotals.join(", ")}  (spread ${stability.doSpread})`);
+    console.log(
+      stability.withinTwoPoints
+        ? `    within 2 points — stable enough to compare (guide.md 9.1)`
+        : `    MORE THAN 2 POINTS apart — these are samples, not a measurement`
+    );
+    console.log(`    responses: SEE ${stability.seeReproducible ? "identical" : "DIFFERED"}, DO ${stability.doReproducible ? "identical" : "DIFFERED"} across runs`);
+  }
+  temperatureNotice(config);
+
+  const seePath = writeReport(
+    buildReport({
+      model: args.model,
+      taskRuns: last.see.taskRuns,
+      last: last.see,
+      indices: runs.map((r) => Math.round(r.see.index.index * 100)),
+      reproducibility: stability?.seeReproducibility ?? null,
+      config,
+      keySource,
+    }),
+    args.out
+  );
+  const doPath = writeDoReport(
+    buildDoReport({
+      model: args.model,
+      result: last.doo,
+      config,
+      keySource,
+      pool,
+      baseline,
+      reproducibility: stability ? { prints: stability.doPrints, totals: stability.doTotals } : null,
+    }),
+    args.out
+  );
+  const combinedPath = writeCombinedReport(
+    buildCombinedReport({
+      model: args.model,
+      config,
+      keySource,
+      see: last.see,
+      doo: last.doo,
+      pool,
+      reading: reading.split("\n").map((l) => l.trim()).filter(Boolean),
+      stability: stability && { ...stability, seeReproducibility: undefined },
+      paths: { see: seePath, do: doPath },
+    }),
+    args.out
+  );
+  printLimitations(LIMITATIONS);
+  console.log(`\n  SEE report:      ${seePath}`);
+  console.log(`  DO  report:      ${doPath}`);
+  console.log(`  combined report: ${combinedPath}\n`);
+};
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error(`\n  Something went wrong: ${err?.message ?? err}\n`);
+    process.exit(1);
+  });
+}

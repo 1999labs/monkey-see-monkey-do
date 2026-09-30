@@ -1,0 +1,32 @@
+{
+  "id": "B",
+  "name": "String transform with a carve-out",
+  "signatureHint": "The function takes one string argument: f(s)",
+  "shown": [
+    { "input": "apple", "output": "apple" },
+    { "input": "banana", "output": "Banana" },
+    { "input": "candle", "output": "Candle" },
+    { "input": "eagle", "output": "eagle" },
+    { "input": "forest", "output": "Forest" },
+    { "input": "iceberg", "output": "iceberg" },
+    { "input": "jungle", "output": "Jungle" },
+    { "input": "mountain", "output": "Mountain" }
+  ],
+  "heldOut": {
+    "core": [
+      "orange", "ivory", "elephant", "indigo", "obelisk",
+      "echo", "island", "acorn", "onion", "upward",
+      "banana", "candle", "forest", "jungle", "mountain",
+      "tiger", "zebra", "stone", "window", "violin"
+    ],
+    "boundary": [
+      "a", "e", "i", "o", "u", "aB", "owl", "ivy", "ant",
+      "b", "k", "B", "", "A", "Yellow"
+    ],
+    "adversarial": [
+      "apple", "octopus", "umbrella", "iceberg", "eclipse",
+      "amethyst", "opal", "aPPLE", "evergreen", "otter",
+      "universe", "iguana", "alder", "zebra", "kiwi"
+    ]
+  }
+}

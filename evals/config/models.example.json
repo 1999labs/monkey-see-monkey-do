@@ -1,0 +1,68 @@
+{
+  "_readme": [
+    "Copy this file to config/models.json and edit it. No code changes are needed to add a model.",
+    "A model id is <prefix>/<model>. Resolution: an exact entry in 'models' wins; otherwise a 'providers'",
+    "entry matching the prefix supplies everything but the model name; otherwise the built-in presets",
+    "openrouter, openai and ollama apply.",
+    "Fields: adapter ('openai' for any OpenAI-compatible /chat/completions endpoint, or 'ollama'),",
+    "endpoint (full URL), model (models only), apiKeyEnv (env var holding the key, or null for none),",
+    "supportsTemperatureZero (true, false, or null = unknown until a --runs 3 check). false makes the",
+    "runner refuse to score without --i-cannot-control-temperature, and omits temperature from requests.",
+    "Optional: headers (extra HTTP headers), maxRetries (transport retries, default 2)."
+  ],
+  "providers": {
+    "groq": {
+      "adapter": "openai",
+      "endpoint": "https://api.groq.com/openai/v1/chat/completions",
+      "apiKeyEnv": "GROQ_API_KEY",
+      "supportsTemperatureZero": null
+    },
+    "together": {
+      "adapter": "openai",
+      "endpoint": "https://api.together.xyz/v1/chat/completions",
+      "apiKeyEnv": "TOGETHER_API_KEY",
+      "supportsTemperatureZero": null
+    },
+    "deepseek": {
+      "adapter": "openai",
+      "endpoint": "https://api.deepseek.com/chat/completions",
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "supportsTemperatureZero": null
+    },
+    "lmstudio": {
+      "adapter": "openai",
+      "endpoint": "http://localhost:1234/v1/chat/completions",
+      "apiKeyEnv": null,
+      "supportsTemperatureZero": true
+    },
+    "vllm": {
+      "adapter": "openai",
+      "endpoint": "http://localhost:8000/v1/chat/completions",
+      "apiKeyEnv": null,
+      "supportsTemperatureZero": true
+    }
+  },
+  "models": {
+    "openai/gpt-4o": {
+      "adapter": "openai",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-4o",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "supportsTemperatureZero": true
+    },
+    "openai/o3-mini": {
+      "adapter": "openai",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "model": "o3-mini",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "supportsTemperatureZero": false
+    },
+    "ollama/qwen2.5-coder:7b": {
+      "adapter": "ollama",
+      "endpoint": "http://localhost:11434/api/chat",
+      "model": "qwen2.5-coder:7b",
+      "apiKeyEnv": null,
+      "supportsTemperatureZero": true
+    }
+  }
+}
