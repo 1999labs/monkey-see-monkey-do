@@ -6,7 +6,7 @@
 // code is the person who chose to run it, that is sufficient and the timeout
 // is the part that actually matters. If you ever serve this to strangers on
 // shared infrastructure, `node:vm` is not enough and you need real container
-// isolation (gVisor, Firecracker, nsjail). See guide.md §4.10.
+// isolation (gVisor, Firecracker, nsjail). The requirements are listed below.
 //
 // What this DOES guarantee:
 //   - an infinite loop is interrupted (per-call timeout)
@@ -108,7 +108,7 @@ if (__fn === null) { try { if (typeof module !== "undefined" && module && typeof
 // belong to the sandbox realm. A host-realm object would hand candidate code a
 // host Function constructor via console.log.constructor.
 //
-// Why not strip console.log lines (guide.md 4.10, step 2)? Because a no-op is
+// Why not strip console.log lines? Because a no-op is
 // strictly more robust: it also covers calls inside the function and calls
 // split across lines, which a line-based strip misses. Before this, `console`
 // was undefined, so a correct answer followed by `console.log(f(11))` — a very

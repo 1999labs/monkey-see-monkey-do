@@ -12,7 +12,7 @@
 // to tell a model difference from a setup difference.
 //
 // So this resolves the model and the key ONCE, runs both evals against that
-// same config, and writes both reports plus a combined one (guide.md 10.3).
+// same config, and writes both reports plus a combined one.
 
 import { runSee, printSeeRun } from "./see/run.mjs";
 import { reproducibility } from "./see/fingerprint.mjs";
@@ -43,7 +43,7 @@ MONKEY SEE and MONKEY DO
   --key,   -k    API key. Usually unnecessary: the tool looks in the provider's
                  environment variable, ~/.config/monkeydo, then .env.
   --runs,  -r    repeat both evals N times (default 1). Use 3 for the
-                 stability check guide.md 9.1 requires: totals must agree
+                 stability check the acceptance gate requires: totals must agree
                  within 2 points.
   --per-tier N   DO: score only the first N boards per tier per pool (a quick,
                  non-comparable subset run)
@@ -139,7 +139,7 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
       combinedTotals,
       seeSpread: spread(seeTotals),
       doSpread: spread(doTotals),
-      // guide.md 9.1: "Three runs at temperature 0 differ by <= 2 points".
+      // The gate: three runs at temperature 0 must differ by <= 2 points.
       withinTwoPoints: spread(seeTotals) <= 2 && spread(doTotals) <= 2,
       seeReproducible: seeRep.reproducible,
       seeReproducibility: seeRep,
@@ -192,7 +192,7 @@ const main = async () => {
     console.log(`    DO  totals ${stability.doTotals.join(", ")}  (spread ${stability.doSpread})`);
     console.log(
       stability.withinTwoPoints
-        ? `    within 2 points — stable enough to compare (guide.md 9.1)`
+        ? `    within 2 points — stable enough to compare`
         : `    MORE THAN 2 POINTS apart — these are samples, not a measurement`
     );
     console.log(`    responses: SEE ${stability.seeReproducible ? "identical" : "DIFFERED"}, DO ${stability.doReproducible ? "identical" : "DIFFERED"} across runs`);

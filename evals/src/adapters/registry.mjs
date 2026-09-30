@@ -1,7 +1,7 @@
 // Model registry.
 //
 // Maps a model string to a provider config. Adding a model must never require
-// reading harness code — guide.md 12, criterion 5, "the real test". So the
+// reading harness code — success criterion 5, "the real test". So the
 // registry is data first:
 //
 //   1. config/models.json  "models"     an exact model id, e.g. "openai/gpt-4o"
@@ -157,7 +157,7 @@ export const resolveModel = (spec, { seed, provider, configPath } = {}) => {
 
 /**
  * The flag required to score a model that cannot run at temperature 0. The
- * name is deliberately awkward so it is never passed casually (guide.md 8.2).
+ * name is deliberately awkward so it is never passed casually.
  */
 export const TEMPERATURE_OVERRIDE_FLAG = "--i-cannot-control-temperature";
 

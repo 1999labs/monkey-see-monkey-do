@@ -7,7 +7,7 @@
 // to run repeatedly: cost is per-run, not per-board.
 //
 // The outcomes are the substance of the eval, and conflating any of them would
-// destroy the signal (guide.md 6.3):
+// destroy the signal:
 //
 //   won                 board cleared, every move proven safe
 //   surrender           returned null where no cell was provable. On Pool B
@@ -121,7 +121,7 @@ export const loadPool = ({ perTier = null, path } = {}) => loadPublishedPool({ p
  *
  * `dryRun` substitutes the reference solver for the model and makes NO network
  * call. The solver is compiled fresh for every board, so a model's function
- * cannot carry state from one board to the next ("pure function", guide.md 6.1).
+ * cannot carry state from one board to the next ("pure function").
  *
  * @param {object} config resolved adapter config (unused when dryRun)
  * @param {object} opts

@@ -66,11 +66,11 @@ test("the CLI runners work end to end, write their reports, and score a correct 
   assert.equal(combined.combined.total, 100);
   assert.equal(combined.see.total, 50);
   assert.equal(combined.do.total, 50);
-  // guide.md 10.3 fixes the order of a report's sections.
+  // The order of a report's sections is fixed, and pinned by the tests below.
   assert.deepEqual(
     Object.keys(combined).slice(0, 7),
     ["schema", "model", "date", "temperature", "see", "do", "limitations"],
-    "sections must appear in the order guide.md 10.3 requires"
+    "sections must appear in the order the report contract requires"
   );
   assert.ok(readReport(allDir, "openrouter-stub-model-").limitations.length >= 4, "the SEE report carries limitations too");
 
@@ -150,7 +150,7 @@ test("the acceptance gate rehearses end to end and tells a strong model from a w
   const byName = Object.fromEntries(report.criteria.map((c) => [c.name, c.ok]));
   assert.equal(byName["the strong model outscores the weak one on SEE"], true, JSON.stringify(report.models));
   assert.equal(byName["the strong model outscores the weak one on DO"], true, JSON.stringify(report.models));
-  assert.equal(byName["guide.md 9.1 requires three runs per model"], false, "two runs must be flagged as short of the requirement");
+  assert.equal(byName["the acceptance gate requires three runs per model"], false, "two runs must be flagged as short of the requirement");
   assert.equal(r.code, 1, "an unmet criterion fails the rehearsal too");
   assert.deepEqual(report.models.strong.see, [50, 50]);
   assert.ok(report.models.weak.see.every((t) => t < 30), `a surface-fit strategy should land near the naive band: ${report.models.weak.see}`);

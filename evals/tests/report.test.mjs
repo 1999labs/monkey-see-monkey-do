@@ -179,7 +179,7 @@ test("a model id with path separators cannot escape the output directory", () =>
 
 import { LIMITATIONS, buildCombinedReport, writeCombinedReport } from "../src/report.mjs";
 
-test("every SEE report carries the limitations guide.md 10.3 requires", () => {
+test("every SEE report carries the full limitations list", () => {
   const r = buildReport({ model: "m", taskRuns: [], last: null, indices: [], reproducibility: null, config: {} });
   assert.deepEqual(r.limitations, LIMITATIONS);
   const text = LIMITATIONS.join(" ");
@@ -195,7 +195,7 @@ test("a SEE report states what the config says about temperature", () => {
   assert.match(refused.generation.temperatureControl.statement, /NOT comparable/);
 });
 
-test("the combined report adds up, and follows the section order in guide.md 10.3", async () => {
+test("the combined report adds up, and follows the required section order", async () => {
   const see = await runSee(fakeConfig([...NAIVE]));
   const doo = {
     score: {

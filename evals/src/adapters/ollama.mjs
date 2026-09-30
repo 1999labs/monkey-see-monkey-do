@@ -2,7 +2,7 @@
 //
 // Local models are the most reproducible thing this suite can score: no
 // provider routing, no batching with strangers, and a seed that is honoured.
-// That is why guide.md names Ollama alongside the OpenAI wire format.
+// That is why Ollama is supported alongside the OpenAI wire format.
 //
 // Same contract as the OpenAI adapter: one user message, temperature 0, no
 // system prompt, and a retry only on a TRANSPORT failure — never on an answer

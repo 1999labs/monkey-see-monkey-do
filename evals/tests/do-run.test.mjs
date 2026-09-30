@@ -426,7 +426,7 @@ test("the report records the pool, the prompt digest, and every board outcome", 
   assert.equal(r.eval, "DO");
   assert.equal(r.pool.sha256, "POOLDIGEST");
   assert.equal(r.pool.full, true);
-  assert.ok(r.limitations.length >= 4, "a report without its limitations is invalid (guide.md 10.3)");
+  assert.ok(r.limitations.length >= 4, "a report without its limitations is invalid");
   assert.equal(r.pool.boardCount, 2);
   assert.equal(r.generation.modelCalls, 1, "DO costs one call per run, not one per board");
   assert.equal(r.prompt.sha256, promptDigest());

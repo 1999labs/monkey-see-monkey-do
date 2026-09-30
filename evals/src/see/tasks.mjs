@@ -11,8 +11,9 @@
 //
 // Expected values for held-out cases are computed by calling the reference at
 // runtime. Storing them would create two sources of truth that can disagree,
-// and we have already shipped one instance of exactly that bug (see guide.md
-// §9.2 item 7). Deriving them makes drift structurally impossible rather than
+// and we have already shipped one instance of exactly that bug: Task C's shown
+// example stated 0 where the rule gives -1. Deriving them makes drift
+// structurally impossible rather than
 // merely unlikely.
 //
 // Note the asymmetry, which is deliberate: the SHOWN examples do store their

@@ -135,10 +135,10 @@ Every report carries these, and a score quoted without them is misleading:
 | `npm run gen-pool` | Regenerates `src/do/minesweeper/pool.json` from seed `0x5EED` |
 | `npm run check-pool` | Regenerates in memory and compares with the file byte for byte |
 | `npm run prompts` | Prints every prompt with its SHA-256 and whether it matches the recorded digest |
-| `npm run acceptance -- --strong <model> --weak <model>` | The publication gate (guide.md 9.1); add `--quick` to rehearse |
+| `npm run acceptance -- --strong <model> --weak <model>` | The publication gate; add `--quick` to rehearse |
 | `npm run diagnose -- -m <model>` | Runs each SEE task several times and saves raw responses, to tell endpoint noise from harness bugs |
 
-Changing a prompt changes its digest: update `src/prompt-digests.mjs` and guide.md 8.3 deliberately.
+Changing a prompt changes its digest: update `src/prompt-digests.mjs` and bump the suite version, deliberately.
 Changing the oracle or pool classification: bump `GENERATOR_VERSION` in `pool.mjs` and run
 `npm run gen-pool`; loading a pool built by a different generator fails loudly.
 

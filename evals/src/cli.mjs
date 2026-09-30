@@ -88,7 +88,7 @@ export const prepareModel = async (args, { log = console.log } = {}) => {
   }
   if (config.seed !== undefined) log(`  seed: ${config.seed}`);
 
-  // guide.md 8.2: a provider that cannot run at temperature 0 is a different
+  // A provider that cannot run at temperature 0 is a different
   // experiment. Refuse to record a score unless the user says, awkwardly, that
   // they know.
   if (config.supportsTemperatureZero === false) {
@@ -125,7 +125,7 @@ export const prepareModel = async (args, { log = console.log } = {}) => {
 };
 
 /**
- * guide.md 8.3: "A failing self-test blocks scoring. There is no override."
+ * A failing self-test blocks scoring. There is no override.
  *
  * Imported lazily: the self-test imports the runners' own modules, and a static
  * import here would be circular.
@@ -144,7 +144,7 @@ export const selfTestGate = async ({ log = console.log } = {}) => {
   return result;
 };
 
-/** The limitations every report must carry (guide.md 10.3), for the console. */
+/** The limitations every report must carry, for the console. */
 export const printLimitations = (limitations, log = console.log) => {
   log(`\n  LIMITATIONS — read before quoting this score`);
   for (const l of limitations) log(`    - ${l}`);

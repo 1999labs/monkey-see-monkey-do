@@ -6,7 +6,7 @@
 //
 // Deterministic: running it twice must produce identical bytes. If it does not,
 // the generator has a bug and every score computed on the published pool is
-// unverifiable (guide.md 8.5, and success criterion 4).
+// unverifiable (success criterion 4).
 //
 // Takes a couple of minutes: Pool B accepts only 10-20% of candidate boards,
 // because most boards turn out to be winnable without a guess.

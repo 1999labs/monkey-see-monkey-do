@@ -46,7 +46,7 @@ export const POOL_SEED = 0x5eed;
 export const GENERATOR_VERSION = 2;
 
 /**
- * The three non-standard shapes, used by BOTH pools (guide.md 5.6).
+ * The three non-standard shapes, used by BOTH pools.
  *
  * The design originally gave Pool B the three classic tiers — beginner 9x9,
  * intermediate 16x16, expert 16x30 — on the reasoning that Pool B would mirror
@@ -109,7 +109,7 @@ export const POOL_B_TIERS = POOL_TIERS;
  * them.
  *
  * The pool uses this to decide whether a board is winnable; the model-facing
- * harness (guide.md 6.7) must use the SAME value for a tier, or Pool A would
+ * harness must use the SAME value for a tier, or Pool A would
  * contain boards the oracle can win but the model is not allowed to finish.
  */
 export const MIN_CALLS = 24;
@@ -256,7 +256,7 @@ export const replayBoard = (tier, attempt, seed = POOL_SEED, boardSeed = seed) =
 /**
  * Generate the pool by rejection sampling.
  *
- * MEASURED REALITY, which the original design in guide.md 6.6 got wrong twice.
+ * MEASURED REALITY, which the original design got wrong twice.
  *
  * First measurement, with a fixed cap of 24 calls: only 9% of boards were won,
  * and 85% hit the cap. That looked like a property of Minesweeper — "a correct
@@ -273,7 +273,7 @@ export const replayBoard = (tier, attempt, seed = POOL_SEED, boardSeed = seed) =
  *
  * Median calls on a won board is 32, comfortably under the derived cap of 44
  * for this tier. The remaining 23% that still cap out are NOT yet explained;
- * see the "Still open" note in guide.md before trusting per-tier rates.
+ * so treat per-tier acceptance rates as provisional until that is explained.
  *
  * The two ambiguity groups are kept apart deliberately:
  *
@@ -385,7 +385,7 @@ export const poolDigest = (pool) => {
 //                    hash to the recorded digest
 //   self-test        a sample of boards is re-classified by the oracle
 //   gen-pool --check the whole pool is regenerated and compared byte for byte
-//                    (guide.md 12, criterion 4)
+//                    (success criterion 4)
 
 /** Boards per tier in the published pool. 3 tiers x (100 + 50) = 450 boards. */
 export const PUBLISHED_PER_TIER = { A: 100, B: 50 };

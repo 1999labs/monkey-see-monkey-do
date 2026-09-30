@@ -93,7 +93,7 @@ export const scoreTask = (task, fn) => {
  * the SEEN arm still counted their 8 shown examples as failures. With Task A
  * answered in prose and B and C perfect, that reported a Monkey Index of -33
  * (a number the interpretation table has no row for) and a full 5/5 robustness
- * bonus. guide.md 4.7 and 4.8 define both over all 150 cases.
+ * bonus. Both the task points and the index are defined over all 150 cases.
  */
 export const unusableResult = (task, reason = "unusable response") => ({
   ...scoreTask(task, () => {

@@ -3,7 +3,7 @@
 // Validates the eval itself before any model is scored. A failing self-test
 // blocks scoring — there is no override. Every runner calls runSelfTest() before
 // contacting a model (see cli.mjs selfTestGate), and `npm run self-test` prints
-// the full report. See guide.md 8.3.
+// the full report.
 //
 // `full: true` adds the slow check: regenerating the entire published pool and
 // comparing it byte for byte (success criterion 4). It takes a few minutes, so
@@ -288,7 +288,7 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     check("an unusable task costs its share of the robustness bonus", Math.abs(rb.points - 5 * 100 / 150) < 1e-9, `+${rb.points.toFixed(2)} of 5`);
   }
 
-  // --- Sandbox containment (guide.md 8.3, check 6) -------------------------
+  // --- Sandbox containment -------------------------------------------
   log("\nSandbox containment");
   {
     const loop = compileCandidate("function f(n) { while (true) {} }");
@@ -601,7 +601,7 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     //
     // Measured survival is 0% on every tier: random play dies after 1-4 calls,
     // because it clicks hidden cells with no regard for the numbers it can see.
-    // That is a real result, not a broken baseline — guide.md 5.7's "~11% / 4% /
+    // That is a real result, not a broken baseline — the "~11% / 4% /
     // 1%" figures assumed a first click WITHOUT the cascade opening this harness
     // uses, which gave random play a far smaller board to stumble through.
     const boards = loadPool({ perTier: 2 }).boards;

@@ -1,4 +1,4 @@
-// The publication gate — guide.md 9.1, roadmap phase 6.
+// The publication gate — the criteria a run must clear before the suite ships.
 //
 //   node scripts/acceptance.mjs --strong <model> --weak <model>
 //
@@ -46,13 +46,13 @@ const runs = argv.includes("--runs") || argv.includes("-r") ? common.runs : 3;
 
 if (!strong || !weak || common.help) {
   console.log(`
-MONKEY SEE / MONKEY DO · acceptance gate (guide.md 9.1)
+MONKEY SEE / MONKEY DO · acceptance gate (publication criteria)
 
   node scripts/acceptance.mjs --strong <model> --weak <model> [--runs 3]
 
   --strong MODEL   a model known to be strong (e.g. a frontier model)
   --weak MODEL     a small model (e.g. ollama/qwen2.5-coder:7b)
-  --runs N         runs per model (default 3; guide.md 9.1 requires 3)
+  --runs N         runs per model (default 3; the gate requires 3)
   --quick          rehearsal: skip pool regeneration, play --per-tier boards.
                    A quick run never reports the gate as passed.
   --per-tier N     with --quick, boards per tier per pool
@@ -120,7 +120,7 @@ record("the strong model outscores the weak one on SEE",
   mean(scored.strong.see) > mean(scored.weak.see), `${mean(scored.strong.see).toFixed(1)} vs ${mean(scored.weak.see).toFixed(1)}`);
 record("the strong model outscores the weak one on DO",
   mean(scored.strong.do) > mean(scored.weak.do), `${mean(scored.strong.do).toFixed(1)} vs ${mean(scored.weak.do).toFixed(1)}`);
-if (runs < 3) record("guide.md 9.1 requires three runs per model", false, `ran ${runs}`);
+if (runs < 3) record("the acceptance gate requires three runs per model", false, `ran ${runs}`);
 
 finish();
 

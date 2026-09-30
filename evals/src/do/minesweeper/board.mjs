@@ -19,7 +19,7 @@
 //   - `mines`: a boolean grid the harness owns. Ground truth, never exposed.
 //   - `visible`: what the model sees. null = unrevealed, 0-8 = a number,
 //     'F' = flagged. Flags are decorative: they carry no authority and are
-//     treated exactly like null when reasoning (guide.md 5.3).
+//     treated exactly like null when reasoning.
 
 /** A tiny, fast, seedable PRNG (mulberry32). Deterministic across platforms. */
 export const makeRng = (seed) => {
@@ -38,7 +38,7 @@ export const makeRng = (seed) => {
  *
  * Pool A deliberately uses shapes and densities OUTSIDE the classic settings.
  * A solver memorised from training data is tuned for 9x9/10 and 16x16/40; odd
- * sizes make that recall transfer poorly, which is the point (guide.md 5.6).
+ * sizes make that recall transfer poorly, which is the point.
  */
 export const TIERS = {
   beginner: { rows: 9, cols: 9, mines: 10 },

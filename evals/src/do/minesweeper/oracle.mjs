@@ -8,7 +8,7 @@
 //
 // Two things make that hard, and both are handled here:
 //
-//   1. PROPAGATION IS INCOMPLETE. The five rules in guide.md 5.4 settle most
+//   1. PROPAGATION IS INCOMPLETE. The five deduction rules settle most
 //      positions, but they are not sound on their own. There are boards where
 //      a cell is provably safe only after exhausting the search space. Treating
 //      "propagation found nothing" as "nothing is provable" would be wrong.
@@ -132,7 +132,7 @@ const buildConstraints = (grid, rows, cols, totalMines, safe, mines) => {
  * Apply the deductive rules to a fixpoint. Mutates `safe` and `mines`.
  * Returns false on a contradiction (the position is impossible).
  *
- * Rules implemented, from guide.md 5.4:
+ * Rules implemented:
  *   Rule 2  saturated set     need === 0, or need === set size
  *   Rule 3  subset removal   A's set inside B's set transfers the difference
  *   Rule 5  global count     all remaining mines are accounted for
@@ -281,7 +281,7 @@ const isConsistent = (grid, rows, cols, totalMines, assumeSafe, assumeMines, bud
   // apart from a real one. Without it, running out of budget on the LAST
   // candidate looked exactly like a finished search, and the position was
   // reported as conclusively ambiguous — the inconclusive-as-ambiguous mistake
-  // guide.md 6.6 forbids. Once exhausted, every call returns true and that true
+  // that would manufacture ambiguity. Once exhausted, every call returns true and that true
   // propagates to the root, so a root answer of `false` is always trustworthy.
   if (budget.remaining <= 0) {
     budget.exhausted = true;
@@ -425,7 +425,7 @@ export const analyse = (grid, rows, cols, totalMines, { budget = DEFAULT_BUDGET 
  * Is one SPECIFIC cell provably safe in this position?
  *
  * The harness uses this to audit every move a model makes. The contract is
- * "return a cell that is LOGICALLY CERTAIN to be safe" (guide.md 6.1), and a
+ * "return a cell that is LOGICALLY CERTAIN to be safe", and a
  * cell that merely turned out safe does not meet it: a lucky guess must not win
  * a Pool A board, and must not let a model play past the point where Pool B
  * asks it to stop.

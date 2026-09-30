@@ -99,7 +99,7 @@ test("an empty board is not provably safe — every cell could be a mine", () =>
 });
 
 test("flags are treated as unrevealed, carrying no authority", () => {
-  // guide.md 5.3: flags are the player's own annotation. The solver must
+  // Flags are the player's own annotation and prove nothing. The solver must
   // ignore them entirely, exactly as if they were null.
   const plain = gridOf([
     [1, null],

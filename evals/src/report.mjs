@@ -299,7 +299,7 @@ export const writeDoReport = (report, outDir = "results") => {
 };
 
 /**
- * The combined report written by run-all, in the order guide.md 10.3 requires:
+ * The combined report written by run-all, in the order the tests pin:
  * model, date, temperature guarantee, SEE score and index, DO score and baseline
  * gap, limitations, combined total. The per-eval reports remain the primary
  * artefacts; this one points at them.

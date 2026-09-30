@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
  * was told and what it was scored against:
  *
  *   - The model now receives the TOTAL MINE COUNT as a second argument. The
- *     oracle that certifies Pool A has always used it (Rule 5, guide.md 5.4),
+ *     oracle that certifies Pool A has always used it (Rule 5),
  *     so without it 5 of 60 Pool A boards could not be won from the model's
  *     side, and "premature surrender" was judged with information the model
  *     never had. Real Minesweeper displays the count; so does this prompt.

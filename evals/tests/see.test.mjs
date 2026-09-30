@@ -40,7 +40,7 @@ test("task A: threshold is inclusive at 10 and 11", () => {
 });
 
 test("task B: uppercase vowel initials are returned unchanged", () => {
-  // Guards the trap documented in guide.md 4.5: an uppercase vowel-initial
+  // Guards a real trap: an uppercase vowel-initial
   // word is NOT a discriminating case, because naive coincides with truth.
   assert.equal(taskB.reference("Apple"), "Apple");
   assert.equal(taskB.naive("Apple"), "Apple");

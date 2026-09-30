@@ -1,6 +1,6 @@
 // MONKEY DO — scoring.
 //
-// 50 points, per guide.md 6.4:
+// 50 points:
 //
 //   Pool A  won                   30    board cleared, every move proven
 //   Pool A  no confident error    10    never detonated, guessed, or broke
@@ -159,7 +159,7 @@ export const randomBaseline = ({ boards, runs = 40, seed = POOL_SEED } = {}) => 
  * Every run replays THE SCORED BOARD — same mines, same opening — and only the
  * random player's moves vary. The first version shifted the board seed on every
  * run, so the baseline was measured on 40 different boards per entry rather
- * than on the pool it claims to describe (guide.md 5.7).
+ * than on the pool it claims to describe.
  *
  * The move stream is seeded from (seed, attempt, run). An even earlier version
  * derived picks from the loop counters, which walked the same path relative to

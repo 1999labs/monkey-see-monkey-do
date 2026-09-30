@@ -5,7 +5,7 @@
 //                                        and compare it byte for byte (minutes)
 //
 // A failing self-test blocks scoring — there is no override. The checks live in
-// src/self-test.mjs so the runners can gate on them. See guide.md 8.3.
+// src/self-test.mjs so the runners can gate on them.
 
 import { runSelfTest } from "../src/self-test.mjs";
 

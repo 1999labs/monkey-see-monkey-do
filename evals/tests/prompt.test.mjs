@@ -58,7 +58,7 @@ test("task C renders the CORRECTED example f([-1, 0, -1]) -> -1", () => {
   const p = buildPrompt(taskById.C);
   assert.ok(p.includes("f([-1, 0, -1]) -> -1"), p);
   // The value the doc used to state wrongly. If this ever comes back, the
-  // bug documented in guide.md 9.2 item 7 has returned.
+  // bug this suite already shipped once has returned.
   assert.ok(!p.includes("f([-1, 0, -1]) -> 0"), "wrong answer leaked back into the prompt");
 });
 

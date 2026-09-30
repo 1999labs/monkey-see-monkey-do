@@ -1,11 +1,11 @@
 // Recorded SHA-256 of every prompt, exactly as sent (no trailing newline).
 //
-// guide.md 8.3, check 7. These are pinned so that a digest mismatch means the
+// These are pinned so that a digest mismatch means the
 // PROMPT CHANGED — never that a reconstruction drifted. Two scores are only
 // comparable if every model saw byte-identical text.
 //
 // Changing a prompt is allowed, but it is a deliberate act: update the digest
-// here AND in guide.md 8.3, and treat every score recorded under the old digest
+// here, bump the suite version, and treat every score recorded under the old digest
 // as a different experiment. Every report embeds the digests it actually used.
 //
 // DO history: the first DO prompt (digest 69200346a3f1…) called solve(board)
