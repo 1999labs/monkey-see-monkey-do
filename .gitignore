@@ -14,6 +14,11 @@ prompts.txt
 # OS
 .DS_Store
 
+# Editor settings are per-machine. The suite deliberately has no build step or
+# project config to share, and extension recommendations are a matter of taste.
+.vscode/
+.idea/
+
 # Backgrounded run logs
 nohup.out
 *.log
