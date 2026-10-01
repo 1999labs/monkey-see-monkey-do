@@ -20,7 +20,6 @@
     "check-pool": "node bin/gen-pool.mjs --check",
     "acceptance": "node bin/acceptance.mjs",
     "providers": "node bin/providers.mjs",
-    "diagnose": "node bin/diagnose.mjs",
-    "setup-key": "bash setup-key.sh"
+    "diagnose": "node bin/diagnose.mjs"
   }
 }

@@ -27,7 +27,7 @@ ollama pull qwen2.5-coder:7b
 npm run all -- -m ollama/qwen2.5-coder:7b
 
 # A hosted model through OpenRouter
-npm run setup-key                                   # stores your key outside the repo
+export OPENROUTER_API_KEY=sk-or-...
 npm run all -- -m openrouter/<model-id>
 
 # OpenAI directly
@@ -183,7 +183,6 @@ monkey-see-monkey-do/
 ├── bin/                         command-line entry points, one per npm script:
 │                                gen-pool, acceptance, diagnose, providers, show-prompts
 ├── compare.sh                   run several pinned models 3× each, side by side
-├── setup-key.sh                 store an OpenRouter key outside the repository
 └── tests/                       node:test suites
 ```
 
