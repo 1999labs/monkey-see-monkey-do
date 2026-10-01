@@ -7,8 +7,9 @@
 //   1. config/models.json  "models"     an exact model id, e.g. "openai/gpt-4o"
 //   2. config/models.json  "providers"  a prefix, e.g. "groq" makes every
 //                                       "groq/<id>" work with no per-model entry
-//   3. built-in presets                 openrouter, openai, ollama, gogo,
-//                                       gogo-responses
+//   3. built-in presets                 openrouter, openai, ollama,
+//                                       gogo/-responses/-messages,
+//                                       zen/-responses/-messages
 //
 // The first match wins. Copy config/models.example.json to config/models.json
 // to start; the example documents every field.
@@ -21,17 +22,23 @@ import { fileURLToPath } from "node:url";
 import { complete as openAiComplete, openRouterConfig, AdapterError } from "./openai.mjs";
 import { complete as ollamaComplete } from "./ollama.mjs";
 import { complete as responsesComplete } from "./responses.mjs";
+import { complete as anthropicComplete } from "./anthropic.mjs";
 
 export const DEFAULT_CONFIG_PATH = fileURLToPath(new URL("../../config/models.json", import.meta.url));
 
 /** Every adapter, by the name used in config files. */
-export const ADAPTERS = { openai: openAiComplete, ollama: ollamaComplete, responses: responsesComplete };
+export const ADAPTERS = {
+  openai: openAiComplete,
+  ollama: ollamaComplete,
+  responses: responsesComplete,
+  anthropic: anthropicComplete,
+};
 
 /**
- * OpenCode Go serves one key across three endpoints, so a preset must pin the
- * dialect. The prefix does it rather than a lookup table of model ids: ids go
- * stale the next time OpenCode adds a model, and a missing entry would misroute
- * a request silently instead of failing.
+ * OpenCode Go and Zen each serve one key across three endpoints, so a preset
+ * must pin the dialect. The prefix does it rather than a lookup table of model
+ * ids: ids go stale the next time OpenCode adds a model, and a missing entry
+ * would misroute a request silently instead of failing.
  *
  * Go asks clients to identify themselves with their own user agent and to send
  * a stable `x-opencode-session` per conversation, and says traffic is monitored
@@ -39,12 +46,12 @@ export const ADAPTERS = { openai: openAiComplete, ollama: ollamaComplete, respon
  * id per call would defeat the prompt caching Go routes on, and reproducibility
  * here comes from fingerprinting the responses, not from the session id.
  */
-const GO_SESSION_ID = randomUUID();
-const goHeaders = () => ({
+const GATEWAY_SESSION_ID = randomUUID();
+const GATEWAY_HEADERS = () => ({
   // Read from package.json rather than written out here, so the version this
   // suite reports to a gateway cannot drift from the version it ships as.
   "user-agent": `monkey-see-monkey-do/${createRequire(import.meta.url)("../../package.json").version}`,
-  "x-opencode-session": GO_SESSION_ID,
+  "x-opencode-session": GATEWAY_SESSION_ID,
 });
 
 /**
@@ -75,7 +82,7 @@ export const PRESETS = {
     endpoint: "https://opencode.ai/zen/go/v1/chat/completions",
     model,
     apiKeyEnv: "OPENCODE_API_KEY",
-    headers: goHeaders(),
+    headers: GATEWAY_HEADERS(),
     supportsTemperatureZero: null,
   }),
   // OpenCode Go, Responses dialect: Grok 4.6/4.7, GPT 5.6/6 Luna, Muse Spark.
@@ -84,10 +91,54 @@ export const PRESETS = {
     endpoint: "https://opencode.ai/zen/go/v1/responses",
     model,
     apiKeyEnv: "OPENCODE_API_KEY",
-    headers: goHeaders(),
+    headers: GATEWAY_HEADERS(),
     // Measured, never assumed. Reasoning models on this endpoint commonly
     // reject a temperature parameter outright, and a run must not claim
     // temperature 0 until a --runs 3 check says it was honoured.
+    supportsTemperatureZero: null,
+  }),
+  // OpenCode Go, Messages dialect: MiniMax M3/M2.7, Qwen3.8, Qwen3.7 Plus.
+  "gogo-messages": (model) => ({
+    adapter: "anthropic",
+    endpoint: "https://opencode.ai/zen/go/v1/messages",
+    model,
+    apiKeyEnv: "OPENCODE_API_KEY",
+    anthropicVersion: "2023-06-01",
+    headers: GATEWAY_HEADERS(),
+    supportsTemperatureZero: null,
+  }),
+
+  // OpenCode Zen is the same gateway on a pay-per-token plan, and it is where
+  // the frontier models live: Go carries none of them. Same three dialects, so
+  // the same adapters serve both and only the endpoints differ.
+  //
+  // Zen, OpenAI chat dialect: GLM, Kimi, DeepSeek, MiniMax, Qwen3.8 Max.
+  zen: (model) => ({
+    adapter: "openai",
+    endpoint: "https://opencode.ai/zen/v1/chat/completions",
+    model,
+    apiKeyEnv: "OPENCODE_API_KEY",
+    headers: GATEWAY_HEADERS(),
+    supportsTemperatureZero: null,
+  }),
+  // Zen, Responses dialect: Claude Fable 5.1, Opus 5.5, GPT 6 Astra/Sol,
+  // GPT 5.6 Sol, Grok 4.7, Muse Spark.
+  "zen-responses": (model) => ({
+    adapter: "responses",
+    endpoint: "https://opencode.ai/zen/v1/responses",
+    model,
+    apiKeyEnv: "OPENCODE_API_KEY",
+    headers: GATEWAY_HEADERS(),
+    supportsTemperatureZero: null,
+  }),
+  // Zen, Messages dialect: Claude Sonnet 5, Haiku 4.5, Qwen3.7/3.6, MiniMax.
+  "zen-messages": (model) => ({
+    adapter: "anthropic",
+    endpoint: "https://opencode.ai/zen/v1/messages",
+    model,
+    apiKeyEnv: "OPENCODE_API_KEY",
+    anthropicVersion: "2023-06-01",
+    headers: GATEWAY_HEADERS(),
     supportsTemperatureZero: null,
   }),
 };
@@ -104,6 +155,8 @@ const FIELDS = {
   // could truncate a solver the model had room to finish, which is scored as a
   // weak model and not as a harness bug.
   maxOutputTokens: (v) => Number.isInteger(v) && v > 0,
+  maxTokens: (v) => Number.isInteger(v) && v > 0,
+  anthropicVersion: (v) => typeof v === "string" && v.length > 0,
 };
 
 const describeField = {
@@ -115,6 +168,8 @@ const describeField = {
   headers: "an object of extra HTTP headers",
   maxRetries: "a non-negative integer",
   maxOutputTokens: "a positive integer (Responses adapters only)",
+  maxTokens: "a positive integer (Messages adapters; defaults to 32000)",
+  anthropicVersion: "a date string, e.g. 2023-06-01 (Messages adapters)",
 };
 
 /** Validate one entry; the error names the file, the entry and the field. */
@@ -256,4 +311,10 @@ export const KNOWN_EXAMPLES = [
   "ollama/qwen2.5-coder:7b",
   "gogo/glm-5.3",
   "gogo-responses/grok-4.7",
+  "gogo-messages/minimax-m3",
+  "zen/glm-5.3",
+  "zen-responses/gpt-6-astra",
+  // Fable is a Messages model, not a chat one: pick the prefix from the
+  // dialect OpenCode documents for the model, not from its family.
+  "zen-messages/claude-fable-5.1",
 ];

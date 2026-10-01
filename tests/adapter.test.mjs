@@ -631,34 +631,222 @@ test("Responses: a missing API key fails before any request", async () => {
   assert.equal(called, false);
 });
 
-// --- OpenCode Go presets ------------------------------------------------------
+// --- Messages (Anthropic) -----------------------------------------------------
 
-test("the Go presets pin a dialect and identify the client", () => {
-  const chat = resolveModel("gogo/glm-5.3");
-  assert.equal(chat.adapter, "openai");
-  assert.equal(chat.endpoint, "https://opencode.ai/zen/go/v1/chat/completions");
-  assert.equal(chat.model, "glm-5.3");
-  assert.equal(chat.apiKeyEnv, "OPENCODE_API_KEY");
+import { complete as anthropicComplete } from "../src/adapters/anthropic.mjs";
 
-  const res = resolveModel("gogo-responses/grok-4.7");
-  assert.equal(res.adapter, "responses");
-  assert.equal(res.endpoint, "https://opencode.ai/zen/go/v1/responses");
-  assert.equal(res.model, "grok-4.7");
-  assert.equal(res.supportsTemperatureZero, null, "unmeasured is unknown, not assumed");
+const messagesConfig = (fetchImpl, extra = {}) => ({
+  adapter: "anthropic",
+  endpoint: "https://example.test/v1/messages",
+  model: "test/model",
+  apiKeyEnv: "TEST_KEY",
+  anthropicVersion: "2023-06-01",
+  fetchImpl,
+  maxRetries: 0,
+  ...extra,
+});
 
-  for (const c of [chat, res]) {
-    assert.ok(c.headers["user-agent"].startsWith("monkey-see-monkey-do/"), "Go asks clients to identify themselves");
-    assert.ok(c.headers["x-opencode-session"], "Go asks clients to send a session id");
+const textBlock = (text) => ({ type: "text", text });
+const messagesBody = (text, extra = {}) => ({
+  id: "msg_123",
+  type: "message",
+  role: "assistant",
+  model: "test/model-20260101",
+  stop_reason: "end_turn",
+  content: [textBlock(text)],
+  usage: { input_tokens: 12, output_tokens: 8 },
+  ...extra,
+});
+
+test("Messages: reads text blocks and maps usage", async () => {
+  const fetchImpl = async () => jsonResponse(messagesBody("function solve(b,m){return null}"));
+  const r = await anthropicComplete(messagesConfig(fetchImpl), "PROMPT");
+  assert.equal(r.text, "function solve(b,m){return null}");
+  assert.equal(r.finishReason, "end_turn");
+  assert.equal(r.providerModel, "test/model-20260101");
+  assert.deepEqual(r.usage, { prompt_tokens: 12, completion_tokens: 8 });
+  assert.equal(r.empty, false);
+});
+
+test("Messages: one user message, a required max_tokens, and no system prompt", async () => {
+  let body;
+  const fetchImpl = async (url, init) => {
+    body = JSON.parse(init.body);
+    return jsonResponse(messagesBody("x"));
+  };
+  await anthropicComplete(messagesConfig(fetchImpl), "PROMPT");
+  assert.deepEqual(body.messages, [{ role: "user", content: "PROMPT" }]);
+  assert.equal(body.system, undefined, "no system prompt");
+  assert.equal(body.stream, false);
+  assert.equal(body.temperature, 0);
+  // max_tokens is mandatory on this dialect, and defaults high on purpose: too
+  // low truncates a solver the model had room to finish, which then scores as
+  // a weak model rather than as a harness bug.
+  assert.equal(body.max_tokens, 32000);
+  await anthropicComplete(messagesConfig(fetchImpl, { maxTokens: 4096 }), "PROMPT");
+  assert.equal(body.max_tokens, 4096);
+});
+
+test("Messages: sends x-api-key and anthropic-version, never Bearer", async () => {
+  let headers;
+  const fetchImpl = async (url, init) => {
+    headers = init.headers;
+    return jsonResponse(messagesBody("x"));
+  };
+  await anthropicComplete(messagesConfig(fetchImpl), "PROMPT");
+  assert.equal(headers["x-api-key"], "test-key-1234");
+  assert.equal(headers["anthropic-version"], "2023-06-01");
+  assert.equal(headers.authorization, undefined, "this dialect does not use Bearer");
+  assert.equal(headers["content-type"], "application/json");
+});
+
+test("Messages: a thinking block is never read as the answer", async () => {
+  // Same trap as the Responses reasoning item: read the wrong block and chain
+  // of thought reaches the code extractor and poisons the fingerprint.
+  const fetchImpl = async () =>
+    jsonResponse(
+      messagesBody("SOLVER", {
+        content: [
+          { type: "thinking", thinking: "first I will consider the board" },
+          { type: "redacted_thinking", data: "..." },
+          textBlock("SOLVER"),
+        ],
+      })
+    );
+  const r = await anthropicComplete(messagesConfig(fetchImpl), "PROMPT");
+  assert.equal(r.text, "SOLVER");
+  assert.doesNotMatch(r.text, /consider the board/);
+});
+
+test("Messages: truncation is reported in finishReason, not raised", async () => {
+  const fetchImpl = async () =>
+    jsonResponse(messagesBody("function solve(board, mi", { stop_reason: "max_tokens" }));
+  const r = await anthropicComplete(messagesConfig(fetchImpl), "P");
+  assert.equal(r.finishReason, "max_tokens", "a cut-off solver is not a solved task");
+  assert.equal(r.empty, false);
+});
+
+test("Messages: a renamed block type fails loudly instead of scoring zero", async () => {
+  const drifted = async () =>
+    jsonResponse({ model: "m", stop_reason: "end_turn", content: [{ type: "output_text", text: "SOLVER" }] });
+  await assert.rejects(
+    () => anthropicComplete(messagesConfig(drifted), "P"),
+    /does not recognise/,
+    "must refuse to score a response it cannot read"
+  );
+});
+
+test("Messages: content with no text block is an empty answer, not an error", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    return jsonResponse(messagesBody("", { content: [{ type: "thinking", thinking: "hmm" }] }));
+  };
+  const r = await anthropicComplete(messagesConfig(fetchImpl, { maxRetries: 2 }), "P");
+  assert.equal(r.text, "");
+  assert.equal(r.empty, true);
+  assert.equal(calls, 1);
+});
+
+test("Messages: a response with no content fails loudly", async () => {
+  const fetchImpl = async () => jsonResponse({ model: "m", stop_reason: "end_turn" });
+  await assert.rejects(() => anthropicComplete(messagesConfig(fetchImpl), "P"), /no content/);
+});
+
+test("Messages: a --seed is refused rather than silently dropped", async () => {
+  let called = false;
+  const fetchImpl = async () => ((called = true), jsonResponse(messagesBody("x")));
+  await assert.rejects(() => anthropicComplete(messagesConfig(fetchImpl, { seed: 42 }), "P"), /does not send a seed/);
+  assert.equal(called, false);
+});
+
+test("Messages: temperature 0 omitted when the config says it is unsupported", async () => {
+  let body;
+  const fetchImpl = async (url, init) => {
+    body = JSON.parse(init.body);
+    return jsonResponse(messagesBody("x"));
+  };
+  await anthropicComplete(messagesConfig(fetchImpl, { supportsTemperatureZero: false }), "P");
+  assert.equal(body.temperature, undefined);
+});
+
+test("Messages: 429 retries and 400 does not", async () => {
+  let calls = 0;
+  const retrying = async () => {
+    calls++;
+    return { ok: false, status: 429, text: async () => "slow down" };
+  };
+  await assert.rejects(() => anthropicComplete(messagesConfig(retrying, { maxRetries: 2 }), "P"), /HTTP 429/);
+  assert.equal(calls, 3);
+
+  let hard = 0;
+  const rejecting = async () => {
+    hard++;
+    return jsonResponse({ type: "error", error: { message: "max_tokens: must be > 0" } }, 400);
+  };
+  await assert.rejects(
+    () => anthropicComplete(messagesConfig(rejecting, { maxRetries: 3 }), "P"),
+    /max_tokens: must be > 0/
+  );
+  assert.equal(hard, 1);
+});
+
+test("Messages: a missing API key fails before any request", async () => {
+  let called = false;
+  const fetchImpl = async () => ((called = true), jsonResponse(messagesBody("x")));
+  await assert.rejects(
+    () => anthropicComplete(messagesConfig(fetchImpl, { apiKeyEnv: "DEFINITELY_NOT_SET_12345" }), "P"),
+    /Missing API key/
+  );
+  assert.equal(called, false);
+});
+
+test("the registry dispatches a messages config to the anthropic adapter", async () => {
+  let url;
+  const fetchImpl = async (u) => ((url = u), jsonResponse(messagesBody("ok")));
+  const r = await dispatch(messagesConfig(fetchImpl), "P");
+  assert.equal(r.text, "ok");
+  assert.match(url, /v1\/messages$/);
+});
+
+// --- OpenCode Go and Zen presets ----------------------------------------------
+
+test("every gateway preset pins one dialect and one endpoint", () => {
+  // The prefix decides the dialect, so a wrong prefix is a 404 rather than a
+  // misrouted request that silently scores something else.
+  const cases = [
+    ["gogo/glm-5.3", "openai", "https://opencode.ai/zen/go/v1/chat/completions"],
+    ["gogo-responses/grok-4.7", "responses", "https://opencode.ai/zen/go/v1/responses"],
+    ["gogo-messages/minimax-m3", "anthropic", "https://opencode.ai/zen/go/v1/messages"],
+    ["zen/glm-5.3", "openai", "https://opencode.ai/zen/v1/chat/completions"],
+    ["zen-responses/gpt-6-astra", "responses", "https://opencode.ai/zen/v1/responses"],
+    ["zen-messages/claude-fable-5.1", "anthropic", "https://opencode.ai/zen/v1/messages"],
+  ];
+  for (const [spec, adapter, endpoint] of cases) {
+    const c = resolveModel(spec);
+    assert.equal(c.adapter, adapter, `${spec} adapter`);
+    assert.equal(c.endpoint, endpoint, `${spec} endpoint`);
+    assert.equal(c.apiKeyEnv, "OPENCODE_API_KEY", `${spec} key`);
+    assert.equal(c.supportsTemperatureZero, null, `${spec}: unmeasured is unknown, not assumed`);
+    assert.ok(c.headers["user-agent"].startsWith("monkey-see-monkey-do/"), `${spec} identifies the client`);
+    assert.ok(c.headers["x-opencode-session"], `${spec} sends a session id`);
   }
+
+  // Only the Messages dialect needs a version header, and only because that
+  // API requires one. Sending it to the others is meaningless at best.
+  assert.equal(resolveModel("gogo-messages/minimax-m3").anthropicVersion, "2023-06-01");
+  assert.equal(resolveModel("gogo-responses/grok-4.7").anthropicVersion, undefined);
+
   // The reported version is read from package.json, so it cannot drift away
   // from the version this suite ships as.
   assert.equal(
-    res.headers["user-agent"],
+    resolveModel("gogo/glm-5.3").headers["user-agent"],
     `monkey-see-monkey-do/${createRequire(import.meta.url)("../package.json").version}`
   );
-  // One id per process, so the four calls of a run share it and Go's prompt
-  // caching still applies. A fresh id per request would defeat the caching.
-  assert.equal(chat.headers["x-opencode-session"], res.headers["x-opencode-session"]);
+  // One session id per process, so the calls of a run share it and the gateway's
+  // prompt caching still applies. A fresh id per request would defeat it.
+  const ids = cases.map(([s]) => resolveModel(s).headers["x-opencode-session"]);
+  assert.equal(new Set(ids).size, 1, "every preset shares one session id per process");
 });
 
 // --- The registry file ---------------------------------------------------------

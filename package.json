@@ -20,6 +20,7 @@
     "check-pool": "node bin/gen-pool.mjs --check",
     "acceptance": "node bin/acceptance.mjs",
     "providers": "node bin/providers.mjs",
+    "chart": "node bin/chart.mjs",
     "diagnose": "node bin/diagnose.mjs"
   }
 }

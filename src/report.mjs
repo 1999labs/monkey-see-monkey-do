@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { allPromptDigests } from "./see/prompt.mjs";
 import { fingerprint } from "./fingerprint.mjs";
 import { temperatureStatus } from "./adapters/registry.mjs";
+import { adjustedTotal } from "./adjusted.mjs";
 
 /**
  * A report omitting the limitations is invalid, regardless of the scores. So
@@ -354,6 +355,15 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
       max: 100,
       reading,
     },
+    // REPORTING ONLY — see src/adjusted.mjs. `combined.total` above is
+    // untouched; this is the single figure to plot once the Monkey Index and
+    // the DO diagnostic are folded in.
+    adjusted: adjustedTotal({
+      seeTotal,
+      doTotal: doo.score.total,
+      monkeyIndex: Math.round(see.index.index * 100),
+      initiationRate: doo.diagnostic?.initiationRate ?? 1,
+    }),
     stability,
     reports: paths,
   };

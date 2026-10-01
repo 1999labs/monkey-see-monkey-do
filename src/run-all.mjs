@@ -18,6 +18,7 @@ import { runSee, printSeeRun } from "./see/run.mjs";
 import { reproducibility } from "./fingerprint.mjs";
 import { runDo, loadPool, printDoRun } from "./do/run.mjs";
 import { randomBaseline, CONFIDENT_ERRORS } from "./do/score.mjs";
+import { adjustedTotal } from "./adjusted.mjs";
 import {
   buildReport,
   writeReport,
@@ -185,6 +186,20 @@ const main = async () => {
   console.log(`\n\n=== COMBINED ===`);
   const reading = summarise(last.see, last.doo);
   console.log(reading);
+
+  // The one number to plot. Reported, never scored — SEE + DO above is
+  // unchanged. See src/adjusted.mjs.
+  {
+    const seeTotal = Math.round(last.see.points + last.see.noCrash);
+    const adj = adjustedTotal({
+      seeTotal,
+      doTotal: last.doo.score.total,
+      monkeyIndex: Math.round(last.see.index.index * 100),
+      initiationRate: last.doo.diagnostic?.initiationRate ?? 1,
+    });
+    console.log(`\n  ADJUSTED (see + do, less Monkey Index and unearned points)`);
+    console.log(`    ${adj.base}  -  ${adj.monkeyIndexPenalty} (index)  -  ${adj.unearnedPenalty} (unearned)  =  \x1b[1m${adj.total}/100\x1b[0m`);
+  }
 
   if (stability) {
     console.log(`\n  STABILITY over ${stability.runs} runs`);

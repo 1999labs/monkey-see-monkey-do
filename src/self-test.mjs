@@ -29,6 +29,7 @@ import {
 } from "./do/minesweeper/pool.mjs";
 import { scoreDo, randomBaseline } from "./do/score.mjs";
 import { scoreDiagnostic, REFERENCE_DEPTH } from "./do/diagnostic.mjs";
+import { adjustedTotal } from "./adjusted.mjs";
 import { playBoard, loadPool } from "./do/run.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "./do/reference-solver.mjs";
 import { PREAMBLE as DO_PREAMBLE, promptDigest as doPromptDigest } from "./do/prompt.mjs";
@@ -729,8 +730,52 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     }
   }
 
-  // --- 18. DO prompt and harness ------------------------------------------
-  log("\n18. DO prompt and harness");
+  // --- 18. The adjusted total (reported, never scored) -------------------
+  log("\n18. The adjusted total");
+
+  {
+    const adj = (seeTotal, doTotal, monkeyIndex, initiationRate) =>
+      adjustedTotal({ seeTotal, doTotal, monkeyIndex, initiationRate });
+
+    // The load-bearing invariant: a perfect run must still be 100. This is what
+    // lets the adjusted figure exist at all — it is reported beside SEE + DO
+    // rather than replacing them, and the oracle is not penalised for the
+    // diagnostic it has no use for.
+    check("a perfect run still scores 100/100 adjusted", adj(50, 50, 0, 1).total === 100, `${adj(50, 50, 0, 1).total}/100`);
+    check("the reference solver is not penalised by the diagnostic clawback",
+      adj(50, 50, 0, 1).unearnedPenalty === 0);
+    check("a perfect run with no diagnostic supplied is not penalised either",
+      adjustedTotal({ seeTotal: 50, doTotal: 50, monkeyIndex: 0 }).total === 100);
+
+    // Bounded on both sides.
+    check("a surface-fitter floors at 0 rather than going negative", adj(0, 0, 100, 0).total === 0);
+    check("the total is clamped at 100 even if a base ever exceeded it",
+      adjustedTotal({ seeTotal: 80, doTotal: 80, monkeyIndex: 0, initiationRate: 1 }).total === 100);
+
+    // Both adjustments actually bite, and in the right direction.
+    check("the Monkey Index is subtracted, so the same scores score lower at a higher index",
+      adj(24, 10, 25, 0).total < adj(24, 10, 9, 0).total);
+    check("a solver that never engaged has the unearned points clawed back",
+      adj(24, 10, 9, 0).unearnedPenalty === 10, `${adj(24, 10, 9, 0).unearnedPenalty}`);
+    check("a solver that engaged on every board keeps the no-confident-error points",
+      adj(24, 10, 9, 1).unearnedPenalty === 0);
+    check("engagement claws back proportionally, not all-or-nothing",
+      adj(24, 10, 9, 0.5).unearnedPenalty === 5, `${adj(24, 10, 9, 0.5).unearnedPenalty}`);
+
+    // The clawback can never exceed the component it corrects.
+    check("the clawback never exceeds the 10 points it is correcting",
+      adjustedTotal({ seeTotal: 0, doTotal: 0, monkeyIndex: 0, initiationRate: -5 }).unearnedPenalty <= 10);
+    check("a negative Monkey Index is treated as zero rather than a bonus",
+      adj(24, 10, -30, 1).total === 34, `${adj(24, 10, -30, 1).total}`);
+
+    // It must stay a reporting layer: SEE + DO are untouched.
+    const wonRows = Array.from({ length: 4 }, (_, i) => ({ pool: "A", tier: "poolA-small", attempt: i + 1, outcome: "won", calls: 75 }));
+    check("the adjusted figure does not change the SEE or DO totals",
+      scoreDo({ boardResults: wonRows }).total === 40 && adj(40, 0, 0, 0).base === 40);
+  }
+
+  // --- 19. DO prompt and harness ------------------------------------------
+  log("\n19. DO prompt and harness");
 
   {
     check("the prompt asks for a logically certain cell and forbids guessing",

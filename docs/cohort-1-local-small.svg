@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 560" width="1040" height="560" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+<rect width="1040" height="560" fill="#ffffff"/>
+<rect x="76" y="404.8" width="664" height="87.19999999999999" fill="#fdf2f2"/>
+<rect x="76" y="317.6" width="664" height="87.19999999999999" fill="#fffbeb"/>
+<rect x="76" y="230.40000000000003" width="664" height="87.19999999999999" fill="#f0fdf4"/>
+<rect x="76" y="143.2" width="664" height="87.20000000000005" fill="#eff6ff"/>
+<rect x="76" y="56" width="664" height="87.19999999999999" fill="#faf5ff"/>
+<line x1="76" y1="492" x2="740" y2="492" stroke="#9ca3af" stroke-width="1"/>
+<line x1="76" y1="56" x2="76" y2="492" stroke="#9ca3af" stroke-width="1"/>
+<line x1="76" y1="492" x2="740" y2="492" stroke="#e5e7eb" stroke-width="1"/>
+<text x="64" y="496" text-anchor="end" font-size="12" fill="#6b7280">0</text>
+<line x1="76" y1="404.8" x2="740" y2="404.8" stroke="#e5e7eb" stroke-width="1"/>
+<text x="64" y="408.8" text-anchor="end" font-size="12" fill="#6b7280">20</text>
+<line x1="76" y1="317.6" x2="740" y2="317.6" stroke="#e5e7eb" stroke-width="1"/>
+<text x="64" y="321.6" text-anchor="end" font-size="12" fill="#6b7280">40</text>
+<line x1="76" y1="230.40000000000003" x2="740" y2="230.40000000000003" stroke="#e5e7eb" stroke-width="1"/>
+<text x="64" y="234.40000000000003" text-anchor="end" font-size="12" fill="#6b7280">60</text>
+<line x1="76" y1="143.2" x2="740" y2="143.2" stroke="#e5e7eb" stroke-width="1"/>
+<text x="64" y="147.2" text-anchor="end" font-size="12" fill="#6b7280">80</text>
+<line x1="76" y1="56" x2="740" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="64" y="60" text-anchor="end" font-size="12" fill="#6b7280">100</text>
+<line x1="76" y1="56" x2="740" y2="56" stroke="#166534" stroke-width="1.5" stroke-dasharray="5 4"/>
+<line x1="76" y1="492" x2="76" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="76" y="514" text-anchor="middle" font-size="12" fill="#6b7280">0</text>
+<line x1="160.6938775510204" y1="492" x2="160.6938775510204" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="160.6938775510204" y="514" text-anchor="middle" font-size="12" fill="#6b7280">1</text>
+<line x1="245.38775510204079" y1="492" x2="245.38775510204079" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="245.38775510204079" y="514" text-anchor="middle" font-size="12" fill="#6b7280">2</text>
+<line x1="330.0816326530612" y1="492" x2="330.0816326530612" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="330.0816326530612" y="514" text-anchor="middle" font-size="12" fill="#6b7280">3</text>
+<line x1="414.77551020408157" y1="492" x2="414.77551020408157" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="414.77551020408157" y="514" text-anchor="middle" font-size="12" fill="#6b7280">4</text>
+<line x1="499.46938775510205" y1="492" x2="499.46938775510205" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="499.46938775510205" y="514" text-anchor="middle" font-size="12" fill="#6b7280">5</text>
+<line x1="584.1632653061224" y1="492" x2="584.1632653061224" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="584.1632653061224" y="514" text-anchor="middle" font-size="12" fill="#6b7280">6</text>
+<line x1="668.8571428571428" y1="492" x2="668.8571428571428" y2="56" stroke="#e5e7eb" stroke-width="1"/>
+<text x="668.8571428571428" y="514" text-anchor="middle" font-size="12" fill="#6b7280">7</text>
+<path d="M 245.38775510204079 457.12 L 643.4489795918367 457.12 L 643.4489795918367 413.52 L 668.8571428571428 413.52 L 668.8571428571428 404.8" fill="none" stroke="#c2410c" stroke-width="2" stroke-dasharray="6 4" opacity="0.85"/>
+<circle cx="245.38775510204079" cy="457.12" r="6.5" fill="#c2410c" stroke="#c2410c" stroke-width="2"/>
+<text x="245.38775510204079" y="443.12" text-anchor="middle" font-size="11.5" font-weight="600" fill="#c2410c">8</text>
+<circle cx="330.0816326530612" cy="492" r="6.5" fill="#ffffff" stroke="#b6bcc6" stroke-width="2"/>
+<text x="330.0816326530612" y="478" text-anchor="middle" font-size="11.5" font-weight="600" fill="#6b7280">0</text>
+<circle cx="643.4489795918367" cy="413.52" r="6.5" fill="#c2410c" stroke="#c2410c" stroke-width="2"/>
+<text x="643.4489795918367" y="399.52" text-anchor="middle" font-size="11.5" font-weight="600" fill="#c2410c">18</text>
+<circle cx="668.8571428571428" cy="452.76" r="6.5" fill="#ffffff" stroke="#b6bcc6" stroke-width="2"/>
+<text x="668.8571428571428" y="438.76" text-anchor="middle" font-size="11.5" font-weight="600" fill="#6b7280">9</text>
+<circle cx="668.8571428571428" cy="404.8" r="6.5" fill="#c2410c" stroke="#c2410c" stroke-width="2"/>
+<text x="668.8571428571428" y="390.8" text-anchor="middle" font-size="11.5" font-weight="600" fill="#c2410c">20</text>
+<text x="766" y="60" font-size="12" font-weight="600" fill="#14161a">model</text>
+<text x="1016" y="60" font-size="12" font-weight="600" fill="#14161a" text-anchor="end">SEE · MI · DO · adj</text>
+<line x1="760" y1="68" x2="1020" y2="68" stroke="#e5e7eb" stroke-width="1"/>
+<circle cx="772" cy="84" r="5" fill="#c2410c" stroke="#c2410c" stroke-width="2"/>
+<text x="784" y="88" font-size="11.5" fill="#14161a" font-weight="600">gemma2:2b</text>
+<text x="1016" y="88" font-size="11.5" fill="#14161a" text-anchor="end" font-weight="600">14 · 13 · 10 · 8</text>
+<circle cx="772" cy="103" r="5" fill="#ffffff" stroke="#b6bcc6" stroke-width="2"/>
+<text x="784" y="107" font-size="11.5" fill="#6b7280" font-weight="400">llama3.2:3b</text>
+<text x="1016" y="107" font-size="11.5" fill="#6b7280" text-anchor="end" font-weight="400">22 · 25 · 0 · 0</text>
+<circle cx="772" cy="122" r="5" fill="#c2410c" stroke="#c2410c" stroke-width="2"/>
+<text x="784" y="126" font-size="11.5" fill="#14161a" font-weight="600">deepseek-coder:6.7b</text>
+<text x="1016" y="126" font-size="11.5" fill="#14161a" text-anchor="end" font-weight="600">22 · 9 · 10 · 18</text>
+<circle cx="772" cy="141" r="5" fill="#ffffff" stroke="#b6bcc6" stroke-width="2"/>
+<text x="784" y="145" font-size="11.5" fill="#6b7280" font-weight="400">mistral:7b-instruct</text>
+<text x="1016" y="145" font-size="11.5" fill="#6b7280" text-anchor="end" font-weight="400">15 · 12 · 10 · 9</text>
+<circle cx="772" cy="160" r="5" fill="#c2410c" stroke="#c2410c" stroke-width="2"/>
+<text x="784" y="164" font-size="11.5" fill="#14161a" font-weight="600">qwen2.5-coder:7b</text>
+<text x="1016" y="164" font-size="11.5" fill="#14161a" text-anchor="end" font-weight="600">24 · 9 · 10 · 20</text>
+<line x1="760" y1="177" x2="1020" y2="177" stroke="#e5e7eb" stroke-width="1"/>
+<line x1="772" y1="189" x2="792" y2="189" stroke="#c2410c" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="800" y="193" font-size="11.5" fill="#14161a">Pareto frontier</text>
+<circle cx="782" cy="213" r="5" fill="#ffffff" stroke="#b6bcc6" stroke-width="2"/>
+<text x="800" y="217" font-size="11.5" fill="#6b7280">dominated</text>
+<line x1="764" y1="235" x2="800" y2="235" stroke="#166534" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="808" y="239" font-size="11.5" fill="#6b7280">reference solver</text>
+<text x="76" y="26" font-size="15" font-weight="600" fill="#14161a">Cohort 1 — small local models (&lt;8B, Ollama on Apple M2)</text>
+<text x="76" y="44" font-size="12" fill="#6b7280">adjusted score (0-100) vs parameters · 2026-10-01 · 3 runs at temperature 0</text>
+<text x="408" y="542" text-anchor="middle" font-size="12" fill="#6b7280">parameters (billions)</text>
+<text x="20" y="274" text-anchor="middle" font-size="12" fill="#6b7280" transform="rotate(-90 20 274)">adjusted score (0-100)</text>
+</svg>

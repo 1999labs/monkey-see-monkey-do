@@ -75,7 +75,8 @@ cp config/models.example.json config/models.json
 
 - A **provider** entry makes every `groq/<model-id>` work. A **model** entry configures one id exactly.
 - `adapter` is `openai` for any OpenAI-compatible `/chat/completions` endpoint (OpenRouter, Groq,
-  Together, vLLM, LM Studio, …), `responses` for any OpenAI Responses endpoint, or `ollama`.
+  Together, vLLM, LM Studio, …), `responses` for any OpenAI Responses endpoint, `anthropic` for any
+  Anthropic Messages endpoint, or `ollama`.
 - `apiKeyEnv` names the environment variable holding the key; `null` means no key (local servers).
 - `supportsTemperatureZero`: `true`, `false`, or `null` (unknown until a `-r 3` check). With
   `false` the runner **refuses to score** unless you pass `--i-cannot-control-temperature`, and the
@@ -83,32 +84,44 @@ cp config/models.example.json config/models.json
 - `maxOutputTokens` caps the response on `responses` adapters. Leave it unset: a limit this harness
   chose can truncate a solver the model had room to finish, and a self-inflicted truncation scores
   like a weak model.
+- `maxTokens` is the required `max_tokens` on `anthropic` adapters. It defaults to 32000. Raise it
+  if a long solver is truncated; lower it only to cap cost.
+- `anthropicVersion` is the date header that dialect requires, e.g. `2023-06-01`.
 
-Built in, with no config: `openrouter/…`, `openai/…`, `ollama/…`, `gogo/…`, `gogo-responses/…`.
+Built in, with no config: `openrouter/…`, `openai/…`, `ollama/…`, `gogo/…`, `gogo-responses/…`,
+`gogo-messages/…`, `zen/…`, `zen-responses/…`, `zen-messages/…`.
 
-### OpenCode Go
+### OpenCode Go and Zen
 
-One subscription key serves three dialects, so the prefix picks the endpoint rather than a lookup
-table of model ids, which would go stale the next time OpenCode adds a model:
+Both serve one key across the same three dialects, so the prefix picks the endpoint rather than a
+lookup table of model ids, which would go stale the next time OpenCode adds a model. Go is the
+subscription plan for open models; Zen is pay-per-token and is where the frontier models are.
 
-| Prefix | Endpoint | Dialect | Models |
+| Prefix | Go endpoint | Zen endpoint | Dialect |
 |---|---|---|---|
-| `gogo/` | `/zen/go/v1/chat/completions` | OpenAI chat | GLM, Kimi, DeepSeek, MiMo, Hy, LongCat, Space Bunny Free |
-| `gogo-responses/` | `/zen/go/v1/responses` | OpenAI Responses | Grok 4.6/4.7, GPT 5.6/6 Luna, Muse Spark |
-| `gogo-messages/` | `/zen/go/v1/messages` | Anthropic Messages | MiniMax M3, Qwen3.8, Qwen3.7 Plus: not built in yet |
+| `gogo/`, `zen/` | `/zen/go/v1/chat/completions` | `/zen/v1/chat/completions` | OpenAI chat |
+| `gogo-responses/`, `zen-responses/` | `/zen/go/v1/responses` | `/zen/v1/responses` | OpenAI Responses |
+| `gogo-messages/`, `zen-messages/` | `/zen/go/v1/messages` | `/zen/v1/messages` | Anthropic Messages |
 
 ```bash
 export OPENCODE_API_KEY=...
 npm run all -- -m gogo-responses/grok-4.7
+npm run all -- -m zen-messages/claude-fable-5.1
 ```
 
-Go asks clients to send their own user agent and a stable `x-opencode-session`, and says traffic is
-monitored for abuse. The presets send both, with one session id per process so the calls of a run
+**Pick the prefix from the dialect OpenCode documents for that model, not from its family.**
+Claude Fable is a Messages model, so it is `zen-messages/claude-fable-5.1`, even though it is the
+strongest model in the catalogue. The wrong prefix is a 404 rather than a misrouted request, which
+is the intended failure.
+
+Both ask clients to send their own user agent and a stable `x-opencode-session`, and Go says traffic
+is monitored for abuse. The presets send both, with one session id per process so the calls of a run
 share it and prompt caching still applies.
 
-Two limits worth knowing. Go's per-model monthly caps bind well before OpenRouter's pay-per-token
-does, so a `-r 3` check on an expensive model can stall partway through a month. And `--only-provider`
-is refused, because Go is the only route to its models and there is nothing to pin between.
+Three limits worth knowing. Go's per-model monthly caps bind well before Zen's pay-per-token
+pricing does, so a `-r 3` check on an expensive model can stall partway through a month.
+`--only-provider` is refused for both, since each is the only route to its models. And Zen serves
+seven Gemini models on a fourth dialect, `/v1/models/gemini-*`, which has no adapter here.
 
 ### Keys
 
@@ -119,25 +132,202 @@ If none is found, the runner prints the one command that stores one.
 
 ## Reading the scores
 
-**SEE**: three tasks, 50 held-out cases each, 15 points per task plus 5 for code that does not
-throw. The **Monkey Index** is `seen pass rate − held-out pass rate`, reported descriptively and
-never as a claim about the model: 0–10 `generalizes` (held-out performance matches shown
-performance), 11–30 `mostly generalizes`, 31–60 `partial`, 61+ `SURFACE FIT` (shown performance
-carried no information about held-out). A naive implementation of each task scores 32–36%, by design.
+Two evals, each out of 50. Four numbers come out of them: a score from each (`SEE`, `DO`), a
+generalization index for SEE (`MI`), and a progress diagnostic for DO. Only `SEE` and `DO`
+are scored; `MI` and the diagnostic are reported beside them, and an **adjusted** total folds
+both in when you want a single number to plot.
 
-**DO**: the model writes `solve(board, mines)` once; it is replayed on 450 generated boards.
-Every move is checked: a move must be *provably* safe, not merely lucky.
+### SEE — induction, out of 50
 
-| Component | Points |
+Given 8 examples of an unknown function, does the model infer the rule or copy its surface?
+
+| Component | Points | What it takes |
+|---|---|---|
+| Task A | 15 | Recovers the rule from 8 examples, applied to 50 unseen inputs |
+| Task B | 15 | Same, for a string rule |
+| Task C | 15 | Same, for an array rule |
+| Robustness | 5 | Code that does not throw on any of the 150 held-out cases |
+
+A naive implementation of each task scores 32–36%, **by design** — that floor is the point.
+
+### DO — deduction, out of 50
+
+The model writes `solve(board, mines)` **once**. That single function is replayed on 450
+generated boards, and every move is checked for *proof*: a move must be provably safe, not
+merely lucky.
+
+| Component | Points | What it takes |
+|---|---|---|
+| Pool A | 30 | Wins each of 300 boards that pure deduction can solve, every move proven |
+| No confident error | 10 | Never detonates, never guesses, never breaks |
+| Pool B | 10 | On 150 boards reaching an unprovable position, plays all proven moves then correctly returns `null` |
+
+Outcomes per board: `won`, `surrender` (a correct stop), `premature_surrender`,
+`detonation`, `unproven_move` (safe by luck, **scored like a detonation**),
+`protocol_violation`, `stalled`.
+
+Random play survives 0% of boards, so a Pool A win cannot be luck. It does not show the
+solver was *derived* rather than recalled; see the first two limitations.
+
+The reference solver scores **50/50** with a diagnostic of **15/15**. `npm run dry-run`
+proves that on all 450 boards, and no model is scored unless it passes first.
+
+### The Monkey Index (MI) — reported, not scored
+
+`MI = seen pass rate − held-out pass rate`, in points. It asks a different question from the
+score: *did performance carry from the examples the model was shown to inputs it had not
+seen?*
+
+| MI | Reading |
 |---|---|
-| Pool A (300 boards, solvable by pure deduction): boards won | 30 |
-| Pool A: no detonation, no unproven guess, no broken output | 10 |
-| Pool B (150 boards that reach a position where nothing is provable): stopped correctly by returning `null` there | 10 |
+| 0–10 | **generalizes** — held-out performance matches shown performance |
+| 11–30 | **mostly generalizes** — held-out trails shown on some cases |
+| 31–60 | **partial** |
+| 61+ | **SURFACE FIT** — shown performance carried no information about held-out |
 
-Outcomes per board: `won`, `surrender` (a correct stop), `premature_surrender`, `detonation`,
-`unproven_move` (safe by luck, scored like a detonation), `protocol_violation`, `stalled`.
-Random play survives 0% of boards, so a Pool A win cannot be luck. It does not show the solver was
-derived rather than recalled; see the first two limitations.
+A low MI is evidence of generalization, **not proof of abstraction**: a heuristic fitted to
+one distribution would score the same. Two models can share a score and sit at opposite ends
+of this scale, which is why it is reported next to the score and never merged into it.
+
+### The DO diagnostic — reported, not scored, out of 15
+
+DO's 50 points measure two different things: whether a solver *cleared* a board, and whether
+it *stayed out of trouble*. A solver returning `null` on its very first call clears nothing,
+so it scores 0 of the 30 — but it also never detonates, so it banks the full 10 for "no
+confident error" and lands on **10/50**.
+
+That 10 flatters it. Ten points for a solver that did nothing reads like partial competence.
+The diagnostic grades **provable progress** on the same 450 boards and the same replay — no
+extra model calls, no extra boards, no change to the prompt.
+
+| Component | Points | What it takes |
+|---|---|---|
+| Initiation | 5 | Share of Pool A boards where it made at least one proven move |
+| Depth | 5 | Mean proven moves, scaled to the reference solver's 75 and capped there |
+| Breadth | 5 | Fraction of the three Pool A tiers it reached |
+
+Reference solver: **15/15**, at a mean of 74.99 proven moves per board. Pool B is excluded —
+quitting correctly there is not progress, and DO already scores it.
+
+### The adjusted total — the one number to plot
+
+`SEE + DO` is out of 100 and already maxes out, so MI and the diagnostic have nowhere to go.
+The adjusted total folds both in. **It is a reporting layer only**: SEE, DO, MI and the
+diagnostic are all unchanged on every report, and the reference solver still scores 100.
+
+```
+adjusted = clamp( SEE + DO  −  0.5 × MI  −  10 × (1 − initiationRate),  0, 100 )
+```
+
+The two adjustments point in **opposite directions**, which is why they are not one formula:
+
+- A high **MI inflates** a score. Memorizing the shown examples looks like competence and
+  collects held-out points it has not earned, so it is **subtracted**.
+- A low **diagnostic** inflates nothing; it means a solver did nothing. Those 10 points are
+  real points in the 50 and are not removed here — instead the *unearned portion* is clawed
+  back, scaled by how few boards the solver engaged on.
+
+Worked example. `gemma2:2b` scored SEE 14 + DO 10 = 24, but all 10 DO points were free (it
+made zero moves) and its MI of 13 says some of the 14 was memorization:
+
+```
+24  −  6.5 (MI 13 × 0.5)  −  10 (never engaged)  =  8
+```
+
+The weights are hand-chosen, and this project freezes hand-chosen weights for a reason — see
+[`docs/calibration.md`](docs/calibration.md). They live in `src/adjusted.mjs` rather than
+buried in a formula so a reader can disagree with them. The adjusted total is a **derived
+figure**: never quote it without the components it came from.
+
+## Results
+
+Each cohort gets its own chart, generated from the JSON reports rather than drawn by hand, so
+a figure cannot drift from the numbers behind it. Regenerate any chart with:
+
+```bash
+node bin/chart.mjs docs/cohort-1-local-small.json docs/cohort-1-local-small.svg
+```
+
+### Cohort 1 — small local models
+
+Five open-weight models under 8B, pulled from the Ollama registry and served locally on an
+Apple M2 (16 GB, 100% GPU) at Ollama's default quantization. Scored 3× each at temperature 0;
+all three runs returned byte-identical code, so every spread below is 0 and the score is a
+measurement rather than a sample.
+
+![Adjusted score against parameter count for five local models under 8B. The Pareto frontier runs gemma2:2b at 8, deepseek-coder:6.7b at 18, to qwen2.5-coder:7b at 20. The reference solver sits at 100, far above every model.](docs/cohort-1-local-small.svg)
+
+| Model | Params | SEE /50 | MI | DO /50 | Diag /15 | SEE+DO | **Adjusted /100** |
+|---|---|---|---|---|---|---|---|
+| `gemma2:2b` | 2.0 | 14 | 13 | 10 | 0 | 24 | **8** |
+| `llama3.2:3b` | 3.0 | 22 | 25 | 0 | 0 | 22 | **0** |
+| `deepseek-coder:6.7b` | 6.7 | 22 | 9 | 10 | 0 | 32 | **18** |
+| `qwen2.5-coder:7b` | 7.0 | 24 | 9 | 10 | 0 | 34 | **20** |
+| `mistral:7b-instruct` | 7.0 | 15 | 12 | 10 | 0 | 25 | **9** |
+
+**Pareto frontier:** `gemma2:2b` → `deepseek-coder:6.7b` → `qwen2.5-coder:7b`. The other two
+are dominated.
+
+#### What the numbers say
+
+**Every model failed DO outright.** All five scored **0/15 on the diagnostic and made zero
+moves on all 450 boards** — not one proven move on any board, for any model. This is the
+cohort's headline and it is not a close call.
+
+Reading their code explains why. None implemented constraint propagation. Qwen compared a
+neighbour mine count against the cell it was testing, which is `null`, so the comparison was
+never true. DeepSeek compared local adjacent mines against the board's *total* mine count.
+Gemma tested `board[row][col] === 0` only on cells it had already established were `null`. All
+three fell through to `return null` on the first call. Llama was the only genuine failure: it
+shadowed the `mines` parameter inside a loop and emitted an illegal move, which is a
+`protocol_violation` and therefore forfeits even the 10 unearned points — the only model to
+score 0 on DO itself.
+
+So DO currently measures a binary: *did the model write real constraint propagation, or
+not?* Five for five, no. That is a sharp result about this tier, and it is also the reason
+DO has no gradient at the bottom — which is what the diagnostic was added to expose.
+
+**Without the diagnostic, four of these five looked like they scored 10.** Ten points is a
+quarter of the scale, and it reads as partial competence. It was not: it was the "never
+detonated" points, collected by solvers that never clicked anything. The adjusted total
+removes that padding, and llama3.2:3b goes from 22 to **0** — which is the honest reading of a
+model that aced the shown examples, collapsed on held-out ones (MI 25, the worst in the
+cohort), and could not produce a working solver at all.
+
+**Coding specialization beats general purpose at equal size.** Qwen and Mistral are both 7B.
+Qwen scores **20 adjusted, Mistral 9** — the same cost, more than double the score. DeepSeek
+Coder 6.7B reaches 18, beating the 7B generalist. The two models purpose-built for code sit
+at the top of the cohort, and the ranking is not a size effect in disguise.
+
+**Size mostly matters, once you control for that.** Going 2B → 3B → 6.7B → 7B gives 8 → 0 → 18
+→ 20. It is close to monotonic except that gemma2:2b outscores llama3.2:3b — a larger model
+scoring *worse*, on both axes at once.
+
+**Gemma 2 is the value pick by a wide margin.** 8 points at 2B against Qwen's 20 at 7B is 71%
+of the score for 29% of the parameters, and it is the cheapest point on the frontier. Llama
+3.2 is dominated outright: a full billion parameters more than Gemma for two points fewer.
+Nobody should pick it from this chart.
+
+**The whole cohort is nowhere near the ceiling.** The reference solver scores 100 adjusted and
+15/15 diagnostic; the best model here scores 20 and 0/15. That gap is the finding, not a
+disappointment — but it means this chart says nothing yet about whether the eval *discriminates
+between capable models*, because no model in it reached the range where DO starts scoring.
+See "What this cohort cannot tell you" below.
+
+#### What this cohort cannot tell you
+
+- **DO is uncalibrated at the top.** Every model scored 0 or 10 on DO, so the entire 0–30 band
+  of Pool A is untested. Until a strong model is run, there is no evidence DO separates
+  competent solvers from each other.
+- **The adjusted total has no resolution down here.** It compresses a 34-to-22 spread in
+  `SEE+DO` into 20-to-0, and floors llama at 0. Two models with different failure modes can
+  both land near the bottom, so read the components, not just the total.
+- **Quantization is uncontrolled.** These ran at Ollama's default (Q4 for most), which is not
+  the precision a hosted provider serves. Cohort 1 is not cleanly comparable to any hosted
+  cohort until that is stated.
+- **Cohort 1 is not a cost measurement.** Parameter count is an exact, portable proxy for
+  compute, and it is what this axis uses. It is not a price: none of these models is
+  purchasable on a hosted provider today.
 
 ## Limitations
 
@@ -168,19 +358,28 @@ Every report carries these, and a score quoted without them is misleading:
   one afresh.
 - **Two narrow tasks.** Not a general intelligence measure, and the 50-point weights are hand-chosen
   (frozen at suite version 0.2.0).
+- **The adjusted total is derived and hand-weighted.** It subtracts `0.5 × MI` and claws back the
+  no-confident-error points a solver did not earn, both with judgement-call weights. It moves no
+  50-point score and the reference solver still reads 100, but it is a convenience for plotting,
+  not an independent measurement. Quote the components.
+- **The DO diagnostic only discriminates on engagement.** Its initiation and breadth components
+  measure whether a solver moved at all. A cohort of solvers that never engages scores 0/15
+  uniformly, and the diagnostic then separates nothing — it explains the DO score rather than
+  refining it.
 
 ## Maintaining the suite
 
 | Command | What it does |
 |---|---|
 | `npm test` | Unit and end-to-end tests (no network; the CLI tests use a stubbed fetch) |
-| `npm run self-test` | The 129-check gate every runner enforces before it will score anything |
+| `npm run self-test` | The 141-check gate every runner enforces before it will score anything |
 | `npm run self-test:full` | Self-test plus a byte-for-byte regeneration of the board pool (minutes) |
 | `npm run gen-pool` | Regenerates `src/do/minesweeper/pool.json` from seed `0x5EED` |
 | `npm run check-pool` | Regenerates in memory and compares with the file byte for byte |
 | `npm run prompts` | Prints every prompt with its SHA-256 and whether it matches the recorded digest |
 | `npm run acceptance -- --strong <model> --weak <model>` | The publication gate; add `--quick` to rehearse |
 | `npm run diagnose -- -m <model>` | Runs each SEE task several times and saves raw responses, to tell endpoint noise from harness bugs |
+| `node bin/chart.mjs <cohort>.json [<out>.svg]` | Regenerates a cohort chart from its JSON report data |
 
 Every push and pull request runs `npm test` and `npm run self-test` on Node 20 via
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Pool regeneration is deliberately
@@ -193,7 +392,8 @@ Changing the oracle or pool classification: bump `GENERATOR_VERSION` in `pool.mj
 `npm run gen-pool`; loading a pool built by a different generator fails loudly.
 
 Every number the suite asserts (the naive baselines, the 0% random baseline, the
-effort cap and how it was derived, the pool's shape and acceptance rates) is
+effort cap and how it was derived, the pool's shape and acceptance rates, the
+diagnostic's depth reference of 75 and the adjusted total's weights) is
 recorded in [`docs/calibration.md`](docs/calibration.md), with the commands that
 re-derive each one. Read it before changing a held-out set, the pool, the oracle
 or the cap.
@@ -220,8 +420,10 @@ discriminate is worse than no eval, because it manufactures false confidence.
 monkey-see-monkey-do/
 ├── config/models.example.json   model registry template
 ├── docs/calibration.md          every asserted number, and how it was measured
+├── docs/cohort-*.json           chart source data, derived from results/
+├── docs/cohort-*.svg            generated charts — edit the JSON, not these
 ├── src/
-│   ├── adapters/                openai.mjs, responses.mjs, ollama.mjs, registry.mjs
+│   ├── adapters/                openai.mjs, responses.mjs, anthropic.mjs, ollama.mjs, registry.mjs
 │   ├── sandbox.mjs              node:vm execution, per-call timeout, code extraction
 │   ├── cli.mjs                  shared runner plumbing, temperature rule, self-test gate
 │   ├── key.mjs                  API key resolution, shared by both evals
@@ -230,20 +432,24 @@ monkey-see-monkey-do/
 │   │                            and the `npm run self-test` entry point
 │   ├── prompt-digests.mjs       recorded SHA-256 of every prompt
 │   ├── report.mjs               JSON reports and the limitations they carry
+│   ├── adjusted.mjs             the adjusted total — folds MI and the DO diagnostic into
+│   │                            one figure, reported beside SEE + DO and never inside them
 │   ├── run-all.mjs              both evals, one model, combined report
 │   ├── see/                     SEE only: reference.mjs (ground truth), tasks/*.json,
 │   │                            tasks.mjs, prompt, score, run
-│   └── do/                      DO only: prompt, score, run, reference-solver.mjs
+│   └── do/                      DO only: prompt, score, run, reference-solver.mjs,
+│       │                        diagnostic.mjs (the 15-point progress axis)
 │       └── minesweeper/         board.mjs, oracle.mjs, pool.mjs, pool.json
 ├── bin/                         command-line entry points, one per npm script:
-│                                gen-pool, acceptance, diagnose, providers, show-prompts
+│                                gen-pool, acceptance, diagnose, providers, show-prompts,
+│                                chart (cohort JSON -> SVG)
 ├── compare.sh                   run several pinned models 3× each, side by side
 └── tests/                       node:test suites
 ```
 
 `src/see/` and `src/do/` hold only what is private to their own eval. Anything both
-evals need (key resolution, response fingerprinting, the sandbox, reporting) lives at
-the top of `src/`, so neither eval's folder reaches into the other's.
+evals need (key resolution, response fingerprinting, the sandbox, reporting, the adjusted
+total) lives at the top of `src/`, so neither eval's folder reaches into the other's.
 
 ## Provenance
 
