@@ -28,6 +28,7 @@ import {
   POOL_A_TIERS, POOL_B_TIERS, PUBLISHED_PER_TIER, POOL_FILE, buildPublishedPool, serializePool,
 } from "./do/minesweeper/pool.mjs";
 import { scoreDo, randomBaseline } from "./do/score.mjs";
+import { scoreDiagnostic, REFERENCE_DEPTH } from "./do/diagnostic.mjs";
 import { playBoard, loadPool } from "./do/run.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "./do/reference-solver.mjs";
 import { PREAMBLE as DO_PREAMBLE, promptDigest as doPromptDigest } from "./do/prompt.mjs";
@@ -663,8 +664,73 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     check("an empty run scores 0, not a free bonus", scoreDo({ boardResults: [] }).total === 0);
   }
 
-  // --- 17. DO prompt and harness ------------------------------------------
-  log("\n17. DO prompt and harness");
+  // --- 17. DO diagnostic ---------------------------------------------------
+  log("\n17. DO diagnostic (reported beside the 50, never inside it)");
+
+  {
+    const rows = (outcome, n, calls, pool = "A", tier = "poolA-small") =>
+      Array.from({ length: n }, (_, i) => ({ pool, tier, attempt: i + 1, outcome, calls }));
+
+    // A full-marks run has to span every Pool A tier as well as make
+    // reference-depth moves — breadth is a separate component and will cap a
+    // single-tier run at 12/15 however deep it plays.
+    const acrossTiers = (outcome, calls) =>
+      POOL_A_TIERS.flatMap((tier) => rows(outcome, 2, calls, "A", tier));
+
+    // The gap the diagnostic exists to close: surrendering every board scores 10
+    // on the 50 because it never detonates, but it made no move at all. These
+    // two assertions together are the reason the axis exists.
+    const inert = scoreDiagnostic({ boardResults: rows("premature_surrender", 4, 0) });
+    const inertScore = scoreDo({ boardResults: rows("premature_surrender", 4, 0) });
+    check("a solver that surrenders immediately scores 10/50 — the flattering score",
+      inertScore.total === 10, `${inertScore.total}/50`);
+    check("…and scores 0/15 on the diagnostic, which is what separates it from a cautious solver",
+      inert.total === 0, `${inert.total}/15`);
+    check("…and is flagged inert so a reader does not have to infer it from three zeroes", inert.inert === true);
+
+    check("a solver making reference-depth moves on every tier scores the full 15",
+      scoreDiagnostic({ boardResults: acrossTiers("won", 75) }).total === 15);
+    check("depth saturates at the oracle rather than running away",
+      scoreDiagnostic({ boardResults: acrossTiers("won", 300) }).total === 15);
+    check("a single-tier run is capped at 12 by breadth, however deep it plays",
+      scoreDiagnostic({ boardResults: rows("won", 4, 75) }).total === 12);
+    check("depth is graded, not binary — half the reference depth earns partial credit",
+      scoreDiagnostic({ boardResults: rows("won", 4, 37) }).points.depth > 2
+        && scoreDiagnostic({ boardResults: rows("won", 4, 37) }).points.depth < 3);
+    check("initiation is share-of-boards, so one lucky opening cannot buy full marks",
+      scoreDiagnostic({ boardResults: [...rows("won", 1, 75), ...rows("won", 3, 0)] }).points.initiation < 5);
+    check("breadth caps a solver that only handles the smallest tier",
+      scoreDiagnostic({ boardResults: [...rows("won", 4, 75), ...rows("won", 4, 0, "A", "poolA-medium"), ...rows("won", 4, 0, "A", "poolA-large")] }).points.breadth < 5);
+
+    // The invariant that matters most: adding the axis must not move the 50.
+    const perfectRows = [...rows("won", 4, 75), ...rows("surrender", 4, 75, "B")];
+    check("the diagnostic does not change the 50-point score",
+      scoreDo({ boardResults: perfectRows }).total === 50);
+    check("Pool B is excluded from the diagnostic — quitting correctly is not progress",
+      scoreDiagnostic({ boardResults: rows("surrender", 4, 0, "B") }).total === 0);
+    check("an empty run scores 0 on the diagnostic, not a free bonus",
+      scoreDiagnostic({ boardResults: [] }).total === 0);
+
+    // End to end through the sandbox, on the same shape runDo produces. Sampled
+    // rather than the full pool to keep the gate fast, so the deterministic
+    // components are asserted exactly and depth is held to a floor rather than
+    // to the reference figure — a six-board sample cannot be expected to match
+    // the oracle's 300-board mean exactly.
+    {
+      const solver = compileCandidate(REFERENCE_SOLVER_SOURCE, { entry: "solve" });
+      const played = loadPool({ perTier: 2 }).boards
+        .filter((b) => b.pool === "A")
+        .map((b) => ({ pool: b.pool, tier: b.tier, attempt: b.attempt, ...playBoard(replayBoard(b.tier, b.attempt, POOL_SEED), solver) }));
+      const g = scoreDiagnostic({ boardResults: played });
+      check("the reference solver initiates on every sampled Pool A board", g.points.initiation === 5, `${g.points.initiation}/5`);
+      check("the reference solver reaches every Pool A tier", g.activeTiers.length === POOL_A_TIERS.length, g.activeTiers.join(", ") || "none");
+      check("the reference solver's depth is at least 70% of its own reference figure",
+        g.points.depth >= 3.5, `${g.points.depth.toFixed(2)}/5 at mean ${g.meanCalls} of ${REFERENCE_DEPTH}`);
+    }
+  }
+
+  // --- 18. DO prompt and harness ------------------------------------------
+  log("\n18. DO prompt and harness");
 
   {
     check("the prompt asks for a logically certain cell and forbids guessing",

@@ -29,6 +29,7 @@ import { replayBoard, capForTier, loadPublishedPool, POOL_SEED } from "./mineswe
 import { buildPrompt, promptDigest } from "./prompt.mjs";
 import { analyse, verifyMove } from "./minesweeper/oracle.mjs";
 import { scoreDo, randomBaseline } from "./score.mjs";
+import { scoreDiagnostic } from "./diagnostic.mjs";
 import { buildDoReport, writeDoReport, LIMITATIONS } from "../report.mjs";
 import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "../cli.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "./reference-solver.mjs";
@@ -153,10 +154,13 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
   return {
     boardResults,
     score: scoreDo({ boardResults, baseline }),
+    // Reported beside the 50, never inside it. See src/do/diagnostic.mjs.
+    diagnostic: scoreDiagnostic({ boardResults }),
     usable: compileError === null,
     compileError,
     response: dryRun ? "(reference solver — no model was called)" : completion.text,
     providerModel: completion.providerModel ?? null,
+    finishReason: completion.finishReason ?? null,
     responseFingerprint: fingerprint(completion.text),
     digest: promptDigest(),
     dryRun,
@@ -284,6 +288,21 @@ export const printDoRun = (model, out) => {
   }
   if (s.unverifiedMoves > 0) {
     console.log(`  ${s.unverifiedMoves} move(s) could not be verified within the oracle's budget and were given the benefit of the doubt.`);
+  }
+
+  // The diagnostic is printed under the score, never added to it. `inert` is
+  // called out in words because a 0/15 next to a 10/50 reads as noise without
+  // it: both numbers are explained by a solver that made no move at all.
+  const dg = out.diagnostic;
+  if (dg) {
+    console.log(`\n  \x1b[1mDIAGNOSTIC (not part of the 50)\x1b[0m`);
+    console.log(`    initiation ${dg.points.initiation.toFixed(1)}/5   depth ${dg.points.depth.toFixed(1)}/5   breadth ${dg.points.breadth.toFixed(1)}/5`);
+    console.log(`    ${dg.total}/${dg.max}`);
+    if (dg.inert) {
+      console.log(`    made no move on any Pool A board — mean 0 of ${dg.referenceDepth} proven moves`);
+    } else {
+      console.log(`    mean ${dg.meanCalls} proven moves per Pool A board (oracle ${dg.referenceDepth}); tiers reached: ${dg.activeTiers.join(", ") || "none"}`);
+    }
   }
 
   if (out.dryRun) {

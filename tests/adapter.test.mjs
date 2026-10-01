@@ -309,6 +309,7 @@ test("resolveModel rejects an unknown provider and a missing slash", () => {
 // --- Keyless endpoints and temperature control ------------------------------
 
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { complete as ollamaComplete } from "../src/adapters/ollama.mjs";
@@ -378,6 +379,251 @@ test("the registry dispatches to the adapter the config names", async () => {
   const r = await dispatch(ollamaConfig(fetchImpl), "P");
   assert.equal(r.text, "ok");
   assert.match(url, /api\/chat/);
+});
+
+test("the registry dispatches a responses config to the responses adapter", async () => {
+  let url;
+  const fetchImpl = async (u) => ((url = u), jsonResponse(responsesBody("ok")));
+  const r = await dispatch(responsesConfig(fetchImpl), "P");
+  assert.equal(r.text, "ok");
+  assert.match(url, /v1\/responses$/);
+});
+
+// --- Responses ----------------------------------------------------------------
+
+import { complete as responsesComplete } from "../src/adapters/responses.mjs";
+
+const responsesConfig = (fetchImpl, extra = {}) => ({
+  adapter: "responses",
+  endpoint: "https://example.test/v1/responses",
+  model: "test/model",
+  apiKeyEnv: "TEST_KEY",
+  fetchImpl,
+  maxRetries: 0,
+  ...extra,
+});
+
+const message = (text) => ({
+  type: "message",
+  role: "assistant",
+  status: "completed",
+  content: [{ type: "output_text", text, annotations: [] }],
+});
+
+const reasoning = (summary) => ({
+  type: "reasoning",
+  summary: summary ? [{ type: "summary_text", text: summary }] : [],
+  content: [],
+});
+
+const responsesBody = (text, extra = {}) => ({
+  id: "resp_123",
+  object: "response",
+  status: "completed",
+  model: "test/model-20260101",
+  output: [message(text)],
+  usage: { input_tokens: 10, output_tokens: 20, output_tokens_details: { reasoning_tokens: 6 } },
+  ...extra,
+});
+
+test("Responses: reads output_text and maps usage", async () => {
+  const fetchImpl = async () => jsonResponse(responsesBody("function f(n){return n}"));
+  const r = await responsesComplete(responsesConfig(fetchImpl), "PROMPT");
+  assert.equal(r.text, "function f(n){return n}");
+  assert.equal(r.finishReason, "completed");
+  assert.equal(r.providerModel, "test/model-20260101");
+  assert.deepEqual(r.usage, { prompt_tokens: 10, completion_tokens: 20, reasoning_tokens: 6 });
+  assert.equal(r.empty, false);
+});
+
+test("Responses: one user message, no instructions, no cap it did not choose", async () => {
+  let body;
+  const fetchImpl = async (url, init) => {
+    body = JSON.parse(init.body);
+    return jsonResponse(responsesBody("x"));
+  };
+  await responsesComplete(responsesConfig(fetchImpl), "PROMPT");
+  assert.deepEqual(body.input, [{ role: "user", content: [{ type: "input_text", text: "PROMPT" }] }]);
+  assert.equal(body.instructions, undefined, "no system prompt");
+  assert.equal(body.temperature, 0);
+  assert.equal(body.stream, false);
+  assert.equal(body.max_output_tokens, undefined, "no self-inflicted truncation budget");
+  await responsesComplete(responsesConfig(fetchImpl, { maxOutputTokens: 4096 }), "PROMPT");
+  assert.equal(body.max_output_tokens, 4096);
+});
+
+test("Responses: a reasoning item is never read as the answer", async () => {
+  // The trap this adapter exists to avoid: a reasoning model puts its chain of
+  // thought in output[0], ahead of the message. Reading item 0 would put prose
+  // in front of the code extractor and poison the reproducibility fingerprint.
+  const fetchImpl = async () =>
+    jsonResponse(
+      responsesBody("SOLVER", {
+        output: [reasoning("first I will consider the board"), message("SOLVER")],
+      })
+    );
+  const r = await responsesComplete(responsesConfig(fetchImpl), "PROMPT");
+  assert.equal(r.text, "SOLVER");
+  assert.doesNotMatch(r.text, /consider the board/);
+});
+
+test("Responses: several message items are joined", async () => {
+  const fetchImpl = async () =>
+    jsonResponse(responsesBody("", { output: [message("part one "), reasoning("hmm"), message("part two")] }));
+  const r = await responsesComplete(responsesConfig(fetchImpl), "P");
+  assert.equal(r.text, "part one part two");
+});
+
+test("Responses: truncation is reported in finishReason, not raised", async () => {
+  // A response that arrived is scored as it arrived, even when it is cut off.
+  // Raising here would turn a model result into a harness error.
+  const fetchImpl = async () =>
+    jsonResponse(
+      responsesBody("function solve(board, mi", {
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+      })
+    );
+  const r = await responsesComplete(responsesConfig(fetchImpl), "P");
+  assert.equal(r.text, "function solve(board, mi");
+  assert.equal(r.finishReason, "max_output_tokens");
+  assert.equal(r.empty, false, "a truncated answer is still an answer");
+});
+
+test("Responses: a refusal is an empty answer, and is not retried", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    return jsonResponse(
+      responsesBody("", {
+        output: [{ type: "message", role: "assistant", content: [{ type: "refusal", refusal: "no" }] }],
+      })
+    );
+  };
+  const r = await responsesComplete(responsesConfig(fetchImpl, { maxRetries: 2 }), "P");
+  assert.equal(r.text, "", "refusal prose must not reach the code extractor");
+  assert.equal(r.empty, true);
+  assert.equal(calls, 1);
+});
+
+test("Responses: a gateway that flattens to output_text still works", async () => {
+  const fetchImpl = async () => jsonResponse({ status: "completed", model: "m", output_text: "SOLVER" });
+  const r = await responsesComplete(responsesConfig(fetchImpl), "P");
+  assert.equal(r.text, "SOLVER");
+});
+
+test("Responses: an output array with no message item is an empty answer", async () => {
+  // Same rule as the OpenAI adapter: a response that arrived with no text is a
+  // score of zero, not a harness error. Reasoning-only output lands here too.
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    return jsonResponse(responsesBody("", { output: [reasoning("thinking")] }));
+  };
+  const r = await responsesComplete(responsesConfig(fetchImpl, { maxRetries: 2 }), "P");
+  assert.equal(r.text, "");
+  assert.equal(r.empty, true);
+  assert.equal(calls, 1, "not retried");
+});
+
+test("Responses: a response with neither output nor output_text fails loudly", async () => {
+  // Better to refuse to score than to score a response we could not read: with
+  // no output array and no convenience field there is nothing to extract.
+  const fetchImpl = async () => jsonResponse({ status: "completed", model: "m" });
+  await assert.rejects(() => responsesComplete(responsesConfig(fetchImpl), "P"), /no output/);
+});
+
+test("Responses: a --seed is refused rather than silently dropped", async () => {
+  let called = false;
+  const fetchImpl = async () => ((called = true), jsonResponse(responsesBody("x")));
+  await assert.rejects(() => responsesComplete(responsesConfig(fetchImpl, { seed: 42 }), "P"), /does not send a seed/);
+  assert.equal(called, false);
+});
+
+test("Responses: temperature 0 omitted when the config says it is unsupported", async () => {
+  let body;
+  const fetchImpl = async (url, init) => {
+    body = JSON.parse(init.body);
+    return jsonResponse(responsesBody("x"));
+  };
+  await responsesComplete(responsesConfig(fetchImpl, { supportsTemperatureZero: false }), "P");
+  assert.equal(body.temperature, undefined);
+});
+
+test("Responses: 429 retries, 400 does not, and the provider's message survives", async () => {
+  let calls = 0;
+  const retrying = async () => {
+    calls++;
+    return { ok: false, status: 429, text: async () => "slow down" };
+  };
+  await assert.rejects(
+    () => responsesComplete(responsesConfig(retrying, { maxRetries: 2 }), "P"),
+    (err) => err instanceof AdapterError && err.status === 429
+  );
+  assert.equal(calls, 3);
+
+  let hard = 0;
+  const rejecting = async () => {
+    hard++;
+    return jsonResponse({ error: { message: "Unsupported parameter: 'temperature'." } }, 400);
+  };
+  await assert.rejects(
+    () => responsesComplete(responsesConfig(rejecting, { maxRetries: 3 }), "P"),
+    /Unsupported parameter: 'temperature'/
+  );
+  assert.equal(hard, 1, "a 400 is the provider's answer, not a transport failure");
+});
+
+test("Responses: sends bearer auth and any configured extra headers", async () => {
+  let headers;
+  const fetchImpl = async (url, init) => {
+    headers = init.headers;
+    return jsonResponse(responsesBody("x"));
+  };
+  await responsesComplete(responsesConfig(fetchImpl, { headers: { "x-opencode-session": "s1" } }), "P");
+  assert.equal(headers.authorization, "Bearer test-key-1234");
+  assert.equal(headers["content-type"], "application/json");
+  assert.equal(headers["x-opencode-session"], "s1");
+});
+
+test("Responses: a missing API key fails before any request", async () => {
+  let called = false;
+  const fetchImpl = async () => ((called = true), jsonResponse(responsesBody("x")));
+  await assert.rejects(
+    () => responsesComplete(responsesConfig(fetchImpl, { apiKeyEnv: "DEFINITELY_NOT_SET_12345" }), "P"),
+    /Missing API key/
+  );
+  assert.equal(called, false);
+});
+
+// --- OpenCode Go presets ------------------------------------------------------
+
+test("the Go presets pin a dialect and identify the client", () => {
+  const chat = resolveModel("gogo/glm-5.3");
+  assert.equal(chat.adapter, "openai");
+  assert.equal(chat.endpoint, "https://opencode.ai/zen/go/v1/chat/completions");
+  assert.equal(chat.model, "glm-5.3");
+  assert.equal(chat.apiKeyEnv, "OPENCODE_API_KEY");
+
+  const res = resolveModel("gogo-responses/grok-4.7");
+  assert.equal(res.adapter, "responses");
+  assert.equal(res.endpoint, "https://opencode.ai/zen/go/v1/responses");
+  assert.equal(res.model, "grok-4.7");
+  assert.equal(res.supportsTemperatureZero, null, "unmeasured is unknown, not assumed");
+
+  for (const c of [chat, res]) {
+    assert.ok(c.headers["user-agent"].startsWith("monkey-see-monkey-do/"), "Go asks clients to identify themselves");
+    assert.ok(c.headers["x-opencode-session"], "Go asks clients to send a session id");
+  }
+  // The reported version is read from package.json, so it cannot drift away
+  // from the version this suite ships as.
+  assert.equal(
+    res.headers["user-agent"],
+    `monkey-see-monkey-do/${createRequire(import.meta.url)("../package.json").version}`
+  );
+  // One id per process, so the four calls of a run share it and Go's prompt
+  // caching still applies. A fresh id per request would defeat the caching.
+  assert.equal(chat.headers["x-opencode-session"], res.headers["x-opencode-session"]);
 });
 
 // --- The registry file ---------------------------------------------------------

@@ -73,6 +73,11 @@ export const buildReport = ({ model, taskRuns, last, indices, reproducibility, c
       // snapshot, a different quantisation). Record both.
       resolvedByProvider: taskRuns.find((t) => t.providerModel)?.providerModel ?? null,
       endpoint: config?.endpoint ?? null,
+      // Why the model stopped, per dialect. A Responses endpoint reports
+      // "max_output_tokens" here when the answer was cut off, which is the
+      // difference between a model that cannot solve the task and a harness
+      // that gave it too little room. Null where the dialect has no such field.
+      finishReason: taskRuns.find((t) => t.finishReason)?.finishReason ?? null,
     },
 
     generation: {
@@ -213,6 +218,9 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
     requested: model,
     resolvedByProvider: result.providerModel ?? null,
     endpoint: config?.endpoint ?? null,
+    // See the SEE report: "max_output_tokens" here means a truncated solver,
+    // not a model that could not write one.
+    finishReason: result.finishReason ?? null,
     // A dry run is not a model result and must never be filed as one.
     dryRun: result.dryRun === true,
   },
@@ -256,6 +264,11 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
     outcomes: result.score.outcomes,
     unverifiedMoves: result.score.unverifiedMoves,
   },
+
+  // A second axis on the same boards, deliberately outside `score`. A solver
+  // that surrendered immediately still banks score.points.poolANoDetonation,
+  // so the 50 alone cannot distinguish caution from inertia; this can.
+  diagnostic: result.diagnostic,
 
   reproduction: reproducibility
     ? {

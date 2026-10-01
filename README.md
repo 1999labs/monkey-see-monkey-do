@@ -75,13 +75,40 @@ cp config/models.example.json config/models.json
 
 - A **provider** entry makes every `groq/<model-id>` work. A **model** entry configures one id exactly.
 - `adapter` is `openai` for any OpenAI-compatible `/chat/completions` endpoint (OpenRouter, Groq,
-  Together, vLLM, LM Studio, …) or `ollama`.
+  Together, vLLM, LM Studio, …), `responses` for any OpenAI Responses endpoint, or `ollama`.
 - `apiKeyEnv` names the environment variable holding the key; `null` means no key (local servers).
 - `supportsTemperatureZero`: `true`, `false`, or `null` (unknown until a `-r 3` check). With
   `false` the runner **refuses to score** unless you pass `--i-cannot-control-temperature`, and the
   result is stamped as not comparable. A model sampled above temperature 0 is a different experiment.
+- `maxOutputTokens` caps the response on `responses` adapters. Leave it unset: a limit this harness
+  chose can truncate a solver the model had room to finish, and a self-inflicted truncation scores
+  like a weak model.
 
-Built in, with no config: `openrouter/…`, `openai/…`, `ollama/…`.
+Built in, with no config: `openrouter/…`, `openai/…`, `ollama/…`, `gogo/…`, `gogo-responses/…`.
+
+### OpenCode Go
+
+One subscription key serves three dialects, so the prefix picks the endpoint rather than a lookup
+table of model ids, which would go stale the next time OpenCode adds a model:
+
+| Prefix | Endpoint | Dialect | Models |
+|---|---|---|---|
+| `gogo/` | `/zen/go/v1/chat/completions` | OpenAI chat | GLM, Kimi, DeepSeek, MiMo, Hy, LongCat, Space Bunny Free |
+| `gogo-responses/` | `/zen/go/v1/responses` | OpenAI Responses | Grok 4.6/4.7, GPT 5.6/6 Luna, Muse Spark |
+| `gogo-messages/` | `/zen/go/v1/messages` | Anthropic Messages | MiniMax M3, Qwen3.8, Qwen3.7 Plus: not built in yet |
+
+```bash
+export OPENCODE_API_KEY=...
+npm run all -- -m gogo-responses/grok-4.7
+```
+
+Go asks clients to send their own user agent and a stable `x-opencode-session`, and says traffic is
+monitored for abuse. The presets send both, with one session id per process so the calls of a run
+share it and prompt caching still applies.
+
+Two limits worth knowing. Go's per-model monthly caps bind well before OpenRouter's pay-per-token
+does, so a `-r 3` check on an expensive model can stall partway through a month. And `--only-provider`
+is refused, because Go is the only route to its models and there is nothing to pin between.
 
 ### Keys
 
@@ -130,6 +157,10 @@ Every report carries these, and a score quoted without them is misleading:
   algorithm.
 - **SEE saturates.** Frontier models reach high SEE scores and it stops discriminating at the top of
   the market; it is most informative for open-weight and mid-tier models.
+- **A score describes one provider, not a model.** It is what that gateway served on that day.
+  OpenRouter load-balances across providers, so pin one with `--only-provider --no-fallback` or the
+  number mixes machines. OpenCode Go is a curated pairing, but not a fixed one. Neither is a
+  statement about the underlying weights, and two scores taken months apart may not be comparable.
 - **Not comparable to SWE-bench, HumanEval, or any external leaderboard.** Different scale, different
   construction; never present these numbers alongside one.
 - **DO has residual contamination risk.** Constraint propagation with search is a textbook
@@ -143,7 +174,7 @@ Every report carries these, and a score quoted without them is misleading:
 | Command | What it does |
 |---|---|
 | `npm test` | Unit and end-to-end tests (no network; the CLI tests use a stubbed fetch) |
-| `npm run self-test` | The 114-check gate every runner enforces before it will score anything |
+| `npm run self-test` | The 129-check gate every runner enforces before it will score anything |
 | `npm run self-test:full` | Self-test plus a byte-for-byte regeneration of the board pool (minutes) |
 | `npm run gen-pool` | Regenerates `src/do/minesweeper/pool.json` from seed `0x5EED` |
 | `npm run check-pool` | Regenerates in memory and compares with the file byte for byte |
@@ -190,7 +221,7 @@ monkey-see-monkey-do/
 ├── config/models.example.json   model registry template
 ├── docs/calibration.md          every asserted number, and how it was measured
 ├── src/
-│   ├── adapters/                openai.mjs, ollama.mjs, registry.mjs
+│   ├── adapters/                openai.mjs, responses.mjs, ollama.mjs, registry.mjs
 │   ├── sandbox.mjs              node:vm execution, per-call timeout, code extraction
 │   ├── cli.mjs                  shared runner plumbing, temperature rule, self-test gate
 │   ├── key.mjs                  API key resolution, shared by both evals

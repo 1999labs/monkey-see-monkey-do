@@ -1,0 +1,177 @@
+// Adapter for any OpenAI Responses endpoint (/v1/responses).
+//
+// Same contract as the OpenAI adapter: one user message, temperature 0, no
+// system prompt, and a retry only on a TRANSPORT failure — never on an answer
+// that actually arrived.
+//
+// The wire format differs in three ways that matter to a scoring harness:
+//
+//   1. Text lives in output[]. A reasoning model puts a `reasoning` item FIRST,
+//      whose summary and content hold the chain of thought. Only `output_text`
+//      blocks inside a `message` item are the answer. Reading the wrong item
+//      would push chain of thought through the code extractor and the
+//      reproducibility fingerprint, so the walk is explicit about types.
+//   2. There is no finish_reason. `status` is "completed" / "incomplete" /
+//      "failed" and `incomplete_details.reason` says why, usually
+//      "max_output_tokens". Truncation is REPORTED, never raised: a response we
+//      received is scored exactly as it arrived, so the reason rides along in
+//      finishReason where the report will show it.
+//   3. `seed` is refused rather than ignored. Sending an unsupported parameter
+//      is a 400, but silently dropping one the user asked for would hand them a
+//      reproducibility claim the run cannot support. Reproducibility on this
+//      adapter is established with --runs 3, not with a seed.
+
+import { setTimeout as delay } from "node:timers/promises";
+
+import { AdapterError } from "./openai.mjs";
+
+// Longer than the OpenAI adapter's 120s: these endpoints front reasoning
+// models, and thinking before the first token is normal rather than a hang.
+const DEFAULT_TIMEOUT_MS = 180_000;
+
+/**
+ * The answer, and only the answer, out of an `output` array.
+ *
+ * Returns null when there is no array to walk (a proxy that returns just
+ * `output_text`), so the caller can decide whether that is fatal. Returns ""
+ * when the array held no `output_text` block, which is a refusal: a refusal is
+ * a real answer, and an empty one.
+ */
+const answerFromOutput = (output) => {
+  if (!Array.isArray(output)) return null;
+  let text = "";
+  for (const item of output) {
+    // Skips `reasoning` items, and any tool-call item this suite never asks for.
+    if (item?.type !== "message") continue;
+    for (const block of item.content ?? []) {
+      if (block?.type === "output_text" && typeof block.text === "string") text += block.text;
+    }
+  }
+  return text;
+};
+
+export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) => {
+  const { endpoint, model, headers = {}, fetchImpl = fetch, maxRetries = 2 } = config;
+
+  const apiKeyEnv = config.apiKeyEnv;
+  const apiKey = apiKeyEnv ? process.env[apiKeyEnv] : null;
+  if (apiKeyEnv && !apiKey) {
+    throw new AdapterError(
+      `Missing API key. Set ${apiKeyEnv} before scoring a model.`,
+      { retryable: false }
+    );
+  }
+
+  if (config.seed !== undefined) {
+    throw new AdapterError(
+      "This adapter does not send a seed. It is not part of the Responses request, " +
+        "and dropping it silently would claim a reproducibility guarantee the run cannot " +
+        "support. Drop --seed, or point the model at an adapter that sends one.",
+      { retryable: false }
+    );
+  }
+
+  const body = {
+    model,
+    // The explicit array rather than a bare string, so "one user message, no
+    // system prompt" is guaranteed by the request instead of inferred from a
+    // shorthand. `instructions` is deliberately never set.
+    input: [{ role: "user", content: [{ type: "input_text", text: promptText }] }],
+    stream: false,
+  };
+  if (config.supportsTemperatureZero !== false) body.temperature = 0;
+  // Omitted rather than defaulted: a cap this harness chose could truncate a
+  // solver the model had room to finish, and a self-inflicted truncation is
+  // indistinguishable from a weak model once it is scored.
+  if (config.maxOutputTokens != null) body.max_output_tokens = config.maxOutputTokens;
+
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) await delay(500 * attempt);
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    try {
+      const res = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+          ...headers,
+        },
+        body: JSON.stringify(body),
+        signal: ac.signal,
+      });
+
+      const text = await res.text();
+      if (!res.ok) {
+        const retryable = res.status === 429 || res.status >= 500;
+        let detail = text.slice(0, 500);
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed?.error?.message) detail = parsed.error.message;
+        } catch {
+          /* not JSON, keep the raw text */
+        }
+        lastError = new AdapterError(`HTTP ${res.status}: ${detail}`, {
+          status: res.status,
+          retryable,
+          body: text.slice(0, 500),
+        });
+        if (retryable) continue;
+        throw lastError;
+      }
+
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new AdapterError("Endpoint returned non-JSON", { status: res.status, body: text.slice(0, 500) });
+      }
+
+      const answer = answerFromOutput(json.output);
+      if (answer === null) {
+        // No output array at all. Some gateways flatten the shape; take the
+        // convenience field if it is there, and fail loudly if it is not,
+        // rather than scoring a response we failed to read.
+        if (typeof json.output_text === "string") {
+          return {
+            text: json.output_text,
+            finishReason: json.status ?? null,
+            providerModel: json.model ?? model,
+            usage: null,
+            empty: json.output_text.length === 0,
+          };
+        }
+        throw new AdapterError("Response contained no output", { status: res.status, body: text.slice(0, 500) });
+      }
+
+      const usage = json.usage
+        ? {
+            prompt_tokens: json.usage.input_tokens ?? null,
+            completion_tokens: json.usage.output_tokens ?? null,
+            // Carried so a truncated run can be explained after the fact:
+            // reasoning_tokens high next to max_output_tokens means the budget
+            // went to thinking, not to a solver that was too long.
+            reasoning_tokens: json.usage.output_tokens_details?.reasoning_tokens ?? null,
+          }
+        : null;
+
+      return {
+        text: answer,
+        finishReason:
+          json.status === "incomplete"
+            ? (json.incomplete_details?.reason ?? "incomplete")
+            : (json.status ?? null),
+        providerModel: json.model ?? model,
+        usage,
+        empty: answer.length === 0,
+      };
+    } catch (err) {
+      if (err instanceof AdapterError && !err.retryable) throw err;
+      lastError = err instanceof AdapterError ? err : new AdapterError(String(err?.message ?? err), { retryable: true });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError ?? new AdapterError("Request failed", { retryable: true });
+};
