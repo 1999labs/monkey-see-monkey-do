@@ -8,7 +8,14 @@ node_modules/
 npm-debug.log*
 
 # Results may contain model output; local by default.
-results/
+#
+# EXCEPT the combined reports, which are committed: they are the evidence for
+# every number the cohort tables and charts print, and a chart whose source
+# reports are absent cannot be audited. They are ~4 KB each. The per-eval and
+# per-board reports stay ignored, since they carry 450 boardResults and the
+# raw model response per model, and nothing published cites them directly.
+results/*
+!results/combined-*.json
 prompts.txt
 
 # OS

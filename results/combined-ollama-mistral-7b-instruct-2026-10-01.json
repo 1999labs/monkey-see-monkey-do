@@ -1,0 +1,93 @@
+{
+  "schema": "monkey-see-monkey-do/combined@3",
+  "model": {
+    "requested": "ollama/mistral:7b-instruct",
+    "endpoint": "http://localhost:11434/api/chat"
+  },
+  "date": "2026-10-01T16:43:18.036Z",
+  "temperature": {
+    "requested": 0,
+    "sent": true,
+    "supported": true,
+    "override": false,
+    "comparable": true,
+    "statement": "temperature 0 requested; the model config says it is supported",
+    "keySource": "not required"
+  },
+  "see": {
+    "total": 15,
+    "max": 50,
+    "generalizationIndex": 12,
+    "reading": "mostly generalizes: held-out trails shown on some cases",
+    "seen": 0.3333,
+    "heldOut": 0.2133
+  },
+  "do": {
+    "total": 10,
+    "max": 50,
+    "poolAWon": 0,
+    "poolANoConfidentError": 1,
+    "poolBCorrectStop": 0,
+    "baselineGap": {
+      "poolA-small": 0,
+      "poolA-medium": 0,
+      "poolA-large": 0
+    },
+    "progressIndex": {
+      "total": 0,
+      "max": 15,
+      "points": {
+        "initiation": 0,
+        "depth": 0,
+        "breadth": 0
+      },
+      "initiationRate": 0,
+      "meanCalls": 0,
+      "inert": true
+    },
+    "poolSha256": "76b352b9652b05c641aebf47c054c9ab660e95ab6296a6324f9932fd7c4f8871",
+    "fullPool": true
+  },
+  "limitations": [
+    "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and solver soundness (DO), not software engineering.",
+    "DO scores a program, not a chain of thought. The model writes solve(board, mines) in a single call and never sees an individual board, so a DO score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
+    "A low Generalization Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
+    "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
+    "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
+    "Not comparable to SWE-bench, HumanEval, or any external leaderboard. Different scale, different construction; never present these numbers alongside one.",
+    "DO has residual contamination risk. Constraint propagation with search is a textbook algorithm, so a high DO score shows the model can produce a correct solver, not that it deduced one afresh.",
+    "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 0.2.0)."
+  ],
+  "combined": {
+    "total": 25,
+    "max": 100,
+    "reading": [
+      "MONKEY SEE   15/50   index 12  (mostly generalizes: held-out trails shown on some cases)",
+      "MONKEY DO    10/50   detonated 0% of boards, guessed on 0%",
+      "SEE 15/50  ·  DO 10/50  ·  combined 25/100",
+      "Mixed: the two evals disagree. Worth reading the per-tier DO",
+      "breakdown, since a model that only handles small boards has learned",
+      "to look at small boards."
+    ]
+  },
+  "adjusted": {
+    "total": 9,
+    "max": 100,
+    "base": 25,
+    "generalizationIndexPenalty": 6,
+    "unearnedPenalty": 10,
+    "components": {
+      "seeTotal": 15,
+      "doTotal": 10,
+      "generalizationIndex": 12,
+      "initiationRate": 0,
+      "generalizationWeight": 0.5,
+      "formula": "clamp(see + do - GENERALIZATION_WEIGHT*GZ - 10*(1 - initiationRate), 0, 100)"
+    }
+  },
+  "stability": null,
+  "reports": {
+    "see": "results/ollama-mistral-7b-instruct-2026-10-01.json",
+    "do": "results/do-ollama-mistral-7b-instruct-2026-10-01.json"
+  }
+}

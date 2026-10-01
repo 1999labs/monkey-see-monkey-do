@@ -327,7 +327,7 @@ export const writeDoReport = (report, outDir = "results") => {
 export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, reading, stability = null, paths = {} }) => {
   const seeTotal = Math.round(see.points + see.noCrash);
   return {
-    schema: "monkey-see-monkey-do/combined@2",
+    schema: "monkey-see-monkey-do/combined@3",
     model: { requested: model, endpoint: config?.endpoint ?? null },
     date: new Date().toISOString(),
     temperature: { ...temperatureStatus(config), keySource: keySource ?? null },
@@ -346,6 +346,19 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
       poolANoConfidentError: Number(doo.score.poolA.noDetonation.toFixed(4)),
       poolBCorrectStop: Number(doo.score.poolB.correctStop.toFixed(4)),
       baselineGap: doo.score.index,
+      // Carried here so one file answers every column the cohort table prints.
+      // Without it a reader auditing a chart from the repo has to open the
+      // separate DO report, which is 135 KB per model and gitignored.
+      progressIndex: doo.progressIndex
+        ? {
+            total: doo.progressIndex.total,
+            max: doo.progressIndex.max,
+            points: doo.progressIndex.points,
+            initiationRate: doo.progressIndex.initiationRate,
+            meanCalls: doo.progressIndex.meanCalls,
+            inert: doo.progressIndex.inert,
+          }
+        : null,
       poolSha256: pool?.sha256 ?? null,
       fullPool: pool?.full ?? null,
     },
