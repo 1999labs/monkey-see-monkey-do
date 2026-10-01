@@ -338,7 +338,7 @@ const main = async () => {
 
   const pool = loadPool({ perTier: args.perTier });
   console.log(
-    `\n  board pool: ${pool.boards.length} boards${pool.full ? " (the full published pool)" : ` (first ${args.perTier} per tier per pool — a SUBSET)`}`
+    `\n  board pool: ${pool.boards.length} boards${pool.full ? " (the full published pool)" : ` (first ${args.perTier} per tier per pool; a SUBSET, not comparable with a full run)`}`
   );
   console.log(`  pool sha256 ${pool.sha256}`);
   console.log(args.dryRun ? `\n  playing the reference solver...` : `\n  contacting the model (ONE call)...`);
