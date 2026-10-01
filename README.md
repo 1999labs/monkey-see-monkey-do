@@ -1,4 +1,4 @@
-## Monkey See, Monkey Do
+## Monkey See, Monkey Do 🙉
 
 Two automated model evals that probe two narrow skills: **induction**, generalizing a
 rule from examples instead of copying their surface; and **solver soundness**, writing
