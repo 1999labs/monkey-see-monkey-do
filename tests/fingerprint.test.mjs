@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fingerprint, reproducibility } from "../src/fingerprint.mjs";
+import { fingerprint, reproducibility, printVerdict } from "../src/fingerprint.mjs";
 
 test("fingerprint is 8 hex chars and stable", () => {
   assert.equal(fingerprint("function f(n){return n}"), fingerprint("function f(n){return n}"));
@@ -64,4 +64,68 @@ test("two differing runs are enough to prove instability", () => {
   ]);
   assert.equal(r.reproducible, false);
   assert.equal(r.perTask.A.distinct, 2);
+});
+
+// --- Failed runs are not evidence of determinism ---------------------------
+//
+// The regression these guard: a run whose call failed records response "", and
+// fingerprint("") is the same constant for every failure mode. Counting those
+// certified two timeouts as "identical code every run" and printed
+// temperatureHonoured: true for a model that never answered.
+
+test("three identical timeouts claim nothing, not stability", () => {
+  const entries = [
+    { taskId: "A", response: "", failed: true },
+    { taskId: "A", response: "", failed: true },
+    { taskId: "A", response: "", failed: true },
+  ];
+  const r = reproducibility(entries);
+  assert.equal(r.reproducible, false);
+  assert.equal(r.verdict, null, "no answered pair means NO verdict, not REPRODUCIBLE");
+  assert.equal(r.perTask.A.runs, 0);
+  assert.equal(r.perTask.A.failedRuns, 3);
+});
+
+test("two identical answers beside a failed run are still reproducible", () => {
+  const entries = [
+    { taskId: "A", response: "same code", failed: false },
+    { taskId: "A", response: "", failed: true },
+    { taskId: "A", response: "same code", failed: false },
+  ];
+  const r = reproducibility(entries);
+  assert.equal(r.reproducible, true);
+  assert.equal(r.verdict, "REPRODUCIBLE");
+  assert.equal(r.perTask.A.runs, 2);
+  assert.equal(r.perTask.A.failedRuns, 1);
+});
+
+test("one answered run alone claims nothing", () => {
+  const entries = [
+    { taskId: "A", response: "only answer", failed: false },
+    { taskId: "A", response: "", failed: true },
+  ];
+  const r = reproducibility(entries);
+  assert.equal(r.verdict, null);
+  assert.equal(r.reproducible, false);
+});
+
+test("a failed run does not create a false NOT_REPRODUCIBLE either", () => {
+  // A timeout beside a real answer used to read as "two different answers".
+  // It is one answer and one non-answer: unstable, but for the right reason.
+  const entries = [
+    { taskId: "A", response: "code", failed: false },
+    { taskId: "A", response: "code", failed: false },
+    { taskId: "A", response: "", failed: true },
+    { taskId: "A", response: "", failed: true },
+  ];
+  const r = reproducibility(entries);
+  assert.equal(r.verdict, "REPRODUCIBLE");
+  assert.equal(r.perTask.A.failedRuns, 2);
+});
+
+test("printVerdict needs two answered prints", () => {
+  assert.equal(printVerdict(["ab12cd34", "ab12cd34"]), "REPRODUCIBLE");
+  assert.equal(printVerdict(["ab12cd34", "0000ffff"]), "NOT_REPRODUCIBLE");
+  assert.equal(printVerdict(["ab12cd34"]), null, "one print is no evidence");
+  assert.equal(printVerdict([]), null);
 });

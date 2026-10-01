@@ -8,6 +8,9 @@ import { runSee } from "../src/see/run.mjs";
 import { tasks } from "../src/see/tasks.mjs";
 import { buildPrompt, promptDigest } from "../src/see/prompt.mjs";
 import { robustnessBonus, ROBUSTNESS_POINTS } from "../src/see/score.mjs";
+import { runAll } from "../src/run-all.mjs";
+import { loadPool } from "../src/do/run.mjs";
+import { REFERENCE_SOLVER_SOURCE } from "../src/do/reference-solver.mjs";
 
 process.env.FAKE_KEY = "fake-key";
 
@@ -218,4 +221,78 @@ test("an unusable response counts as 50 failed, thrown cases in the index and th
   assert.equal(out.robustness.threw, 50);
   assert.ok(Math.abs(out.noCrash - (5 * 100) / 150) < 1e-9, `robustness should be 3.33, got ${out.noCrash}`);
   assert.equal(Math.round(out.points), 30);
+});
+
+// --- Multi-run stability ---------------------------------------------------
+//
+// The regression this guards end to end: a run whose call never returned
+// recorded the empty response, whose fingerprint ("00000000") is identical for
+// every failure mode. The old stability block counted it, so two answered runs
+// plus a timeout read as "three different answers" — and two timeouts alone
+// read as "identical code every run" with temperatureHonoured claimed as true.
+
+// Call order per run is SEE A, B, C, then DO: positions 1,2,3,4 within each
+// run, so (call-1) % 4 maps the three SEE tasks and the one DO call.
+const stabilityConfig = (doFailsOn) => ({
+  endpoint: "https://fake.test/v1/chat/completions",
+  model: "fake/model",
+  apiKeyEnv: "FAKE_KEY",
+  maxRetries: 0,
+  fetchImpl: (() => {
+    let call = 0;
+    return async () => {
+      call++;
+      const position = (call - 1) % 4;
+      if (position === 3) {
+        const run = Math.floor((call - 1) / 4) + 1;
+        if (doFailsOn.includes(run)) {
+          throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+        }
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({ choices: [{ message: { content: REFERENCE_SOLVER_SOURCE }, finish_reason: "stop" }], model: "fake/model" }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            choices: [{ message: { content: [NAIVE.A, NAIVE.B, NAIVE.C][position] }, finish_reason: "stop" }],
+            model: "fake/model",
+          }),
+      };
+    };
+  })(),
+});
+
+test("a failed DO run does not poison the reproducibility verdict", async () => {
+  const pool = loadPool({ perTier: 1 }); // 6 boards: quick, still both pools
+  const { runs, stability } = await runAll(stabilityConfig([2]), { runs: 3, pool });
+  assert.equal(runs.length, 3);
+  assert.equal(stability.runs, 3);
+  // The timed-out run's DO print (the empty constant) must be excluded, so the
+  // two IDENTICAL answered runs carry the verdict instead of being outvoted by
+  // a non-answer.
+  assert.equal(stability.doPrints.length, 2);
+  assert.equal(stability.doVerdict, "REPRODUCIBLE");
+  assert.equal(stability.doReproducible, true);
+  assert.deepEqual(stability.doCallFailures, [false, true, false]);
+  // The failed run still scores (0/50, all boards no_response) and its total
+  // stays in the record, but it is not evidence about determinism.
+  assert.equal(stability.doTotals[1], 0);
+  assert.ok(stability.doTotals[0] > 0, "an answered run should have scored something");
+  // SEE answered identically in every run, so its verdict stands.
+  assert.equal(stability.seeVerdict, "REPRODUCIBLE");
+});
+
+test("every DO run failing is NO_VERDICT, never REPRODUCIBLE", async () => {
+  const pool = loadPool({ perTier: 1 });
+  const { stability } = await runAll(stabilityConfig([1, 2, 3]), { runs: 3, pool });
+  assert.equal(stability.doPrints.length, 0);
+  assert.equal(stability.doVerdict, "NO_VERDICT");
+  assert.equal(stability.doReproducible, false, "three timeouts must not certify identical code");
+  assert.deepEqual(stability.doTotals, [0, 0, 0]);
 });

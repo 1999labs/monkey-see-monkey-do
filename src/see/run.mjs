@@ -229,20 +229,37 @@ const main = async () => {
 
   let rep = null;
   if (runs.length > 1) {
+    // Failed runs are marked and excluded: their empty responses all share one
+    // constant fingerprint, so counting them certified two timeouts as
+    // "same answer every run". A task with fewer than two ANSWERED runs gets no
+    // verdict at all.
     rep = reproducibility(
-      runs.flatMap((r) => r.taskRuns.map((t) => ({ taskId: t.taskId, response: t.response })))
+      runs.flatMap((r) =>
+        r.taskRuns.map((t) => ({ taskId: t.taskId, response: t.response, failed: Boolean(t.callFailure) }))
+      )
     );
     const indices = runs.map((r) => Math.round(r.index.index * 100));
     const spread = Math.max(...indices) - Math.min(...indices);
 
     console.log("\n  REPRODUCIBILITY");
     for (const [taskId, info] of Object.entries(rep.perTask)) {
-      const verdict = info.distinct === 1 ? "same answer every run" : `${info.distinct} DIFFERENT answers`;
+      const verdict =
+        info.runs < 2
+          ? `no answered pair to compare (${info.failedRuns} failed)`
+          : info.distinct === 1
+            ? `same answer every answered run`
+            : `${info.distinct} DIFFERENT answers`;
       console.log(`    task ${taskId}: ${verdict}  [${info.prints.join(" ")}]`);
     }
     console.log(`\n  Generalization Index across runs: ${indices.join(", ")}  (spread ${spread})`);
 
-    if (!rep.reproducible) {
+    if (rep.verdict === null) {
+      console.log(
+        `\n  NO VERDICT. Too few answered runs to compare: every task failed in\n` +
+          `  all but one run. Nothing here says the endpoint is deterministic or\n` +
+          `  otherwise — the calls never came back. Fix the route, then re-run.`
+      );
+    } else if (!rep.reproducible) {
       console.log(
         `\n  NOT REPRODUCIBLE. The endpoint returned different code for the same\n` +
           `  prompt, so the model is guessing afresh each time. That is a property of\n` +
@@ -260,7 +277,7 @@ const main = async () => {
       );
     } else {
       console.log(
-        `\n  REPRODUCIBLE. Same code every run, scores stable within ${spread}.\n` +
+        `\n  REPRODUCIBLE. Same code every answered run, scores stable within ${spread}.\n` +
           `  This score is comparable to other models scored the same way.`
       );
     }

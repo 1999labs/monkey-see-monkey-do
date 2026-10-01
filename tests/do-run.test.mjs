@@ -443,6 +443,12 @@ test("a reproducibility check is what licenses a temperature claim", () => {
   const unstable = reportFixture({ reproducibility: { prints: ["a", "b", "c"] } });
   assert.equal(unstable.generation.temperatureHonoured, false);
   assert.equal(unstable.reproduction.verdict, "NOT_REPRODUCIBLE");
+  // Fewer than two answered runs is NO_VERDICT: unknown, which is null, not
+  // false. The old code would have certified the lone print as honoured.
+  const lonely = reportFixture({ reproducibility: { prints: ["a"], failedRuns: 2 } });
+  assert.equal(lonely.generation.temperatureHonoured, null);
+  assert.equal(lonely.reproduction.verdict, "NO_VERDICT");
+  assert.equal(lonely.reproduction.failedRuns, 2);
 });
 
 test("the report never contains an API key", () => {

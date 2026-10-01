@@ -15,7 +15,7 @@
 // same config, and writes both reports plus a combined one.
 
 import { runSee, printSeeRun } from "./see/run.mjs";
-import { reproducibility } from "./fingerprint.mjs";
+import { reproducibility, printVerdict } from "./fingerprint.mjs";
 import { runDo, loadPool, printDoRun } from "./do/run.mjs";
 import { randomBaseline, CONFIDENT_ERRORS } from "./do/score.mjs";
 import { adjustedTotal } from "./adjusted.mjs";
@@ -82,6 +82,23 @@ export const summarise = (see, doo) => {
   const index = Math.round(see.index.index * 100);
   const seeTotal = Math.round(see.points + see.noCrash);
   const total = Math.max(1, doo.boardResults.length);
+
+  // A route failure is not a disagreement between the evals. The first version
+  // fell through to the interpretive branches below and read a timeout as
+  // "the two evals disagree", which is not what happened and hides the one
+  // thing a reader of a zero must know.
+  if (doo.callFailure) {
+    const lines = [];
+    lines.push(`  MONKEY SEE   ${seeTotal}/50`);
+    lines.push(
+      `  MONKEY DO    0/50   NO RESPONSE (${doo.callFailure.reason}). Every board is no_response:`
+    );
+    lines.push(`  the model call never returned, so this zero describes the route,`);
+    lines.push(`  not the reasoning. SEE ran independently and is unaffected.`);
+    lines.push(`  SEE ${seeTotal}/50  ·  DO 0/50  ·  combined ${seeTotal}/100`);
+    return lines.join("\n");
+  }
+
   const det = doo.boardResults.filter((r) => r.outcome === "detonation").length / total;
   const guess = doo.boardResults.filter((r) => r.outcome === "unproven_move").length / total;
   const unproven = doo.boardResults.filter((r) => CONFIDENT_ERRORS.has(r.outcome) && r.outcome !== "protocol_violation").length / total;
@@ -132,7 +149,20 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
     const seeTotals = out.map((r) => r.seeTotal);
     const doTotals = out.map((r) => r.doTotal);
     const combinedTotals = out.map((r) => r.seeTotal + r.doTotal);
-    const seeRep = reproducibility(out.flatMap((r) => r.see.taskRuns.map((t) => ({ taskId: t.taskId, response: t.response }))));
+    // Only ANSWERED runs are evidence of determinism. A run whose call failed
+    // records an empty response, whose fingerprint is the same constant for
+    // every failure mode: counting it certified two timeouts as "identical
+    // code every run" and claimed temperature 0 was honoured by a model that
+    // never answered. `failed: true` marks those entries for exclusion.
+    const seeRep = reproducibility(
+      out.flatMap((r) =>
+        r.see.taskRuns.map((t) => ({ taskId: t.taskId, response: t.response, failed: Boolean(t.callFailure) }))
+      )
+    );
+    // DO prints from answered runs only: a mixed failure/success set is a
+    // verdict over the successes, not a false NOT_REPRODUCIBLE over the empty
+    // constant. Fewer than two answered runs is NO_VERDICT, not REPRODUCIBLE.
+    const doPrints = out.filter((r) => !r.doo.callFailure).map((r) => r.doo.responseFingerprint);
     stability = {
       runs,
       seeTotals,
@@ -143,9 +173,14 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
       // The gate: three runs at temperature 0 must differ by <= 2 points.
       withinTwoPoints: spread(seeTotals) <= 2 && spread(doTotals) <= 2,
       seeReproducible: seeRep.reproducible,
+      seeVerdict: seeRep.verdict ?? "NO_VERDICT",
       seeReproducibility: seeRep,
-      doReproducible: new Set(out.map((r) => r.doo.responseFingerprint)).size === 1,
-      doPrints: out.map((r) => r.doo.responseFingerprint),
+      doReproducible: doPrints.length >= 2 && new Set(doPrints).size === 1,
+      doVerdict: printVerdict(doPrints) ?? "NO_VERDICT",
+      doPrints,
+      // Per-run route failures, so a spread can be explained from this file alone.
+      doCallFailures: out.map((r) => Boolean(r.doo.callFailure)),
+      seeCallFailures: out.map((r) => r.see.taskRuns.filter((t) => t.callFailure).map((t) => t.taskId)),
     };
   }
   return { runs: out, baseline, stability };
@@ -210,7 +245,11 @@ const main = async () => {
         ? `    within 2 points, stable enough to compare`
         : `    MORE THAN 2 POINTS apart: these are samples, not a measurement`
     );
-    console.log(`    responses: SEE ${stability.seeReproducible ? "identical" : "DIFFERED"}, DO ${stability.doReproducible ? "identical" : "DIFFERED"} across runs`);
+    // Verdict-aware wording: a task or eval with no answered pair is UNKNOWN,
+    // not "DIFFERED" (it never claimed determinism to begin with).
+    const seeWord = { REPRODUCIBLE: "identical", NOT_REPRODUCIBLE: "DIFFERED" }[stability.seeVerdict] ?? "no answered pair";
+    const doWord = { REPRODUCIBLE: "identical", NOT_REPRODUCIBLE: "DIFFERED" }[stability.doVerdict] ?? "no answered pair";
+    console.log(`    responses: SEE ${seeWord}, DO ${doWord} across runs`);
   }
   temperatureNotice(config);
 
@@ -234,7 +273,16 @@ const main = async () => {
       keySource,
       pool,
       baseline,
-      reproducibility: stability ? { prints: stability.doPrints, totals: stability.doTotals } : null,
+      reproducibility: stability
+        ? {
+            // Answered runs only. buildDoReport derives the verdict and the
+            // temperatureHonoured claim from these, and a failed run's constant
+            // empty fingerprint would certify failures as identical code.
+            prints: stability.doPrints,
+            totals: stability.doTotals,
+            failedRuns: stability.runs - stability.doPrints.length,
+          }
+        : null,
     }),
     args.out
   );

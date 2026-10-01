@@ -25,8 +25,6 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { AdapterError } from "./openai.mjs";
 
-// Longer than the OpenAI adapter's 120s: these endpoints front reasoning
-// models, and thinking before the first token is normal rather than a hang.
 // Matches the OpenAI adapter: a reasoning model on this endpoint may need
 // minutes, and three attempts at a short ceiling cost an 18-minute wait.
 const DEFAULT_TIMEOUT_MS = 420_000;

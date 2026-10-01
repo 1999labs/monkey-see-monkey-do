@@ -68,8 +68,8 @@ test("the CLI runners work end to end, write their reports, and score a correct 
   assert.equal(combined.do.total, 50);
   // The order of a report's sections is fixed, and pinned by the tests below.
   assert.deepEqual(
-    Object.keys(combined).slice(0, 7),
-    ["schema", "model", "date", "temperature", "see", "do", "limitations"],
+    Object.keys(combined).slice(0, 8),
+    ["schema", "model", "date", "temperature", "callFailure", "see", "do", "limitations"],
     "sections must appear in the order the report contract requires"
   );
   assert.ok(readReport(allDir, "openrouter-stub-model-").limitations.length >= 4, "the SEE report carries limitations too");

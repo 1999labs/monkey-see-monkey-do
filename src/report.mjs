@@ -18,7 +18,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { allPromptDigests } from "./see/prompt.mjs";
-import { fingerprint } from "./fingerprint.mjs";
+import { fingerprint, printVerdict } from "./fingerprint.mjs";
 import { temperatureStatus } from "./adapters/registry.mjs";
 import { adjustedTotal } from "./adjusted.mjs";
 
@@ -48,6 +48,23 @@ const slug = (model) =>
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+
+/**
+ * The lower median of an even-length list: sorted, take the middle-low index.
+ * Integer-valued by construction, and the conservative half when two disagree.
+ * The headline a multi-run report plots, so a single lucky or unlucky run
+ * (measured: unpinned -r 3 gave 21, 50, 50 across three providers) cannot become
+ * the committed number just by happening to be last.
+ */
+export const median = (xs) => {
+  if (!Array.isArray(xs) || xs.length === 0) return null;
+  const sorted = [...xs].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+};
+
+/** temperatureHonoured from a reproducibility verdict: unknown stays null. */
+const honouredFrom = (verdict) =>
+  ({ REPRODUCIBLE: true, NOT_REPRODUCIBLE: false }[verdict] ?? null);
 
 /**
  * Assemble the machine-readable report.
@@ -87,8 +104,9 @@ export const buildReport = ({ model, taskRuns, last, indices, reproducibility, c
       // score was recorded under --i-cannot-control-temperature.
       temperatureControl: temperatureStatus(config),
       // Never assume this. It is only knowable after a reproducibility check,
-      // and `null` must not be reported as `true`.
-      temperatureHonoured: reproducibility?.reproducible ?? null,
+      // and `null` must not be reported as `true`. NO_VERDICT (too few
+      // answered runs to compare) also stays null: unknown, not false.
+      temperatureHonoured: reproducibility ? honouredFrom(reproducibility.verdict) : null,
       seed: config?.seed ?? null,
       providerPin: config?.provider ?? null,
       keySource: keySource ?? null,
@@ -129,11 +147,19 @@ export const buildReport = ({ model, taskRuns, last, indices, reproducibility, c
 
     reproducibility: reproducibility
       ? {
-          verdict: reproducibility.reproducible ? "REPRODUCIBLE" : "NOT_REPRODUCIBLE",
+          // NO_VERDICT means too few answered runs to compare: unknown, not
+          // stable, and not unstable either. Failed runs are excluded upstream
+          // (they all share the empty response's constant fingerprint).
+          verdict: reproducibility.verdict ?? "NO_VERDICT",
           perTask: Object.fromEntries(
             Object.entries(reproducibility.perTask).map(([id, info]) => [
               id,
-              { distinctResponses: info.distinct, runs: info.runs, fingerprints: info.prints },
+              {
+                distinctResponses: info.distinct,
+                runs: info.runs,
+                failedRuns: info.failedRuns ?? 0,
+                fingerprints: info.prints,
+              },
             ])
           ),
         }
@@ -234,8 +260,10 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
     temperature: 0,
     temperatureControl: temperatureStatus(config),
     // Not assumed: temperature 0 is a request, not a guarantee, and only a
-    // reproducibility check can establish it.
-    temperatureHonoured: reproducibility ? new Set(reproducibility.prints).size === 1 : null,
+    // reproducibility check can establish it. Only ANSWERED runs are evidence:
+    // the caller passes answered runs' prints, because a failed run shares the
+    // empty response's constant fingerprint with every other failure.
+    temperatureHonoured: reproducibility ? honouredFrom(printVerdict(reproducibility.prints)) : null,
     seed: config?.seed ?? null,
     providerPin: config?.provider ?? null,
     keySource: keySource ?? null,
@@ -278,8 +306,12 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
   reproduction: reproducibility
     ? {
         prints: reproducibility.prints,
+        failedRuns: reproducibility.failedRuns ?? 0,
         totals: reproducibility.totals ?? null,
-        verdict: new Set(reproducibility.prints).size === 1 ? "REPRODUCIBLE" : "NOT_REPRODUCIBLE",
+        // NO_VERDICT: fewer than two answered runs, so neither word is
+        // claimable. Failed runs are excluded rather than counted, which is
+        // the fix for the bug where two timeouts certified as "identical code".
+        verdict: printVerdict(reproducibility.prints) ?? "NO_VERDICT",
       }
     : null,
 
@@ -334,23 +366,54 @@ export const writeDoReport = (report, outDir = "results") => {
 
 /**
  * The combined report written by run-all, in the order the tests pin:
- * model, date, temperature guarantee, SEE score and index, DO score and baseline
- * gap, limitations, combined total. The per-eval reports remain the primary
- * artefacts; this one points at them.
+ * model, date, temperature guarantee, route failures, SEE score and index, DO
+ * score and baseline gap, limitations, combined total. The per-eval reports
+ * remain the primary artefacts; this one points at them.
+ *
+ * With --runs > 1 the headline totals are the MEDIAN of the per-run totals,
+ * not the last run's. The last run of an unstable endpoint is a sample that
+ * happened to be last (measured: unpinned -r 3 gave 21, 50, 50 across three
+ * providers); the median is the number a chart should plot, with every
+ * per-run total kept beside it in `stability`. A single-run report is unchanged.
  *
  * @param {object} opts
  * @param {object} opts.see      the last runSee() summary
  * @param {object} opts.doo      the last runDo() result
- * @param {object} [opts.stability]  per-run totals when --runs > 1
+ * @param {object} [opts.stability]  per-run totals and verdicts when --runs > 1
  * @param {object} [opts.paths]  { see, do } report paths
  */
 export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, reading, stability = null, paths = {} }) => {
-  const seeTotal = Math.round(see.points + see.noCrash);
+  const seeTotal = stability?.seeTotals?.length ? median(stability.seeTotals) : Math.round(see.points + see.noCrash);
+  const doTotal = stability?.doTotals?.length ? median(stability.doTotals) : doo.score.total;
   return {
-    schema: "monkey-see-monkey-do/combined@3",
+    schema: "monkey-see-monkey-do/combined@4",
     model: { requested: model, endpoint: config?.endpoint ?? null },
     date: new Date().toISOString(),
     temperature: { ...temperatureStatus(config), keySource: keySource ?? null },
+    // ROUTE failures, not model failures. A zero beside a non-null entry here
+    // is the score of a call that never returned and says nothing about the
+    // model. This is the COMMITTED file, and the per-eval reports that carry
+    // the detail are gitignored, so without this block the only auditable
+    // artefact could show a route-failure 0 as a plain 0.
+    callFailure: {
+      see: (see.taskRuns ?? [])
+        .filter((t) => t.callFailure)
+        .map((t) => ({
+          taskId: t.taskId,
+          reason: t.callFailure.reason ?? null,
+          message: String(t.callFailure.message ?? "").slice(0, 160),
+          elapsedMs: t.callFailure.elapsedMs ?? null,
+        })),
+      do: doo.callFailure
+        ? {
+            reason: doo.callFailure.reason ?? null,
+            message: String(doo.callFailure.message ?? "").slice(0, 160),
+            elapsedMs: doo.callFailure.elapsedMs ?? null,
+            timeoutMs: doo.callFailure.timeoutMs ?? null,
+            attempts: doo.callFailure.attempts ?? null,
+          }
+        : null,
+    },
     see: {
       total: seeTotal,
       max: 50,
@@ -360,7 +423,7 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
       heldOut: Number(see.index.heldOut.toFixed(4)),
     },
     do: {
-      total: doo.score.total,
+      total: doTotal,
       max: 50,
       poolAWon: Number(doo.score.poolA.won.toFixed(4)),
       poolANoConfidentError: Number(doo.score.poolA.noDetonation.toFixed(4)),
@@ -384,7 +447,8 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
     },
     limitations: LIMITATIONS,
     combined: {
-      total: seeTotal + doo.score.total,
+      // The medians of the per-run totals when --runs > 1; see the header.
+      total: seeTotal + doTotal,
       max: 100,
       reading,
     },
@@ -393,7 +457,7 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
     // the DO progress index are folded in.
     adjusted: adjustedTotal({
       seeTotal,
-      doTotal: doo.score.total,
+      doTotal,
       generalizationIndex: Math.round(see.index.index * 100),
       initiationRate: doo.progressIndex?.initiationRate ?? 1,
     }),

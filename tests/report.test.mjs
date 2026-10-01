@@ -144,17 +144,37 @@ test("temperature is not claimed honoured unless reproducibility proves it", () 
   // Checked and found unstable -> false.
   const unstable = buildReport({
     ...base,
-    reproducibility: { reproducible: false, perTask: { A: { distinct: 3, runs: 3, prints: [] } } },
+    reproducibility: {
+      reproducible: false,
+      verdict: "NOT_REPRODUCIBLE",
+      perTask: { A: { distinct: 3, runs: 3, failedRuns: 0, prints: [] } },
+    },
   });
   assert.equal(unstable.generation.temperatureHonoured, false);
   assert.equal(unstable.reproducibility.verdict, "NOT_REPRODUCIBLE");
   // Checked and stable -> true.
   const stable = buildReport({
     ...base,
-    reproducibility: { reproducible: true, perTask: { A: { distinct: 1, runs: 3, prints: [] } } },
+    reproducibility: {
+      reproducible: true,
+      verdict: "REPRODUCIBLE",
+      perTask: { A: { distinct: 1, runs: 3, failedRuns: 0, prints: [] } },
+    },
   });
   assert.equal(stable.generation.temperatureHonoured, true);
   assert.equal(stable.reproducibility.verdict, "REPRODUCIBLE");
+  // No answered pair to compare -> unknown, which is null, not false.
+  const noVerdict = buildReport({
+    ...base,
+    reproducibility: {
+      reproducible: false,
+      verdict: null,
+      perTask: { A: { distinct: 0, runs: 0, failedRuns: 3, prints: [] } },
+    },
+  });
+  assert.equal(noVerdict.generation.temperatureHonoured, null);
+  assert.equal(noVerdict.reproducibility.verdict, "NO_VERDICT");
+  assert.equal(noVerdict.reproducibility.perTask.A.failedRuns, 3);
 });
 
 test("writeReport writes a dated, model-named JSON file", () => {
@@ -216,8 +236,110 @@ test("the combined report adds up, and follows the required section order", asyn
   });
   assert.equal(r.combined.total, r.see.total + 38);
   assert.equal(r.combined.max, 100);
-  assert.deepEqual(Object.keys(r).slice(1, 7), ["model", "date", "temperature", "see", "do", "limitations"]);
+  assert.deepEqual(Object.keys(r).slice(1, 8), [
+    "model",
+    "date",
+    "temperature",
+    "callFailure",
+    "see",
+    "do",
+    "limitations",
+  ]);
   const dir = mkdtempSync(join(tmpdir(), "monkeydo-combined-"));
   const path = writeCombinedReport(r, dir);
   assert.match(path, /combined-openrouter-x-/);
+});
+
+test("the combined report carries route failures, so a zero is never a plain zero", () => {
+  // A DO timeout used to reach the COMMITTED file as a bare do.total: 0 with no
+  // indication the call never returned. The per-eval report that carries the
+  // detail is gitignored, so the combined report must carry it too.
+  const r = buildCombinedReport({
+    model: "openrouter/x",
+    config: {},
+    keySource: "env",
+    see: {
+      points: 0,
+      noCrash: 0,
+      index: { index: 0, heldOut: 0 },
+      seen: { rate: 0 },
+      reading: "",
+      taskRuns: [
+        {
+          taskId: "A",
+          callFailure: { reason: "timeout", message: "Request timed out after 420000ms", elapsedMs: 420001 },
+        },
+      ],
+    },
+    doo: {
+      score: {
+        total: 0,
+        poolA: { won: 0, noDetonation: 0 },
+        poolB: { correctStop: 0 },
+        index: {},
+      },
+      callFailure: {
+        reason: "timeout",
+        message: "Request timed out after 420000ms",
+        elapsedMs: 420001,
+        timeoutMs: 420000,
+        attempts: 1,
+      },
+      progressIndex: null,
+    },
+    pool: { sha256: "abc", full: true },
+    reading: ["line"],
+  });
+  assert.equal(r.schema, "monkey-see-monkey-do/combined@4");
+  assert.equal(r.callFailure.do.reason, "timeout");
+  assert.equal(r.callFailure.do.attempts, 1);
+  assert.equal(r.callFailure.do.timeoutMs, 420000);
+  assert.equal(r.callFailure.see.length, 1);
+  assert.equal(r.callFailure.see[0].taskId, "A");
+  assert.equal(r.callFailure.see[0].reason, "timeout");
+  // And a run without failures carries an empty block, not a missing one.
+  const clean = buildCombinedReport({
+    model: "x",
+    config: {},
+    keySource: "env",
+    see: { points: 40, noCrash: 5, index: { index: 0, heldOut: 0.8 }, seen: { rate: 0.9 }, reading: "", taskRuns: [] },
+    doo: {
+      score: { total: 38, poolA: { won: 0.9, noDetonation: 1 }, poolB: { correctStop: 0.2 }, index: {} },
+      progressIndex: null,
+    },
+    pool: { sha256: "abc", full: true },
+    reading: ["line"],
+  });
+  assert.deepEqual(clean.callFailure.see, []);
+  assert.equal(clean.callFailure.do, null);
+});
+
+test("with runs > 1 the combined headline is the median, not the last run", async () => {
+  // Measured failure this replaces: unpinned -r 3 gave DO 21, 50, 50, and the
+  // run that happened to be last became the committed number.
+  const see = await runSee(fakeConfig([...NAIVE]));
+  const doo = {
+    score: {
+      total: 50,
+      poolA: { won: 0.9, noDetonation: 1 },
+      poolB: { correctStop: 0.2 },
+      index: { "poolA-small": 0.9 },
+    },
+    progressIndex: null,
+  };
+  const r = buildCombinedReport({
+    model: "x",
+    config: {},
+    keySource: "env",
+    see,
+    doo,
+    pool: { sha256: "abc", full: true },
+    reading: ["line"],
+    stability: { seeTotals: [21, 40, 40], doTotals: [21, 50, 50] },
+  });
+  assert.equal(r.see.total, 40, "median of [21, 40, 40] is 40, whatever the last run scored");
+  assert.equal(r.do.total, 50, "median of [21, 50, 50] is 50");
+  assert.equal(r.combined.total, 90);
+  assert.equal(r.adjusted.base, 90);
+  assert.deepEqual(r.stability.seeTotals, [21, 40, 40], "every per-run total stays in the file");
 });

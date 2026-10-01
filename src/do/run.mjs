@@ -482,19 +482,31 @@ const main = async () => {
     runs.push(out);
   }
 
+  // Only ANSWERED runs are evidence of determinism. Every failed run records
+  // the empty response's constant fingerprint, so counting them certified a
+  // timeout and a rate limit as "identical code every run" — the bug this
+  // block existed to catch and instead created. Fewer than two answered runs
+  // is NO VERDICT, not REPRODUCIBLE.
+  const answeredPrints = runs.filter((r) => !r.callFailure).map((r) => r.responseFingerprint);
   if (runs.length > 1) {
-    const prints = runs.map((r) => r.responseFingerprint);
-    const same = new Set(prints).size === 1;
+    const same = answeredPrints.length >= 2 && new Set(answeredPrints).size === 1;
     const totals = runs.map((r) => r.score.total);
     console.log(`\n  REPRODUCIBILITY`);
-    console.log(`    ${same ? "REPRODUCIBLE — identical code every run" : "NOT REPRODUCIBLE — different code each run"}`);
-    console.log(`    prints: ${prints.join(" ")}   totals: ${totals.join(", ")}`);
-    if (!same) {
+    if (answeredPrints.length < 2) {
       console.log(
-        `\n  The endpoint returned different code for the same prompt, so these\n` +
-          `  scores are separate samples. Compare them with care.`
+        `    NO VERDICT — only ${answeredPrints.length} of ${runs.length} run(s) answered. A failed run is`
       );
+      console.log(`    evidence about the route, not about determinism.`);
+    } else {
+      console.log(`    ${same ? "REPRODUCIBLE — identical code every answered run" : "NOT REPRODUCIBLE — different code each run"}`);
+      if (!same) {
+        console.log(
+          `\n  The endpoint returned different code for the same prompt, so these\n` +
+            `  scores are separate samples. Compare them with care.`
+        );
+      }
     }
+    console.log(`    prints: ${answeredPrints.join(" ")}   totals: ${totals.join(", ")}`);
   }
 
   const last = runs[runs.length - 1];
@@ -506,7 +518,15 @@ const main = async () => {
     keySource,
     pool,
     baseline,
-    reproducibility: runs.length > 1 ? { prints: runs.map((r) => r.responseFingerprint), totals: runs.map((r) => r.score.total) } : null,
+    reproducibility: runs.length > 1
+      ? {
+          // Answered runs only: buildDoReport derives the verdict and the
+          // temperatureHonoured claim from these prints.
+          prints: answeredPrints,
+          totals: runs.map((r) => r.score.total),
+          failedRuns: runs.length - answeredPrints.length,
+        }
+      : null,
   });
   const path = writeDoReport(report, args.out);
   printLimitations(LIMITATIONS);
