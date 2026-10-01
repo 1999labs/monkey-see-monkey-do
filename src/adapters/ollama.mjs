@@ -12,12 +12,20 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { AdapterError } from "./openai.mjs";
 
-// Local generation on a laptop CPU can be slow; five minutes per call is
-// generous without letting a wedged server hang the run forever.
-const DEFAULT_TIMEOUT_MS = 300_000;
+// Local generation on a laptop CPU can be slow; the suite-wide 420s ceiling
+// applies here too, for the same reason it does on the hosted adapters: a
+// reasoning model that emits only reasoning tokens needs minutes, and a
+// shorter ceiling failed models that could answer. Override it per model in
+// config/models.json with timeoutMs, which this adapter honours.
+const DEFAULT_TIMEOUT_MS = 420_000;
 
 export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) => {
   const { endpoint, model, headers = {}, fetchImpl = fetch, maxRetries = 2 } = config;
+  // A per-model timeoutMs in config/models.json overrides the default, exactly
+  // as in the OpenAI-dialect adapters. The registry validates the field for
+  // every adapter, so honouring it here is not optional: the report records it
+  // as the budget that was in force, which must be the budget that was.
+  const budget = config.timeoutMs ?? timeoutMs;
 
   const options = {};
   // Omitted, not sent as 0, when the config says it cannot be honoured: the
@@ -36,7 +44,7 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) await delay(500 * attempt);
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    const timer = setTimeout(() => ac.abort(), budget);
     try {
       let res;
       try {
@@ -47,6 +55,17 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
           signal: ac.signal,
         });
       } catch (err) {
+        // OUR timer fired. A timeout is NOT retried: it already consumed the
+        // whole budget, and re-running it turns a wedged local server into a
+        // 21-minute stall (3 attempts x 420s). The same rule as openai.mjs;
+        // this adapter was the one place it was missing.
+        if (err?.name === "AbortError" || err?.code === "ABORT_ERR" || /abort|timeout/i.test(String(err?.message ?? ""))) {
+          throw new AdapterError(`Request timed out after ${budget}ms: ${err?.message ?? err}`, {
+            retryable: false,
+            timedOut: true,
+            timeoutMs: budget,
+          });
+        }
         // Connection refused is the common case: the server is not running.
         lastError = new AdapterError(
           `Could not reach Ollama at ${endpoint} (${err?.cause?.code ?? err?.message ?? err}). ` +

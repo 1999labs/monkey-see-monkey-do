@@ -373,6 +373,56 @@ test("Ollama: a server that is not running says how to start it", async () => {
   await assert.rejects(() => ollamaComplete(ollamaConfig(fetchImpl), "P"), /ollama serve/);
 });
 
+// --- Ollama: timeouts ---------------------------------------------------------
+//
+// The regression these guard: this adapter wrapped the abort as a retryable
+// transport error, so a wedged server cost maxRetries+1 waits (was 3 x 300s =
+// 15 minutes) where the other adapters pay exactly one. It also ignored the
+// per-model timeoutMs config field entirely.
+
+test("Ollama: a timeout is thrown once, never retried, and says its budget", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+  };
+  await assert.rejects(
+    () => ollamaComplete(ollamaConfig(fetchImpl, { maxRetries: 2 }), "P"),
+    (err) => {
+      assert.equal(err.timedOut, true, "the error must say the budget ran out, not hint at it");
+      assert.equal(err.retryable, false);
+      assert.equal(err.timeoutMs, 420_000);
+      assert.match(err.message, /timed out after 420000ms/);
+      return true;
+    }
+  );
+  assert.equal(calls, 1, "a timeout must cost exactly one attempt, not three");
+});
+
+test("Ollama: a per-model timeoutMs in config sets the budget", async () => {
+  const fetchImpl = async () => {
+    throw Object.assign(new Error("aborted"), { name: "AbortError" });
+  };
+  await assert.rejects(
+    () => ollamaComplete(ollamaConfig(fetchImpl, { timeoutMs: 12345 }), "P"),
+    (err) => {
+      assert.equal(err.timeoutMs, 12345, "config.timeoutMs must be honoured, not ignored");
+      assert.match(err.message, /12345ms/);
+      return true;
+    }
+  );
+});
+
+test("Ollama: a connection refused is still retried, only timeouts are not", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    throw new TypeError("fetch failed");
+  };
+  await assert.rejects(() => ollamaComplete(ollamaConfig(fetchImpl, { maxRetries: 1 }), "P"), /Could not reach/);
+  assert.equal(calls, 2, "transport failures keep their retries; the exception is the timeout alone");
+});
+
 test("the registry dispatches to the adapter the config names", async () => {
   let url;
   const fetchImpl = async (u) => ((url = u), jsonResponse({ model: "m", message: { content: "ok" }, done: true }));
