@@ -7,8 +7,8 @@ No human scoring, no LLM judges, no runtime dependencies.
 
 | Eval | Question | Score |
 |---|---|---|
-| **MONKEY SEE** | Given 8 examples of an unknown function, does the model infer the rule, or copy the surface? | 50 points + the Monkey Index |
-| **MONKEY DO** | Given a Minesweeper position, does the model write a solver that only ever makes proven moves, and stops when nothing can be proven? | 50 points |
+| **Monkey See** | Given 8 examples of an unknown function, does the model infer the rule, or copy the surface? | 50 points + the Monkey Index |
+| **Monkey Do** | Given a Minesweeper position, does the model write a solver that only ever makes proven moves, and stops when nothing can be proven? | 50 points |
 
 ## Quickstart
 
