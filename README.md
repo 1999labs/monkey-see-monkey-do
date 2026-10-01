@@ -445,6 +445,10 @@ report a pass.
 If any criterion fails, the eval is not published. An eval that does not
 discriminate is worse than no eval, because it manufactures false confidence.
 
+## Repository layout
+
+Reference only. Nothing in here is needed to run the evals.
+
 ```
 monkey-see-monkey-do/
 ├── config/models.example.json   model registry template
