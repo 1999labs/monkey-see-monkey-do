@@ -130,14 +130,14 @@ Checked in this order: `--key`, the provider's environment variable,
 `NAME=value` line in `.env`. Keys are never written into the repository or into results.
 If none is found, the runner prints the one command that stores one.
 
-## Reading the scores
+## Scoring
 
 Two evals, each out of 50. Four numbers come out of them: a score from each (`SEE`, `DO`), a
 generalization index for SEE (`MI`), and a progress diagnostic for DO. Only `SEE` and `DO`
 are scored; `MI` and the diagnostic are reported beside them, and an **adjusted** total folds
 both in when you want a single number to plot.
 
-### SEE — induction, out of 50
+### Monkey See (induction, out of 50)
 
 Given 8 examples of an unknown function, does the model infer the rule or copy its surface?
 
@@ -150,7 +150,7 @@ Given 8 examples of an unknown function, does the model infer the rule or copy i
 
 A naive implementation of each task scores 32–36%, **by design** — that floor is the point.
 
-### DO — deduction, out of 50
+### Monkey Do (deduction, out of 50)
 
 The model writes `solve(board, mines)` **once**. That single function is replayed on 450
 generated boards, and every move is checked for *proof*: a move must be provably safe, not
@@ -450,9 +450,3 @@ monkey-see-monkey-do/
 `src/see/` and `src/do/` hold only what is private to their own eval. Anything both
 evals need (key resolution, response fingerprinting, the sandbox, reporting, the adjusted
 total) lives at the top of `src/`, so neither eval's folder reaches into the other's.
-
-## Provenance
-
-A working design document covering the reasoning behind every number in here
-existed alongside the code; it was removed from the working tree and remains in
-the git history.
