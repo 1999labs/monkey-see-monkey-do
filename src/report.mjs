@@ -146,6 +146,10 @@ export const buildReport = ({ model, taskRuns, last, indices, reproducibility, c
       responseFingerprint: fingerprint(t.response ?? ""),
       usable: Boolean(t.result),
       compileError: t.compileError ?? null,
+      // Set when the call for this task produced nothing at all. A zero beside
+      // this is the score of a missing answer, not of a wrong one.
+      callFailure: t.callFailure ?? null,
+      callElapsedMs: t.callElapsedMs ?? null,
       heldOut: t.result
         ? {
             correct: t.result.correct,
@@ -285,6 +289,19 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
     responseFingerprint: result.responseFingerprint,
     // The full source. It is the evidence for every score below.
     response: result.response,
+    // Set when the model call produced nothing at all. A score beside this is
+    // NOT a measurement of the model: `timeout` describes the route, not the
+    // reasoning. `empty_response` is different — the endpoint answered and
+    // said nothing, which is a real (scored) answer. Read this field before
+    // quoting any total from a run where it is non-null.
+    callFailure: result.callFailure ?? null,
+    // How long the one call took. On a timeout this is the budget, not a
+    // measurement, so it cannot distinguish "slow" from "never coming back".
+    callElapsedMs: result.callElapsedMs ?? null,
+    // The budget that was in force for this run, so a timeout is readable: a
+    // model that needed 200s at a 420s budget is a different finding from one
+    // that hit a 120s ceiling and stopped.
+    callTimeoutMs: result.callTimeoutMs ?? null,
   },
 
   boardResults: result.boardResults,
@@ -300,6 +317,9 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
     "Pool B passes on a CORRECT STOP (surrender where no cell is provable). premature_surrender",
     "  means a provable move existed.",
     "protocol_violation means the solver was unusable — a broken solver, not a reasoning failure.",
+    "no_response means the model call produced nothing, so no board was played. If solver.callFailure",
+    "  is set, the score is 0 for want of an answer and is NOT evidence about the model. A timeout",
+    "  there describes the route (endpoint, provider, budget), not the reasoning.",
   ],
 });
 

@@ -553,3 +553,164 @@ test("the reference solver never names a mine or an unproven cell on real positi
     assert.ok(!["detonation", "unproven_move", "protocol_violation"].includes(r.outcome), `${b.pool} ${b.tier} #${b.attempt}: ${r.outcome}`);
   }
 });
+
+// --- A model call that never returns --------------------------------------
+//
+// The requirement: ANY model must yield a scored report. A model that
+// times out or errors must therefore look like a scored failure, not like a
+// crashed run with no output file. These tests pin that, because the previous
+// behaviour was an exception that unwound the run and wrote nothing at all.
+
+const twoBoards = [
+  { pool: "A", tier: "poolA-small", attempt: 1 },
+  { pool: "B", tier: "poolB-small", attempt: 1 },
+];
+
+const failingConfig = (makeError) => ({
+  adapter: "openai",
+  endpoint: "https://example.test/v1/chat/completions",
+  model: "test/model",
+  apiKeyEnv: null,
+  maxRetries: 0,
+  fetchImpl: async () => {
+    throw makeError();
+  },
+});
+
+const aborted = () => Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+
+test("a timed-out call is scored as no_response, not thrown", async () => {
+  const out = await runDo(failingConfig(aborted), { boards: twoBoards, baseline: {} });
+  assert.equal(out.score.total, 0, "no answer is worth zero");
+  assert.equal(out.usable, false);
+  assert.equal(out.callFailure.reason, "timeout");
+  assert.equal(out.boardResults.length, 2, "every board is still accounted for");
+  assert.ok(out.boardResults.every((b) => b.outcome === "no_response"));
+});
+
+test("a timed-out model earns none of the no-detonation points", async () => {
+  // The trap this closes: no_response is not a CONFIDENT_ERROR, so without
+  // adding it a model that never called back would score 10/10 for the
+  // detector it never got to run. A failure must not be rewarded.
+  const out = await runDo(failingConfig(aborted), { boards: twoBoards, baseline: {} });
+  assert.equal(out.score.points.poolANoDetonation, 0, "rewarding a missing call would be backwards");
+  assert.equal(out.score.outcomes.no_response, 2);
+});
+
+test("a call failure is reported even when nothing else ran", async () => {
+  const out = await runDo(failingConfig(aborted), { boards: twoBoards, baseline: {} });
+  assert.ok(out.callFailure, "the report must say why there is no score");
+  assert.ok(out.callFailure.elapsedMs >= 0);
+  assert.equal(typeof out.responseFingerprint, "string", "fingerprinting still works, so -r 3 can run");
+});
+
+test("an HTTP failure is classified by status", async () => {
+  const httpFail = (status, message) => async () => ({
+    ok: false,
+    status,
+    text: async () => JSON.stringify({ error: { message } }),
+  });
+  const config = (status, message) => ({
+    adapter: "openai",
+    endpoint: "https://example.test/v1/chat/completions",
+    model: "test/model",
+    apiKeyEnv: null,
+    maxRetries: 0,
+    fetchImpl: httpFail(status, message),
+  });
+  for (const [status, expected] of [[401, "auth_failed"], [429, "rate_limited"], [400, "http_400"]]) {
+    const out = await runDo(config(status, "x"), { boards: twoBoards, baseline: {} });
+    assert.equal(out.callFailure.reason, expected, `HTTP ${status}`);
+    assert.equal(out.score.total, 0);
+  }
+});
+
+test("a network failure is distinguished from a provider error", async () => {
+  const out = await runDo(failingConfig(() => new TypeError("fetch failed")), {
+    boards: twoBoards,
+    baseline: {},
+  });
+  assert.equal(out.callFailure.reason, "network_error");
+});
+
+test("a no_response report survives the report builder", async () => {
+  const out = await runDo(failingConfig(aborted), { boards: twoBoards, baseline: {} });
+  const report = buildDoReport({
+    model: "openrouter/test",
+    result: out,
+    config: { endpoint: "https://example.test/v1/chat/completions" },
+    keySource: "test",
+    pool: { boards: twoBoards, full: false, seed: 1, sha256: "test" },
+    baseline: {},
+    reproducibility: null,
+  });
+  assert.equal(report.score.total, 0);
+  assert.ok(report.solver.callFailure, "the reason travels into the written report");
+  assert.equal(report.solver.callFailure.reason, "timeout");
+  assert.ok(
+    report.notes.some((n) => n.includes("no_response")),
+    "a reader of the file alone must be able to tell a missing answer from a wrong one"
+  );
+});
+
+test("a dry run is unaffected: the reference solver still scores 50/50", async () => {
+  // Real boards, not the two-board stand-in above: replayBoard rejects a tier
+  // it does not know, and the point here is that the no-response path did not
+  // change how a working solver is scored.
+  const out = await runDo(null, { boards: loadPool({ perTier: 1 }).boards, baseline: {}, dryRun: true });
+  assert.equal(out.callFailure, null, "no call, so no call failure");
+  assert.equal(out.score.total, 50);
+  assert.equal(out.usable, true);
+});
+
+test("a timeout is not retried, and the report says how long it waited", async () => {
+  // The expensive lesson from the cohort runs: a 120s ceiling plus two retries
+  // meant 361s per stalled model and 18 minutes for one -r 3 check. One wait is
+  // the cost of finding out, and the budget travels into the report so a
+  // timeout is readable afterwards.
+  let attempts = 0;
+  const config = {
+    adapter: "openai",
+    endpoint: "https://example.test/v1/chat/completions",
+    model: "test/model",
+    apiKeyEnv: null,
+    maxRetries: 2,
+    timeoutMs: 40,
+    fetchImpl: async (url, init) => {
+      attempts++;
+      return new Promise((_, reject) => {
+        init.signal.addEventListener("abort", () =>
+          reject(Object.assign(new Error("This operation was aborted"), { name: "AbortError" }))
+        );
+      });
+    },
+  };
+  const out = await runDo(config, { boards: twoBoards, baseline: {} });
+  assert.equal(attempts, 1, "one attempt, not three");
+  assert.equal(out.callFailure.reason, "timeout");
+  assert.equal(out.callFailure.timeoutMs, 40);
+  assert.equal(out.callFailure.attempts, 1);
+  assert.equal(out.score.total, 0);
+  assert.equal(out.callTimeoutMs, 40, "the effective budget is stamped on the run too");
+});
+
+test("a per-model timeoutMs is reported, not just applied", async () => {
+  // Short budget: the assertion is about which number is RECORDED, so waiting
+  // 900s here would prove nothing.
+  const config = {
+    adapter: "openai",
+    endpoint: "https://example.test/v1/chat/completions",
+    model: "test/model",
+    apiKeyEnv: null,
+    maxRetries: 0,
+    timeoutMs: 30,
+    fetchImpl: async (url, init) =>
+      new Promise((_, reject) => {
+        init.signal.addEventListener("abort", () =>
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }))
+        );
+      }),
+  };
+  const out = await runDo(config, { boards: twoBoards, baseline: {} });
+  assert.equal(out.callFailure.timeoutMs, 30, "a reader must see which budget applied");
+});

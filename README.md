@@ -163,10 +163,34 @@ cp config/models.example.json config/models.json
 - `maxTokens` is the required `max_tokens` on `anthropic` adapters. It defaults to 32000. Raise it
   if a long solver is truncated; lower it only to cap cost.
 - `anthropicVersion` is the date header that dialect requires, e.g. `2023-06-01`.
+- `timeoutMs` is how long one model call may take before it is abandoned, defaulting to
+  **420000** (7 minutes). That covers the slowest response measured against a real endpoint
+  (361s) with headroom, because reasoning models emit tokens for minutes before answering. Set it
+  per model for anything slower. A timeout is **never retried**: it has already spent the whole
+  budget, and three attempts turned one stalled model into an 18-minute wait. Other transport
+  failures are still retried. The budget in force is stamped as `solver.callTimeoutMs`, so a
+  timeout is readable afterwards rather than looking like an unexplained zero.
 
 Built in, with no config: `openrouter/…`, `openai/…`, `ollama/…`, `gogo/…`, `gogo-responses/…`,
 `gogo-messages/…`, `zen/…`, `zen-responses/…`, `zen-messages/…`.
-If none is found, the runner prints the one command that stores one.
+
+#### Pin the provider on OpenRouter, or the score is not a measurement
+
+One model id is served by many hosts. `deepseek/deepseek-v4.1-flash` had **33** endpoints at the
+time of writing, across `fp4`, `fp8`, `fp32` and unquantised builds. An unpinned run therefore
+samples a different machine each time, and `-r 3` reports `NOT_REPRODUCIBLE` for a model that is
+in fact fine. Measured: one unpinned model returned totals of 21, 50 and 50.
+
+```bash
+npm run providers -- -m openrouter/deepseek/deepseek-v4.1-flash
+npm run do -- -m openrouter/deepseek/deepseek-v4.1-flash --only-provider Alibaba --no-fallback -r 3
+```
+
+Two things to expect. A slug from the listing may still be unavailable to your account, in which
+case the request fails with "0 endpoints out of 1 requested are available"; `--no-fallback` then
+fails the run outright instead of quietly routing elsewhere, which is the point. And a pinned
+provider may simply be worse: Alibaba timed out on all three runs for a model that other providers
+answered in 203s.
 
 ## Scoring
 
@@ -227,10 +251,32 @@ merely lucky.
 
 Outcomes per board: `won`, `surrender` (a correct stop), `premature_surrender`,
 `detonation`, `unproven_move` (safe by luck, **scored like a detonation**),
-`protocol_violation`, `stalled`.
+`protocol_violation`, `stalled`, `no_response`.
 
 Random play survives 0% of boards, so a Pool A win cannot be luck. It does not show the
 solver was *derived* rather than recalled; see the first two limitations.
+
+#### When the model never answers
+
+Any model must produce a report, including one whose endpoint stalls or errors. A call that
+times out, returns a non-JSON body, or fails on the network is caught and scored as
+`no_response` on every board, so the report is still written. The budget is enforced, never
+removed; a hung request still fails, just at whatever `timeoutMs` that model declares rather than
+a single global ceiling.
+
+A `no_response` run scores **0/50**, and `solver.callFailure` in the report gives the reason:
+`timeout`, `rate_limited`, `auth_failed`, `http_<status>`, `network_error`,
+`non_json_response`, or `provider_error`. A `timeout` also carries `timeoutMs` and `attempts`, so
+the report says how long it waited and that it did not try again.
+
+**A 0 beside `callFailure` is not a measurement of the model.** It is the score of a call
+that never returned, and it says something about the endpoint, the provider, or the budget,
+not about reasoning. Check the field before quoting the number. Reasoning models that spend
+the whole budget emitting reasoning tokens and never emit an answer land here, which is a
+real and common failure rather than a harness fault.
+
+This is deliberately kept separate from `protocol_violation`, which means the model *did*
+answer and the answer was unusable. One is a wrong answer, the other is a missing one.
 
 The reference solver scores **50/50** with a Progress Index of **15/15**. `npm run dry-run`
 proves that on all 450 boards, and no model is scored unless it passes first.
@@ -405,6 +451,9 @@ Every report carries these, and a score quoted without them is misleading:
   algorithm.
 - **SEE saturates.** Frontier models reach high SEE scores and it stops discriminating at the top of
   the market; it is most informative for open-weight and mid-tier models.
+- **A zero can mean the endpoint, not the model.** Any run whose report carries a non-null
+  `solver.callFailure` (DO) or a `callFailure` on any task (SEE) scored zero because the call
+  failed, not because the reasoning was wrong. Never present those totals as model results.
 - **A score describes one provider, not a model.** It is what that gateway served on that day.
   OpenRouter load-balances across providers, so pin one with `--only-provider --no-fallback` or the
   number mixes machines. OpenCode Go is a curated pairing, but not a fixed one. Neither is a

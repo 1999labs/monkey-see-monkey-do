@@ -42,7 +42,17 @@ import { reveal, isWon, makeRng } from "./minesweeper/board.mjs";
  * one would put luck straight back in. `protocol_violation` is here because a
  * broken solver is not a cautious one.
  */
-export const CONFIDENT_ERRORS = new Set(["detonation", "unproven_move", "protocol_violation"]);
+// `no_response` is here for a different reason than the other three, and the
+// difference matters: a no-response board was never played, so it cannot earn
+// the "no confident error" points either. Without it, a model whose call timed
+// out would score 10/10 for the detector it never got to run, which is a
+// reward for failing. Its real score is 0 and the report says why.
+export const CONFIDENT_ERRORS = new Set([
+  "detonation",
+  "unproven_move",
+  "protocol_violation",
+  "no_response",
+]);
 
 const share = (rows, pred) => (rows.length ? rows.filter(pred).length / rows.length : 0);
 const is = (outcome) => (r) => r.outcome === outcome;
@@ -58,6 +68,7 @@ const breakdown = (rows) => ({
   premature: share(rows, is("premature_surrender")),
   protocolViolation: share(rows, is("protocol_violation")),
   stalled: share(rows, is("stalled")),
+  noResponse: share(rows, is("no_response")),
 });
 
 /**

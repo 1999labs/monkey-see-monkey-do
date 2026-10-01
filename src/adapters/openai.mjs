@@ -12,25 +12,52 @@
 
 import { setTimeout as delay } from "node:timers/promises";
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+// Generous by default, because a reasoning model that emits only reasoning
+// tokens needs minutes, not seconds: measured against OpenRouter, DeepSeek
+// V4.1 Flash returned a full solver in 203s while another provider serving the
+// same model id was still silent at 361s. A 120s ceiling failed models that
+// could answer, and hid that behind a crash.
+//
+// 420s covers the slowest response observed (361s) plus headroom. Override it
+// per model in config/models.json for anything slower; see timeoutMs there.
+//
+// A stalled model costs one attempt, not three: see the timeout note in
+// complete() below. Raising the ceiling therefore costs one long wait, not three.
+export const DEFAULT_TIMEOUT_MS = 420_000;
 
 export class AdapterError extends Error {
-  constructor(message, { status, retryable = false, body } = {}) {
+  constructor(message, { status, retryable = false, body, timedOut = false, timeoutMs = null } = {}) {
     super(message);
     this.name = "AdapterError";
     this.status = status;
     this.retryable = retryable;
     this.body = body;
+    // Distinguishes "we gave up waiting" from "the provider refused". The
+    // report needs the difference: one describes the route, the other is an
+    // answer of sorts.
+    this.timedOut = timedOut;
+    this.timeoutMs = timeoutMs;
   }
 }
+
+/**
+ * True for an abort caused by OUR timeout, not one a caller passed in.
+ * fetch rejects with an AbortError for both, so the timer we set ourselves is
+ * what distinguishes them.
+ */
+const isTimeout = (err) =>
+  err?.name === "AbortError" || err?.code === "ABORT_ERR" || /abort|timeout/i.test(String(err?.message ?? ""));
 
 /**
  * One completion. Returns the raw assistant text plus the metadata needed for
  * the report (finish_reason, usage, and the provider's own model id — which
  * may differ from the id we asked for).
  */
-export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) => {
+export const complete = async (config, promptText, { timeoutMs } = {}) => {
   const { endpoint, model, apiKeyEnv, headers = {}, fetchImpl = fetch, maxRetries = 2 } = config;
+  // A per-model timeoutMs in config/models.json overrides the default, so a
+  // slow reasoning model and a fast small one need not share a ceiling.
+  const budget = config.timeoutMs ?? timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // apiKeyEnv null means a server that needs no key (LM Studio, a local vLLM).
   // A NAMED variable that is unset is still an error, raised before any request.
   const apiKey = apiKeyEnv ? process.env[apiKeyEnv] : null;
@@ -85,7 +112,7 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) await delay(500 * attempt); // brief, linear backoff
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    const timer = setTimeout(() => ac.abort(), budget);
     try {
       const res = await fetchImpl(endpoint, {
         method: "POST",
@@ -153,6 +180,22 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
       };
     } catch (err) {
       if (err instanceof AdapterError && !err.retryable) throw err;
+
+      // A timeout is NOT retried. It already consumed the whole budget, and
+      // doing it three times turns one stalled model into an 18-minute wait
+      // (measured: 361s x 3). The request was abandoned, not refused: the
+      // provider may simply have been slow, in which case one longer budget
+      // configured per model is the right lever, not three identical short
+      // ones. Every other transport failure is still retried, because those
+      // cost milliseconds.
+      if (isTimeout(err)) {
+        throw new AdapterError(`Request timed out after ${budget}ms: ${err?.message ?? err}`, {
+          retryable: false,
+          timedOut: true,
+          timeoutMs: budget,
+        });
+      }
+
       lastError = err instanceof AdapterError ? err : new AdapterError(String(err?.message ?? err), { retryable: true });
     } finally {
       clearTimeout(timer);
@@ -189,7 +232,19 @@ export const openRouterConfig = (model, { maxRetries = 2, seed, provider } = {})
 export const listProviders = async (model, { apiKeyEnv = "OPENROUTER_API_KEY", fetchImpl = fetch } = {}) => {
   const apiKey = process.env[apiKeyEnv];
   if (!apiKey) throw new AdapterError(`Missing API key. Set ${apiKeyEnv} first.`);
-  const res = await fetchImpl(`https://openrouter.ai/api/v1/models/${encodeURIComponent(model)}/endpoints`, {
+  // encodeURIComponent is WRONG here: it turns the "vendor/model" id into
+  // "vendor%2Fmodel", and OpenRouter 404s on the encoded slash. Verified
+  // against the live API: the encoded path returns
+  // {"error":{"message":"Not Found","code":404}} while the raw slash returns
+  // the endpoint list. This broke for every model id containing a slash, which
+  // is nearly all of them. Only the path is interpolated, and the model id is
+  // attacker-controlled only insofar as it comes from a config file, so encode
+  // the segments instead: keep the single slash, escape everything else.
+  const encoded = String(model)
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  const res = await fetchImpl(`https://openrouter.ai/api/v1/models/${encoded}/endpoints`, {
     headers: { authorization: `Bearer ${apiKey}` },
   });
   if (!res.ok) throw new AdapterError(`Could not list providers: HTTP ${res.status}`);

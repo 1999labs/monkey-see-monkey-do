@@ -150,3 +150,53 @@ test("value formatting matches the documented prompt syntax", () => {
   assert.equal(formatExample({ input: "apple", output: "apple" }), 'f("apple") -> "apple"');
   assert.equal(formatExample({ input: [1, 1, 1], output: null }), "f([1, 1, 1]) -> null");
 });
+
+// --- A model call that never returns --------------------------------------
+
+test("a timed-out SEE task is scored as a failure, not thrown", async () => {
+  const config = {
+    adapter: "openai",
+    endpoint: "https://example.test/v1/chat/completions",
+    model: "test/model",
+    apiKeyEnv: null,
+    maxRetries: 0,
+    fetchImpl: async () => {
+      throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+    },
+  };
+  const { runTask } = await import("../src/see/run.mjs");
+  const out = await runTask(config, taskA);
+  assert.equal(out.result, null, "an unanswered task has no held-out result");
+  assert.ok(out.callFailure, "and says why");
+  assert.equal(out.callFailure.reason, "timeout");
+  assert.equal(out.response, "");
+  assert.ok(out.compileError, "it must not look like a usable response");
+});
+
+test("a timed-out SEE task does not stop the other tasks", async () => {
+  // Three tasks are three independent calls. One failing must not cost the
+  // other two, or a flaky endpoint reads as a weak model across the board.
+  const { runTask, runSee } = await import("../src/see/run.mjs");
+  let calls = 0;
+  const config = {
+    adapter: "openai",
+    endpoint: "https://example.test/v1/chat/completions",
+    model: "test/model",
+    apiKeyEnv: null,
+    maxRetries: 0,
+    fetchImpl: async () => {
+      calls++;
+      if (calls === 1) throw Object.assign(new Error("aborted"), { name: "AbortError" });
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "not code" }, finish_reason: "stop" }] }),
+      };
+    },
+  };
+  const out = await runSee(config, {});
+  assert.equal(out.taskRuns.length, 3, "every task is attempted");
+  assert.equal(out.taskRuns.filter((t) => t.callFailure).length, 1, "exactly one failed at the call");
+  assert.ok(out.taskRuns.every((t) => t.result === null || t.compileError !== null || t.result));
+  assert.ok(out, "a report is produced regardless");
+});

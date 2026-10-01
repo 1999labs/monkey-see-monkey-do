@@ -151,6 +151,7 @@ const FIELDS = {
   supportsTemperatureZero: (v) => v === null || typeof v === "boolean",
   headers: (v) => v !== null && typeof v === "object" && !Array.isArray(v),
   maxRetries: (v) => Number.isInteger(v) && v >= 0,
+  timeoutMs: (v) => Number.isInteger(v) && v > 0,
   // Responses dialect only. Left unset by default: a cap this harness chose
   // could truncate a solver the model had room to finish, which is scored as a
   // weak model and not as a harness bug.
@@ -167,6 +168,7 @@ const describeField = {
   supportsTemperatureZero: "true, false, or null (unknown)",
   headers: "an object of extra HTTP headers",
   maxRetries: "a non-negative integer",
+  timeoutMs: "a positive integer of milliseconds (default 420000)",
   maxOutputTokens: "a positive integer (Responses adapters only)",
   maxTokens: "a positive integer (Messages adapters; defaults to 32000)",
   anthropicVersion: "a date string, e.g. 2023-06-01 (Messages adapters)",

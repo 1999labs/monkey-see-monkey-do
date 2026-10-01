@@ -906,3 +906,128 @@ test("the example registry is valid and every entry resolves", () => {
   for (const name of Object.keys(reg.providers)) resolveModel(`${name}/some-model`, { configPath: path });
   assert.ok(Object.keys(PRESETS).includes("ollama"));
 });
+
+// --- Listing OpenRouter providers (the pinning prerequisite) ----------------
+
+test("listProviders keeps the slash in a vendor/model id", async () => {
+  // OpenRouter 404s on an encoded slash: the raw path
+  //   /api/v1/models/deepseek/deepseek-v4.1-flash/endpoints
+  // returns the endpoint list, while
+  //   /api/v1/models/deepseek%2Fdeepseek-v4.1-flash/endpoints
+  // returns 404. Verified against the live API. Encoding the whole id, as this
+  // did originally, broke pinning for every model with a slash in it.
+  const { listProviders } = await import("../src/adapters/openai.mjs");
+  let seen;
+  const fetchImpl = async (url) => {
+    seen = url;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          endpoints: [
+            { provider_name: "DeepSeek", context_length: 393216, max_completion_tokens: 393216, quantization: "unknown" },
+            { provider_name: "Fireworks", context_length: 943718, max_completion_tokens: 943718, quantization: "fp8" },
+          ],
+        },
+      }),
+    };
+  };
+  const providers = await listProviders("deepseek/deepseek-v4.1-flash", { fetchImpl, apiKeyEnv: "TEST_KEY" });
+  assert.equal(seen, "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints");
+  assert.doesNotMatch(seen, /%2F/i, "an encoded slash is a 404 on the live API");
+  assert.equal(providers.length, 2);
+  assert.equal(providers[0].provider, "DeepSeek");
+  assert.equal(providers[1].quantization, "fp8");
+});
+
+test("listProviders escapes a segment that needs it, without touching the slash", async () => {
+  const { listProviders } = await import("../src/adapters/openai.mjs");
+  let seen;
+  const fetchImpl = async (url) => {
+    seen = url;
+    return { ok: true, status: 200, json: async () => ({ data: { endpoints: [] } }) };
+  };
+  await listProviders("vendor/model:free", { fetchImpl, apiKeyEnv: "TEST_KEY" });
+  assert.equal(seen, "https://openrouter.ai/api/v1/models/vendor/model%3Afree/endpoints");
+});
+
+// --- Timeouts: per-model budget, and never retried ---------------------------
+
+const hangingFetch = (counter) => async (url, init) => {
+  if (counter) counter.n++;
+  return new Promise((_, reject) => {
+    init.signal.addEventListener("abort", () =>
+      reject(Object.assign(new Error("This operation was aborted"), { name: "AbortError" }))
+    );
+  });
+};
+
+test("a timeout is not retried", async () => {
+  // Measured: three attempts at a 120s ceiling meant 361s per stalled model,
+  // and an -r 3 run cost 18 minutes to learn the same thing three times. One
+  // wait is the cost of finding out; a longer per-model budget is the lever.
+  const counter = { n: 0 };
+  await assert.rejects(
+    () => complete(config(hangingFetch(counter), { timeoutMs: 40 }), "P"),
+    /timed out/
+  );
+  assert.equal(counter.n, 1, "a timeout has already spent the whole budget");
+});
+
+test("a timeout is marked, so a report can tell it from a refusal", async () => {
+  await assert.rejects(
+    () => complete(config(hangingFetch(), { timeoutMs: 40 }), "P"),
+    (err) => {
+      assert.equal(err.timedOut, true);
+      assert.equal(err.retryable, false, "a timeout must not invite a retry");
+      assert.equal(err.timeoutMs, 40, "and must say what budget it had");
+      return true;
+    }
+  );
+});
+
+test("a config timeoutMs overrides the adapter default", async () => {
+  // A slow reasoning model and a fast small one should not share a ceiling.
+  const err = await complete(config(hangingFetch(), { timeoutMs: 25 }), "P").catch((e) => e);
+  assert.equal(err.timeoutMs, 25);
+});
+
+test("the default budget is generous enough for a reasoning model", async () => {
+  // DeepSeek V4.1 Flash returned a full solver in 203s on one provider. A
+  // ceiling below that fails models that can answer.
+  const { DEFAULT_TIMEOUT_MS } = await import("../src/adapters/openai.mjs");
+  assert.ok(DEFAULT_TIMEOUT_MS >= 300_000, `default was ${DEFAULT_TIMEOUT_MS}ms`);
+});
+
+test("a non-timeout transport failure is still retried", async () => {
+  // Only the timeout changed. A connection refused costs milliseconds, so
+  // retrying it is cheap and correct.
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      complete(
+        config(() => {
+          calls++;
+          throw new TypeError("fetch failed");
+        }, { maxRetries: 2 }),
+        "P"
+      ),
+    /fetch failed/
+  );
+  assert.equal(calls, 3, "initial attempt plus two retries");
+});
+
+test("every adapter honours a configured timeoutMs", async () => {
+  // One budget field, three dialects. If an adapter ignored it, a slow model
+  // would silently keep the default and the field would be a lie.
+  for (const [name, fn, extra] of [
+    ["openai", complete, {}],
+    ["responses", responsesComplete, {}],
+    ["anthropic", anthropicComplete, { anthropicVersion: "2023-06-01" }],
+  ]) {
+    const err = await fn(config(hangingFetch(), { timeoutMs: 25, ...extra }), "P").catch((e) => e);
+    assert.equal(err.timedOut, true, `${name} must mark a timeout`);
+    assert.equal(err.timeoutMs, 25, `${name} must honour the configured budget`);
+  }
+});

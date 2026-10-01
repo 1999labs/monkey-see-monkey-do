@@ -62,7 +62,39 @@ MONKEY SEE
 /** Score one task: prompt the model, compile what came back, run the cases. */
 export const runTask = async (config, task) => {
   const promptText = buildPrompt(task);
-  const completion = await complete(config, promptText);
+  const startedAt = Date.now();
+
+  // A call that never returns must not abort the run. SEE already scores an
+  // unusable RESPONSE as zero, so a call that fails outright is the same kind
+  // of event: the model failed this task, and the other two tasks are
+  // unaffected. Recorded as `callFailure` so a report reader can tell "answered
+  // wrongly" from "never answered".
+  let completion = null;
+  let callFailure = null;
+  try {
+    completion = await complete(config, promptText);
+  } catch (err) {
+    callFailure = {
+      reason: String(err?.name === "AbortError" || /abort/i.test(err?.message ?? "") ? "timeout" : "provider_error"),
+      message: String(err?.message ?? err),
+      elapsedMs: Date.now() - startedAt,
+    };
+    return {
+      taskId: task.id,
+      name: task.name,
+      prompt: promptText,
+      digest: promptDigest(task),
+      response: "",
+      providerModel: null,
+      finishReason: null,
+      callFailure,
+      callElapsedMs: Date.now() - startedAt,
+      compileError: "the model returned no response",
+      fn: null,
+      result: null,
+    };
+  }
+
   const compiled = compileCandidate(completion.text, { entry: "f" });
 
   if (!compiled.ok) {

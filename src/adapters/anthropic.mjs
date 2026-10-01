@@ -29,7 +29,9 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { AdapterError } from "./openai.mjs";
 
-const DEFAULT_TIMEOUT_MS = 180_000;
+// Matches the OpenAI adapter: reasoning models here may need minutes, and
+// three attempts at a short ceiling cost an 18-minute wait.
+const DEFAULT_TIMEOUT_MS = 420_000;
 
 // Anthropic rejects a request with no max_tokens, so there is no "unset means
 // provider default" option here. This is high enough for a solver on any
@@ -58,8 +60,9 @@ const extractAnswer = (content) => {
   return { text, missed };
 };
 
-export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) => {
+export const complete = async (config, promptText, { timeoutMs } = {}) => {
   const { endpoint, model, headers = {}, fetchImpl = fetch, maxRetries = 2 } = config;
+  const budget = config.timeoutMs ?? timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const apiKeyEnv = config.apiKeyEnv;
   const apiKey = apiKeyEnv ? process.env[apiKeyEnv] : null;
@@ -96,7 +99,7 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) await delay(500 * attempt);
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    const timer = setTimeout(() => ac.abort(), budget);
     try {
       const res = await fetchImpl(endpoint, {
         method: "POST",
@@ -175,6 +178,18 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
       };
     } catch (err) {
       if (err instanceof AdapterError && !err.retryable) throw err;
+
+      // A timeout is NOT retried: it already consumed the whole budget, and
+      // three of them cost an 18-minute wait for one stalled model. The right
+      // lever is a larger per-model timeoutMs, not more identical attempts.
+      if (err?.name === "AbortError" || /abort|timeout/i.test(String(err?.message ?? ""))) {
+        throw new AdapterError(`Request timed out after ${budget}ms: ${err?.message ?? err}`, {
+          retryable: false,
+          timedOut: true,
+          timeoutMs: budget,
+        });
+      }
+
       lastError = err instanceof AdapterError ? err : new AdapterError(String(err?.message ?? err), { retryable: true });
     } finally {
       clearTimeout(timer);

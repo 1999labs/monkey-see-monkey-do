@@ -131,12 +131,97 @@ export const loadPool = ({ perTier = null, path } = {}) => loadPublishedPool({ p
  * @param {object} opts.baseline tier -> random survival rate
  * @param {boolean} opts.dryRun  use the reference solver, no API call
  */
+/**
+ * Why a model call produced nothing, in terms a report reader can act on.
+ *
+ * The distinction that matters: `empty_response` means the endpoint answered
+ * and declined to say anything, which is a real answer and is scored. Everything
+ * else means we never got one, and the number describes the route, not the
+ * model. Keeping those apart is the whole point of recording this at all.
+ */
+const classifyCallFailure = (err) => {
+  const message = String(err?.message ?? err ?? "");
+  const status = err?.status;
+  if (err?.name === "AbortError" || /abort/i.test(message)) return "timeout";
+  if (/non-JSON/i.test(message)) return "non_json_response";
+  if (status === 401 || status === 403) return "auth_failed";
+  if (status === 429) return "rate_limited";
+  if (typeof status === "number") return `http_${status}`;
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(message)) return "network_error";
+  return "provider_error";
+};
+
 export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, onProgress, dryRun = false } = {}) => {
-  const completion = dryRun
-    ? { text: REFERENCE_SOLVER_SOURCE, providerModel: "dry-run/reference-solver" }
-    : await complete(config, buildPrompt());
+  const callStartedAt = Date.now();
+  // Recorded even on success: a run that took 200s and one that took 2s are
+  // different facts about a model, and the cohort tables need both.
+  const callTimeoutMs = config?.timeoutMs ?? null;
+
+  // A model that times out, returns nothing, or errors must still produce a
+  // scored run. A model that answers badly already does: it lands as
+  // protocol_violation or detonation and is written out with a score. Without
+  // this, an endpoint that stalls produces NO report at all, which is
+  // indistinguishable from a run nobody started — and it is not evidence about
+  // the model, it is evidence about the provider.
+  //
+  // So the failure is caught here and turned into the `no_response` outcome
+  // below. The timeout itself is NOT raised or lengthened: a hung request must
+  // still fail fast rather than hang a cohort run indefinitely.
+  let completion = null;
+  let callFailure = null;
+  if (dryRun) {
+    completion = { text: REFERENCE_SOLVER_SOURCE, providerModel: "dry-run/reference-solver" };
+  } else {
+    try {
+      completion = await complete(config, buildPrompt());
+    } catch (err) {
+      callFailure = {
+        reason: classifyCallFailure(err),
+        message: String(err?.message ?? err),
+        elapsedMs: Date.now() - callStartedAt,
+        // The budget that was in force, so a report reader can tell a model
+        // that needed longer from one that would never have answered.
+        timeoutMs: err?.timeoutMs ?? config?.timeoutMs ?? null,
+        // Timeouts are not retried, so one wait is the cost of finding out.
+        attempts: err?.timedOut ? 1 : null,
+      };
+    }
+  }
 
   const boardResults = [];
+
+  // No answer at all: every board is `no_response`, which is a scored outcome,
+  // not an exception. A DIFFERENT failure from protocol_violation (which means
+  // the model answered with something unusable) and from stalled (which means
+  // the solver answered but made no progress within the oracle's budget).
+  if (callFailure) {
+    for (const b of boards) {
+      boardResults.push({
+        pool: b.pool,
+        tier: b.tier,
+        attempt: b.attempt,
+        outcome: "no_response",
+        calls: 0,
+      });
+    }
+    return {
+      boardResults,
+      score: scoreDo({ boardResults, baseline }),
+      progressIndex: scoreProgressIndex({ boardResults }),
+      usable: false,
+      compileError: null,
+      callFailure,
+      callElapsedMs: Date.now() - callStartedAt,
+      callTimeoutMs,
+      response: "",
+      providerModel: null,
+      finishReason: null,
+      responseFingerprint: fingerprint(""),
+      digest: promptDigest(),
+      dryRun,
+    };
+  }
+
   const first = compileCandidate(completion.text, { entry: "solve" });
   const compileError = first.ok ? null : first.error;
 
@@ -158,6 +243,9 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
     progressIndex: scoreProgressIndex({ boardResults }),
     usable: compileError === null,
     compileError,
+    callFailure: null,
+    callElapsedMs: Date.now() - callStartedAt,
+    callTimeoutMs,
     response: dryRun ? "(reference solver — no model was called)" : completion.text,
     providerModel: completion.providerModel ?? null,
     finishReason: completion.finishReason ?? null,
@@ -251,7 +339,23 @@ export const dryRunVerdict = (out) => {
 export const printDoRun = (model, out) => {
   const s = out.score;
   console.log(`\nMONKEY DO · ${model}`);
-  if (!out.usable) console.log(`\n  unusable response — ${out.compileError}`);
+
+  // Said first, and in plain words, because a 0 beside a timeout otherwise
+  // reads as a weak model. It is the score of a call that never returned.
+  if (out.callFailure) {
+    console.log(`\n  NO RESPONSE FROM THE MODEL — the score below is 0 for want of an answer.`);
+    console.log(`    reason:   ${out.callFailure.reason}`);
+    const budget = out.callFailure.timeoutMs;
+    console.log(
+      `    elapsed:  ${(out.callFailure.elapsedMs / 1000).toFixed(1)}s` +
+        (budget ? ` of a ${(budget / 1000).toFixed(0)}s budget (not retried)` : "")
+    );
+    console.log(`    message:  ${out.callFailure.message.slice(0, 160)}`);
+    console.log(`\n    This is NOT a measurement of the model. Nothing was played: the call failed`);
+    console.log(`    before any board, so no board result says anything about reasoning.`);
+  } else if (!out.usable) {
+    console.log(`\n  unusable response — ${out.compileError}`);
+  }
 
   console.log(`\n  Pool A · solvable      ${s.poolA.total} boards`);
   console.log(`    won                  ${pct(s.poolA.won).padStart(4)}   ${bar(s.poolA.won)}`);
