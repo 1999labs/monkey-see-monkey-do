@@ -16,7 +16,11 @@
       "base": 24,
       "miPenalty": 6.5,
       "unearnedPenalty": 10,
-      "adjusted": 8
+      "adjusted": 8,
+      "color": "#2563eb",
+      "dx": 13,
+      "dy": 17,
+      "anchor": "start"
     },
     {
       "model": "llama3.2:3b",
@@ -29,7 +33,11 @@
       "base": 22,
       "miPenalty": 12.5,
       "unearnedPenalty": 10,
-      "adjusted": 0
+      "adjusted": 0,
+      "color": "#b91c1c",
+      "dx": 12,
+      "dy": -9,
+      "anchor": "start"
     },
     {
       "model": "deepseek-coder:6.7b",
@@ -42,7 +50,11 @@
       "base": 32,
       "miPenalty": 4.5,
       "unearnedPenalty": 10,
-      "adjusted": 18
+      "adjusted": 18,
+      "color": "#15803d",
+      "dx": -13,
+      "dy": -8,
+      "anchor": "end"
     },
     {
       "model": "mistral:7b-instruct",
@@ -55,7 +67,11 @@
       "base": 25,
       "miPenalty": 6,
       "unearnedPenalty": 10,
-      "adjusted": 9
+      "adjusted": 9,
+      "color": "#ca8a04",
+      "dx": 12,
+      "dy": 5,
+      "anchor": "start"
     },
     {
       "model": "qwen2.5-coder:7b",
@@ -68,7 +84,11 @@
       "base": 34,
       "miPenalty": 4.5,
       "unearnedPenalty": 10,
-      "adjusted": 20
+      "adjusted": 20,
+      "color": "#ea580c",
+      "dx": 12,
+      "dy": -8,
+      "anchor": "start"
     }
   ]
 }
