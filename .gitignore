@@ -22,3 +22,6 @@ prompts.txt
 # Backgrounded run logs
 nohup.out
 *.log
+
+# Private scratch notes: model cohorts, scoring experiments, todo lists.
+notes.md
