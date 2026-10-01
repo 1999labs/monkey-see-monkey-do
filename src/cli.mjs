@@ -5,7 +5,7 @@
 // scope where it was read. One copy now.
 
 import { resolveModel, temperatureStatus, TEMPERATURE_OVERRIDE_FLAG } from "./adapters/registry.mjs";
-import { resolveKey, setupHint } from "./see/key.mjs";
+import { resolveKey, setupHint } from "./key.mjs";
 
 export { temperatureStatus, TEMPERATURE_OVERRIDE_FLAG };
 

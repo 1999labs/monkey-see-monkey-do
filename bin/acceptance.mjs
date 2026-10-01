@@ -1,6 +1,6 @@
 // The publication gate — the criteria a run must clear before the suite ships.
 //
-//   node scripts/acceptance.mjs --strong <model> --weak <model>
+//   node bin/acceptance.mjs --strong <model> --weak <model>
 //
 // "If any criterion fails, the eval is not published. An eval that does not
 // discriminate is worse than no eval, because it manufactures false confidence."
@@ -48,7 +48,7 @@ if (!strong || !weak || common.help) {
   console.log(`
 MONKEY SEE / MONKEY DO · acceptance gate (publication criteria)
 
-  node scripts/acceptance.mjs --strong <model> --weak <model> [--runs 3]
+  node bin/acceptance.mjs --strong <model> --weak <model> [--runs 3]
 
   --strong MODEL   a model known to be strong (e.g. a frontier model)
   --weak MODEL     a small model (e.g. ollama/qwen2.5-coder:7b)

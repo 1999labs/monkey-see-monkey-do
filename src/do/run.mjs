@@ -23,7 +23,7 @@
 
 import { complete } from "../adapters/registry.mjs";
 import { compileCandidate, runCandidate } from "../sandbox.mjs";
-import { fingerprint } from "../see/fingerprint.mjs";
+import { fingerprint } from "../fingerprint.mjs";
 import { asModelView, isWon, reveal, inBounds } from "./minesweeper/board.mjs";
 import { replayBoard, capForTier, loadPublishedPool, POOL_SEED } from "./minesweeper/pool.mjs";
 import { buildPrompt, promptDigest } from "./prompt.mjs";

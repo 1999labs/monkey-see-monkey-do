@@ -10,7 +10,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { resolveKey, setupHint, keyFilePath, readDotenvKey } from "../src/see/key.mjs";
+import { resolveKey, setupHint, keyFilePath, readDotenvKey } from "../src/key.mjs";
 
 const UNSET = "DEFINITELY_UNSET_KEY_9X8Y7Z";
 

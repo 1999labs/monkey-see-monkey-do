@@ -11,7 +11,7 @@ import { tasks, taskById } from "./tasks.mjs";
 import { buildPrompt, promptDigest, allPromptDigests } from "./prompt.mjs";
 import { scoreTask, scoreSeen, monkeyIndex, readIndex, robustnessBonus, unusableResult } from "./score.mjs";
 import { compileCandidate, runCandidate } from "../sandbox.mjs";
-import { reproducibility } from "./fingerprint.mjs";
+import { reproducibility } from "../fingerprint.mjs";
 import { buildReport, writeReport, LIMITATIONS } from "../report.mjs";
 import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "../cli.mjs";
 

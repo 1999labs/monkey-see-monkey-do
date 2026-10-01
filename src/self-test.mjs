@@ -8,8 +8,12 @@
 // `full: true` adds the slow check: regenerating the entire published pool and
 // comparing it byte for byte (success criterion 4). It takes a few minutes, so
 // it is `npm run self-test -- --full`, not part of the gate.
+//
+// This module is both the library the runners gate on and the command-line entry
+// point, so there is only one self-test file to look for.
 
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 import { tasks } from "./see/tasks.mjs";
 import { buildPrompt, promptDigest, allPromptDigests, PREAMBLE } from "./see/prompt.mjs";
@@ -745,3 +749,23 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
 
   return { ok: failures.length === 0, passed, failures };
 };
+
+// Command-line entry point. Only runs when this file is invoked directly, so
+// importing runSelfTest() from the runners does not trigger the report.
+// `import.meta.main` would be tidier but needs Node 24.2; this needs Node 20.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const full = process.argv.includes("--full");
+  const { ok, passed, failures } = await runSelfTest({ full });
+
+  if (ok) {
+    console.log(`\n\x1b[1mMONKEY SEE and MONKEY DO are calibrated and safe to score.\x1b[0m`);
+    console.log(`\x1b[32m\x1b[1mAll ${passed} checks passed.\x1b[0m${full ? "" : "  (Add --full to regenerate the whole pool as well.)"}\n`);
+    process.exit(0);
+  }
+  // Printed ONLY on success now. It used to print "calibrated and safe to score"
+  // unconditionally, directly above the line reporting failed checks.
+  console.log(`\n\x1b[31m\x1b[1m${failures.length} check(s) failed.\x1b[0m Scoring is blocked. Do not trust any score until these pass.\n`);
+  for (const f of failures) console.log(`  - ${f}`);
+  console.log("");
+  process.exit(1);
+}

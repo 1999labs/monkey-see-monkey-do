@@ -1,7 +1,7 @@
 // Regenerate the published MONKEY DO board pool.
 //
-//   node scripts/gen-pool.mjs                 write src/do/minesweeper/pool.json
-//   node scripts/gen-pool.mjs --check         regenerate in memory and compare
+//   node bin/gen-pool.mjs                 write src/do/minesweeper/pool.json
+//   node bin/gen-pool.mjs --check         regenerate in memory and compare
 //                                             byte for byte with the file
 //
 // Deterministic: running it twice must produce identical bytes. If it does not,
@@ -36,7 +36,7 @@ const perTier = {
 const check = args.includes("--check");
 
 if (!Number.isInteger(seed) || !Number.isInteger(perTier.A) || !Number.isInteger(perTier.B)) {
-  console.error("usage: node scripts/gen-pool.mjs [--seed 0x5EED] [--out FILE] [--per-tier-a N] [--per-tier-b N] [--check]");
+  console.error("usage: node bin/gen-pool.mjs [--seed 0x5EED] [--out FILE] [--per-tier-a N] [--per-tier-b N] [--check]");
   process.exit(1);
 }
 

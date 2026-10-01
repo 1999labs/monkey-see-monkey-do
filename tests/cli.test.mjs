@@ -141,7 +141,7 @@ test("a dry run passes its safety gate and scores 50/50", async () => {
 
 test("the acceptance gate rehearses end to end and tells a strong model from a weak one", async () => {
   const dir = mkdtempSync(join(tmpdir(), "md-cli-accept-"));
-  const r = await run("scripts/acceptance.mjs", [
+  const r = await run("bin/acceptance.mjs", [
     "--strong", "openrouter/stub-strong", "--weak", "openrouter/stub-weak",
     "--quick", "--per-tier", "1", "--runs", "2", "--key", "sk-test", "--out", dir,
   ]);

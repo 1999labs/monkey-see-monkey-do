@@ -19,7 +19,6 @@ the git history.
 You need Node.js 20 or newer, and nothing else — there is nothing to `npm install`.
 
 ```bash
-cd evals
 npm run self-test        # validates the eval itself (a few seconds)
 npm run dry-run          # plays the reference solver on all 450 boards; must say PASS and 50/50
 ```
@@ -92,7 +91,7 @@ Built in, with no config: `openrouter/…`, `openai/…`, `ollama/…`.
 
 Checked in this order: `--key`, the provider's environment variable,
 `~/.config/monkeydo/keys/<ENV_NAME>` (or `~/.config/monkeydo/key` for OpenRouter), then a
-`NAME=value` line in `evals/.env`. Keys are never written into the repository or into results.
+`NAME=value` line in `.env`. Keys are never written into the repository or into results.
 If none is found, the runner prints the one command that stores one.
 
 ## Reading the scores
@@ -167,20 +166,31 @@ If any criterion fails, the eval is not published. An eval that does not
 discriminate is worse than no eval, because it manufactures false confidence.
 
 ```
-evals/
+monkey-see-monkey-do/
 ├── config/models.example.json   model registry template
 ├── docs/calibration.md          every asserted number, and how it was measured
 ├── src/
 │   ├── adapters/                openai.mjs, ollama.mjs, registry.mjs
 │   ├── sandbox.mjs              node:vm execution, per-call timeout, code extraction
 │   ├── cli.mjs                  shared runner plumbing, temperature rule, self-test gate
-│   ├── self-test.mjs            the checks that must pass before any score is recorded
+│   ├── key.mjs                  API key resolution — shared by both evals
+│   ├── fingerprint.mjs          response hashing and reproducibility — shared by both evals
+│   ├── self-test.mjs            the checks that must pass before any score is recorded,
+│   │                            and the `npm run self-test` entry point
 │   ├── prompt-digests.mjs       recorded SHA-256 of every prompt
 │   ├── report.mjs               JSON reports and the limitations they carry
 │   ├── run-all.mjs              both evals, one model, combined report
-│   ├── see/                     reference.mjs (ground truth), tasks/*.json, prompt, score, run
-│   └── do/                      prompt, score, run, reference-solver.mjs
+│   ├── see/                     SEE only: reference.mjs (ground truth), tasks/*.json,
+│   │                            tasks.mjs, prompt, score, run
+│   └── do/                      DO only: prompt, score, run, reference-solver.mjs
 │       └── minesweeper/         board.mjs, oracle.mjs, pool.mjs, pool.json
-├── scripts/                     self-test, gen-pool, acceptance, show-prompts, diagnose, providers
+├── bin/                         command-line entry points, one per npm script:
+│                                gen-pool, acceptance, diagnose, providers, show-prompts
+├── compare.sh                   run several pinned models 3× each, side by side
+├── setup-key.sh                 store an OpenRouter key outside the repository
 └── tests/                       node:test suites
 ```
+
+`src/see/` and `src/do/` hold only what is private to their own eval. Anything both
+evals need — key resolution, response fingerprinting, the sandbox, reporting — lives at
+the top of `src/`, so neither eval's folder reaches into the other's.

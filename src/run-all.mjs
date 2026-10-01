@@ -15,7 +15,7 @@
 // same config, and writes both reports plus a combined one.
 
 import { runSee, printSeeRun } from "./see/run.mjs";
-import { reproducibility } from "./see/fingerprint.mjs";
+import { reproducibility } from "./fingerprint.mjs";
 import { runDo, loadPool, printDoRun } from "./do/run.mjs";
 import { randomBaseline, CONFIDENT_ERRORS } from "./do/score.mjs";
 import {
@@ -110,7 +110,7 @@ const spread = (xs) => (xs.length ? Math.max(...xs) - Math.min(...xs) : 0);
 /**
  * Run both evals `runs` times against one resolved config.
  *
- * Exported so the acceptance gate (scripts/acceptance.mjs) scores models through
+ * Exported so the acceptance gate (bin/acceptance.mjs) scores models through
  * exactly the same path as a normal run.
  *
  * @returns {{ runs: Array<{see, doo, seeTotal, doTotal}>, baseline, stability }}

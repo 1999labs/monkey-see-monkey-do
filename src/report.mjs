@@ -18,7 +18,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { allPromptDigests } from "./see/prompt.mjs";
-import { fingerprint } from "./see/fingerprint.mjs";
+import { fingerprint } from "./fingerprint.mjs";
 import { temperatureStatus } from "./adapters/registry.mjs";
 
 /**

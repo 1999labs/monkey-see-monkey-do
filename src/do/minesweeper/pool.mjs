@@ -372,7 +372,7 @@ export const poolDigest = (pool) => {
 // --- The published pool ---------------------------------------------------
 //
 // Generating the full pool takes minutes (Pool B acceptance is 10-20%), so it
-// is generated ONCE by scripts/gen-pool.mjs and stored as pool.json. That
+// is generated ONCE by bin/gen-pool.mjs and stored as pool.json. That
 // reverses an earlier decision to regenerate on every run, which was sound at
 // 20 boards per tier and unworkable at a size that resolves scores: 120 boards
 // took over three minutes per run.

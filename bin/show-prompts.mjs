@@ -1,6 +1,6 @@
 // Prints the exact prompt text and SHA-256 for every prompt: the three SEE
 // tasks and the DO solver prompt. Compare against src/prompt-digests.mjs.
-// Run: node scripts/show-prompts.mjs
+// Run: node bin/show-prompts.mjs
 import { allPromptDigests } from "../src/see/prompt.mjs";
 import { allPromptDigests as doPromptDigests } from "../src/do/prompt.mjs";
 import { RECORDED_DIGESTS } from "../src/prompt-digests.mjs";

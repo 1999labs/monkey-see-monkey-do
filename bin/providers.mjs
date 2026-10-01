@@ -1,12 +1,12 @@
 // List the OpenRouter providers serving a model, so you know what to pin to.
 //
-//   node scripts/providers.mjs -m openrouter/dots-3-note-preview:free
+//   node bin/providers.mjs -m openrouter/dots-3-note-preview:free
 //
 // A different provider is a different machine, which is one reason the same
 // prompt can return different code. Pinning removes that variable.
 
 import { listProviders } from "../src/adapters/openai.mjs";
-import { resolveKey } from "../src/see/key.mjs";
+import { resolveKey } from "../src/key.mjs";
 
 const args = process.argv.slice(2);
 let model = null;
@@ -17,7 +17,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (!model || model.startsWith("openrouter/") === false) {
-  console.error("usage: node scripts/providers.mjs -m openrouter/<model-id>");
+  console.error("usage: node bin/providers.mjs -m openrouter/<model-id>");
   if (model && !model.startsWith("openrouter/")) {
     console.error("  (drop the openrouter/ prefix — pass just the model id)");
   }

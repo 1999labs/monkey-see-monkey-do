@@ -13,7 +13,7 @@
 //   3. ~/.config/monkeydo/keys/<ENV_NAME>   a per-provider key file OUTSIDE
 //      the repo, mode 600 — or, for OpenRouter only, the original
 //      ~/.config/monkeydo/key
-//   4. evals/.env             optional convenience, gitignored
+//   4. .env             optional convenience, gitignored
 //   5. --interactive          opt-in prompt, never the default
 //
 // Key files are PER PROVIDER. The original single key file was returned for

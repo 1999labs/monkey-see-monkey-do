@@ -12,7 +12,7 @@
 // saves the raw response, and reports whether identical inputs produced
 // identical outputs.
 //
-//   node scripts/diagnose.mjs -m openrouter/dots-3-note-preview:free -r 3
+//   node bin/diagnose.mjs -m openrouter/dots-3-note-preview:free -r 3
 //
 // It costs N x 3 model calls.
 
@@ -23,7 +23,7 @@ import { tasks } from "../src/see/tasks.mjs";
 import { buildPrompt, promptDigest } from "../src/see/prompt.mjs";
 import { compileCandidate, runCandidate } from "../src/sandbox.mjs";
 import { scoreTask } from "../src/see/score.mjs";
-import { resolveKey } from "../src/see/key.mjs";
+import { resolveKey } from "../src/key.mjs";
 
 const parseArgs = (argv) => {
   const args = { runs: 3, model: null, key: null };
@@ -45,7 +45,7 @@ const shortHash = (s) => {
 const main = async () => {
   const args = parseArgs(process.argv.slice(2));
   if (!args.model) {
-    console.error("usage: node scripts/diagnose.mjs -m <provider/model> [-r 3]");
+    console.error("usage: node bin/diagnose.mjs -m <provider/model> [-r 3]");
     process.exit(1);
   }
   const config = resolveModel(args.model);

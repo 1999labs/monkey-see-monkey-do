@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fingerprint, reproducibility } from "../src/see/fingerprint.mjs";
+import { fingerprint, reproducibility } from "../src/fingerprint.mjs";
 
 test("fingerprint is 8 hex chars and stable", () => {
   assert.equal(fingerprint("function f(n){return n}"), fingerprint("function f(n){return n}"));

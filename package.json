@@ -9,18 +9,18 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "self-test": "node scripts/self-test.mjs",
-    "self-test:full": "node scripts/self-test.mjs --full",
-    "prompts": "node scripts/show-prompts.mjs",
+    "self-test": "node src/self-test.mjs",
+    "self-test:full": "node src/self-test.mjs --full",
+    "prompts": "node bin/show-prompts.mjs",
     "see": "node src/see/run.mjs",
     "do": "node src/do/run.mjs",
     "dry-run": "node src/do/run.mjs --dry-run",
     "all": "node src/run-all.mjs",
-    "gen-pool": "node scripts/gen-pool.mjs",
-    "check-pool": "node scripts/gen-pool.mjs --check",
-    "acceptance": "node scripts/acceptance.mjs",
-    "providers": "node scripts/providers.mjs",
-    "diagnose": "node scripts/diagnose.mjs",
+    "gen-pool": "node bin/gen-pool.mjs",
+    "check-pool": "node bin/gen-pool.mjs --check",
+    "acceptance": "node bin/acceptance.mjs",
+    "providers": "node bin/providers.mjs",
+    "diagnose": "node bin/diagnose.mjs",
     "setup-key": "bash setup-key.sh"
   }
 }
