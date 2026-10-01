@@ -12,7 +12,7 @@ No human scoring, no LLM judges, no runtime dependencies.
 
 ## Quickstart
 
-You need Node.js 20 or newer, and nothing else — there is nothing to `npm install`.
+You need Node.js 20 or newer, and nothing else: there is nothing to `npm install`.
 
 ```bash
 npm run self-test        # validates the eval itself (a few seconds)
@@ -22,7 +22,7 @@ npm run dry-run          # plays the reference solver on all 450 boards; must sa
 Then score a model. Every runner runs the self-test first and refuses to score if it fails.
 
 ```bash
-# A local model through Ollama — no key needed
+# A local model through Ollama: no key needed
 ollama pull qwen2.5-coder:7b
 npm run all -- -m ollama/qwen2.5-coder:7b
 
@@ -92,13 +92,13 @@ If none is found, the runner prints the one command that stores one.
 
 ## Reading the scores
 
-**SEE** — three tasks, 50 held-out cases each, 15 points per task plus 5 for code that does not
+**SEE**: three tasks, 50 held-out cases each, 15 points per task plus 5 for code that does not
 throw. The **Monkey Index** is `seen pass rate − held-out pass rate`, reported descriptively and
-never as a claim about the model: 0–10 `generalizes — held-out performance matches shown
-performance`, 11–30 `mostly generalizes`, 31–60 `partial`, 61+ `SURFACE FIT — shown performance
-carried no information about held-out`. A naive implementation of each task scores 32–36%, by design.
+never as a claim about the model: 0–10 `generalizes` (held-out performance matches shown
+performance), 11–30 `mostly generalizes`, 31–60 `partial`, 61+ `SURFACE FIT` (shown performance
+carried no information about held-out). A naive implementation of each task scores 32–36%, by design.
 
-**DO** — the model writes `solve(board, mines)` once; it is replayed on 450 generated boards.
+**DO**: the model writes `solve(board, mines)` once; it is replayed on 450 generated boards.
 Every move is checked: a move must be *provably* safe, not merely lucky.
 
 | Component | Points |
@@ -108,19 +108,19 @@ Every move is checked: a move must be *provably* safe, not merely lucky.
 | Pool B (150 boards that reach a position where nothing is provable): stopped correctly by returning `null` there | 10 |
 
 Outcomes per board: `won`, `surrender` (a correct stop), `premature_surrender`, `detonation`,
-`unproven_move` (safe by luck — scored like a detonation), `protocol_violation`, `stalled`.
+`unproven_move` (safe by luck, scored like a detonation), `protocol_violation`, `stalled`.
 Random play survives 0% of boards, so a Pool A win cannot be luck. It does not show the solver was
-derived rather than recalled — see the first two limitations.
+derived rather than recalled; see the first two limitations.
 
 ## Limitations
 
 Every report carries these, and a score quoted without them is misleading:
 
 - **Not a coding benchmark.** Neither eval edits a repository, runs a test suite, or uses tools;
-  they measure rule inference (SEE) and solver soundness (DO) — the induction and deduction named
-  in the lead — not software engineering.
+  they measure rule inference (SEE) and solver soundness (DO), the induction and deduction named
+  in the lead, not software engineering.
 - **DO scores a program, not a chain of thought.** The model writes `solve(board, mines)` in a
-  single call and never sees an individual board, so a DO score describes the code it emitted —
+  single call and never sees an individual board, so a DO score describes the code it emitted,
   not deduction performed at inference time. A correct solver may be recalled rather than derived.
 - **A low Monkey Index is evidence of generalization, not proof of abstraction.** It shows
   performance carried from shown to held-out inputs within one distribution; a heuristic fitted to
@@ -153,7 +153,7 @@ Every report carries these, and a score quoted without them is misleading:
 
 Every push and pull request runs `npm test` and `npm run self-test` on Node 20 via
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Pool regeneration is deliberately
-off that path — it takes minutes — so `check-pool` and `self-test:full` run nightly and on
+off that path because it takes minutes, so `check-pool` and `self-test:full` run nightly and on
 demand from the Actions tab instead. There are no dependencies to install, so CI only
 checks out and runs Node.
 
@@ -161,8 +161,8 @@ Changing a prompt changes its digest: update `src/prompt-digests.mjs` and bump t
 Changing the oracle or pool classification: bump `GENERATOR_VERSION` in `pool.mjs` and run
 `npm run gen-pool`; loading a pool built by a different generator fails loudly.
 
-Every number the suite asserts — the naive baselines, the 0% random baseline, the
-effort cap and how it was derived, the pool's shape and acceptance rates — is
+Every number the suite asserts (the naive baselines, the 0% random baseline, the
+effort cap and how it was derived, the pool's shape and acceptance rates) is
 recorded in [`docs/calibration.md`](docs/calibration.md), with the commands that
 re-derive each one. Read it before changing a held-out set, the pool, the oracle
 or the cap.
@@ -178,7 +178,7 @@ report a pass.
 | Discriminates strong from weak | A known-strong model outscores a 7B model on both evals |
 | Naive baseline lands in band | 20–45% on every SEE task |
 | Random baseline lands in band | DO random survival is 0% on every tier |
-| Oracle reaches 100% | The reference solver wins every Pool A board and stops correctly on every Pool B board — a dry run scores 50/50 |
+| Oracle reaches 100% | The reference solver wins every Pool A board and stops correctly on every Pool B board, so a dry run scores 50/50 |
 | Variance is low | Three runs at `temperature: 0` differ by ≤ 2 points |
 | Self-test passes | Every self-test check, including full pool regeneration |
 
@@ -193,8 +193,8 @@ monkey-see-monkey-do/
 │   ├── adapters/                openai.mjs, ollama.mjs, registry.mjs
 │   ├── sandbox.mjs              node:vm execution, per-call timeout, code extraction
 │   ├── cli.mjs                  shared runner plumbing, temperature rule, self-test gate
-│   ├── key.mjs                  API key resolution — shared by both evals
-│   ├── fingerprint.mjs          response hashing and reproducibility — shared by both evals
+│   ├── key.mjs                  API key resolution, shared by both evals
+│   ├── fingerprint.mjs          response hashing and reproducibility, shared by both evals
 │   ├── self-test.mjs            the checks that must pass before any score is recorded,
 │   │                            and the `npm run self-test` entry point
 │   ├── prompt-digests.mjs       recorded SHA-256 of every prompt
@@ -211,7 +211,7 @@ monkey-see-monkey-do/
 ```
 
 `src/see/` and `src/do/` hold only what is private to their own eval. Anything both
-evals need — key resolution, response fingerprinting, the sandbox, reporting — lives at
+evals need (key resolution, response fingerprinting, the sandbox, reporting) lives at
 the top of `src/`, so neither eval's folder reaches into the other's.
 
 ## Provenance
