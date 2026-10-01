@@ -1,7 +1,7 @@
 ## Monkey See, Monkey Do
 
 Two automated model evals that probe two narrow skills: **induction**, generalizing a
-rule from examples instead of copying their surface; and **deduction**, writing solver
+rule from examples instead of copying their surface; and **solver soundness**, writing
 code that only makes moves it can prove are safe and stops when nothing can be proven.
 No human scoring, no LLM judges, no runtime dependencies.
 
@@ -143,12 +143,19 @@ Every report carries these, and a score quoted without them is misleading:
 | Command | What it does |
 |---|---|
 | `npm test` | Unit and end-to-end tests (no network; the CLI tests use a stubbed fetch) |
+| `npm run self-test` | The 114-check gate every runner enforces before it will score anything |
 | `npm run self-test:full` | Self-test plus a byte-for-byte regeneration of the board pool (minutes) |
 | `npm run gen-pool` | Regenerates `src/do/minesweeper/pool.json` from seed `0x5EED` |
 | `npm run check-pool` | Regenerates in memory and compares with the file byte for byte |
 | `npm run prompts` | Prints every prompt with its SHA-256 and whether it matches the recorded digest |
 | `npm run acceptance -- --strong <model> --weak <model>` | The publication gate; add `--quick` to rehearse |
 | `npm run diagnose -- -m <model>` | Runs each SEE task several times and saves raw responses, to tell endpoint noise from harness bugs |
+
+Every push and pull request runs `npm test` and `npm run self-test` on Node 20 via
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml). Pool regeneration is deliberately
+off that path — it takes minutes — so `check-pool` and `self-test:full` run nightly and on
+demand from the Actions tab instead. There are no dependencies to install, so CI only
+checks out and runs Node.
 
 Changing a prompt changes its digest: update `src/prompt-digests.mjs` and bump the suite version, deliberately.
 Changing the oracle or pool classification: bump `GENERATOR_VERSION` in `pool.mjs` and run

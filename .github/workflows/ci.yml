@@ -1,0 +1,68 @@
+name: ci
+
+# Every push and PR runs the fast gate: the test suite and the self-test that
+# every runner enforces before it will score anything. The suite has no
+# dependencies and no lockfile, so there is nothing to install: Node 20 is the
+# whole toolchain.
+#
+# Pool regeneration is NOT on this path. It takes minutes, not seconds, and it
+# is the slowest thing here by a wide margin, so it lives in the `full` job
+# below and runs on a schedule or on demand.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Nightly, so pool drift is caught even with no human pushing.
+  schedule:
+    # 04:17 UTC daily. An off-hour minute keeps this off the top-of-the-hour
+    # rush when every other scheduled workflow on the planet fires at :00.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: tests and self-test
+    runs-on: ubuntu-latest
+    # Generous relative to the real cost (~1 min), so a slow shared runner is
+    # not mistaken for a failure.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # No npm ci/npm install: package.json declares zero dependencies, and a
+      # lockfile would be a file nothing ever updates.
+      - name: Unit and end-to-end tests
+        run: npm test
+      # The gate every runner enforces before it will score anything. If this
+      # fails, a published score cannot be trusted.
+      - name: Self-test
+        run: npm run self-test
+
+  full:
+    name: full self-test and pool regeneration
+    # Off the default path on purpose: regenerating the pool takes minutes, and
+    # putting it on every push would make the gate slow enough that people stop
+    # waiting for it. Nightly and on demand instead.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    # Generous: pool generation is minutes-long and its cost is not fixed.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # Regenerates the pool in memory and compares byte for byte, proving the
+      # committed pool.json is exactly what the current generator produces.
+      # A mismatch means the generator or the pool changed without the other.
+      - name: Pool regenerates byte-identically
+        run: npm run check-pool
+      # The self-test plus its full pool replay.
+      - name: Self-test with full pool regeneration
+        run: npm run self-test:full

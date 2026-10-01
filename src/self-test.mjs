@@ -299,7 +299,14 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     const t0 = Date.now();
     const r = runCandidate(loop, 1);
     const ms = Date.now() - t0;
-    check("an infinite loop is interrupted in under 1.2s", loop.ok && r.timedOut === true && ms < 1200, `${ms}ms`);
+    // A wall-clock bound on a timer, so it is the one check here that can fail
+    // for reasons unrelated to correctness: a loaded machine can overshoot a
+    // 1000ms timeout by hundreds of ms. The property that matters is that the
+    // loop is interrupted AT ALL and reported as a timeout (checked above); the
+    // bound only catches a timeout that never fires, which takes seconds, not
+    // milliseconds. Kept generous so a busy CI runner does not fail the gate
+    // every runner depends on.
+    check("an infinite loop is interrupted in under 5s", loop.ok && r.timedOut === true && ms < 5000, `${ms}ms`);
 
     const req = compileCandidate("function f(n) { return require('fs').readFileSync('/etc/passwd', 'utf8'); }");
     const rr = runCandidate(req, 1);
