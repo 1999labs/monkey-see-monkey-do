@@ -1,18 +1,14 @@
 # MONKEY SEE / MONKEY DO
 
-Two automated evals that probe two narrow skills: **induction** — generalizing a
-rule from examples instead of copying their surface — and **sound solver code,
-plus knowing when you don't know**. No human scoring, no rubrics, no runtime
-dependencies.
+Two automated model evals that probe two narrow skills: **induction**, generalizing a
+rule from examples instead of copying their surface; and **deduction**, writing solver
+code that only makes moves it can prove are safe and stops when nothing can be proven.
+No human scoring, no LLM judges, no runtime dependencies.
 
 | Eval | Question | Score |
 |---|---|---|
 | **MONKEY SEE** | Given 8 examples of an unknown function, does the model infer the rule, or copy the surface? | 50 points + the Monkey Index |
 | **MONKEY DO** | Given a Minesweeper position, does the model write a solver that only ever makes proven moves, and stops when nothing can be proven? | 50 points |
-
-A working design document covering the reasoning behind every number in here
-existed alongside the code; it was removed from the working tree and remains in
-the git history.
 
 ## Quickstart
 
@@ -194,3 +190,9 @@ monkey-see-monkey-do/
 `src/see/` and `src/do/` hold only what is private to their own eval. Anything both
 evals need — key resolution, response fingerprinting, the sandbox, reporting — lives at
 the top of `src/`, so neither eval's folder reaches into the other's.
+
+## Provenance
+
+A working design document covering the reasoning behind every number in here
+existed alongside the code; it was removed from the working tree and remains in
+the git history.
