@@ -144,29 +144,31 @@ export const monkeyIndex = (seen, taskResults) => {
  * What a LOW index does NOT establish: that the model induced a general rule.
  * A shallow heuristic fitted to this generator's held-out input shapes would
  * score identically to a principled induction. Telling those apart needs a
- * held-out task family — a task the model provably could not have seen — and
+ * held-out task family (a task the model provably could not have seen), and
  * the suite does not have one.
  *
  * What a HIGH index does establish, and it is worth stating plainly: the shown
  * score carried no information about the held-out score. That much is arithmetic.
  */
 export const readIndex = (index) => {
-  if (index <= 10) return "generalizes — held-out performance matches shown performance";
-  if (index <= 30) return "mostly generalizes — held-out trails shown on some cases";
-  if (index <= 60) return "partial — fits the shown examples better than new ones";
-  return "SURFACE FIT — shown performance carried no information about held-out";
+  // The label and its explanation are separated by a colon, not an em dash, to
+  // match how the README quotes these bands.
+  if (index <= 10) return "generalizes: held-out performance matches shown performance";
+  if (index <= 30) return "mostly generalizes: held-out trails shown on some cases";
+  if (index <= 60) return "partial: fits the shown examples better than new ones";
+  return "SURFACE FIT: shown performance carried no information about held-out";
 };
 
 // --- Robustness bonus ----------------------------------------------------
 //
 // Worth 5 of the 50 points. It measures one thing only: whether the model's
 // code THROWS on held-out inputs. It never measures whether the answers were
-// right — that is what the 45 task points already do.
+// right, which is what the 45 task points already do.
 //
 // Why proportional rather than all-or-nothing: an earlier version awarded the
 // full 5 only if nothing threw at all, across all 150 cases. Measurement
 // showed a model that had learned Task B perfectly, and simply missed the
-// empty-string guard, scored an identical 49/50 either way — but lost all 5
+// empty-string guard, scored an identical 49/50 either way but lost all 5
 // points. One input out of 150 was silently worth 10% of the score.
 //
 // Proportional removes the cliff. A single missed guard costs 5/150 of a

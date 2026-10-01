@@ -25,7 +25,7 @@ const seeFixture = (index, points = 20) => ({
   points,
   noCrash: 5,
   index: { index: index / 100 },
-  reading: index <= 10 ? "generalizes — held-out performance matches shown performance" : "SURFACE FIT — shown performance carried no information about held-out",
+  reading: index <= 10 ? "generalizes: held-out performance matches shown performance" : "SURFACE FIT: shown performance carried no information about held-out",
   seen: { rate: 0.6 },
 });
 

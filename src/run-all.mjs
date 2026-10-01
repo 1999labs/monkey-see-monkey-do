@@ -1,4 +1,4 @@
-// MONKEY SEE / MONKEY DO — run both evals against one model.
+// MONKEY SEE / MONKEY DO: run both evals against one model.
 //
 //   node src/run-all.mjs --model openrouter/dots-3-note-preview:free
 //
@@ -7,8 +7,8 @@
 // The two evals share a model, a key and a reproducibility verdict, and they are
 // only interesting TOGETHER: SEE scores rule induction from examples, DO scores
 // the soundness of a solver's moves. Run separately, the two JSON files
-// could legitimately disagree — different provider fallback, a different run
-// count, one sampled at temperature 0 and one not — and there would be no way
+// could legitimately disagree (different provider fallback, a different run
+// count, one sampled at temperature 0 and one not), and there would be no way
 // to tell a model difference from a setup difference.
 //
 // So this resolves the model and the key ONCE, runs both evals against that
@@ -75,7 +75,7 @@ const pct = (r) => `${Math.round(r * 100)}%`;
  * High on both means the model scored well on what it was shown and then its
  * solver acted beyond what the position supported. That is a real pattern in
  * the artefacts and worth flagging. It is not evidence about how the model
- * reached either result — see the limitations, which every report carries.
+ * reached either result; see the limitations, which every report carries.
  */
 export const summarise = (see, doo) => {
   const index = Math.round(see.index.index * 100);
@@ -96,10 +96,10 @@ export const summarise = (see, doo) => {
   } else if (index <= 10 && unproven === 0) {
     lines.push("  Generalizes on SEE, and the solver it wrote never moved without proof");
     lines.push("  on DO. Both results are also consistent with recall of a known approach");
-    lines.push("  rather than derivation — check the run was reproducible first.");
+    lines.push("  rather than derivation; check the run was reproducible first.");
   } else {
     lines.push("  Mixed: the two evals disagree. Worth reading the per-tier DO");
-    lines.push("  breakdown — a model that only handles small boards has learned");
+    lines.push("  breakdown, since a model that only handles small boards has learned");
     lines.push("  to look at small boards.");
   }
   return lines.join("\n");
@@ -165,7 +165,7 @@ const main = async () => {
 
   const pool = loadPool({ perTier: args.perTier });
   console.log(
-    `  DO board pool: ${pool.boards.length} boards${pool.full ? "" : " — a SUBSET, not comparable with a full run"}`
+    `  DO board pool: ${pool.boards.length} boards${pool.full ? "" : " (a SUBSET, not comparable with a full run)"}`
   );
 
   const { runs, baseline, stability } = await runAll(config, {
@@ -192,8 +192,8 @@ const main = async () => {
     console.log(`    DO  totals ${stability.doTotals.join(", ")}  (spread ${stability.doSpread})`);
     console.log(
       stability.withinTwoPoints
-        ? `    within 2 points — stable enough to compare`
-        : `    MORE THAN 2 POINTS apart — these are samples, not a measurement`
+        ? `    within 2 points, stable enough to compare`
+        : `    MORE THAN 2 POINTS apart: these are samples, not a measurement`
     );
     console.log(`    responses: SEE ${stability.seeReproducible ? "identical" : "DIFFERED"}, DO ${stability.doReproducible ? "identical" : "DIFFERED"} across runs`);
   }
