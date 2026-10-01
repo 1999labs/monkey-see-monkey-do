@@ -97,7 +97,7 @@ export const scoreDo = ({ boardResults, baseline = {} }) => {
     poolBCorrectStop: bCorrectStop * 10,
   };
 
-  // The DO Monkey Index: Pool A win rate above random play, per tier. Reported,
+  // The DO Generalization Index: Pool A win rate above random play, per tier. Reported,
   // not scored, because pooling it would hide a model that only handles small
   // boards.
   const index = {};

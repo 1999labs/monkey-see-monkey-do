@@ -50,14 +50,14 @@ test("report records the headline numbers from the run summary", async () => {
     keySource: "key file",
     startedAt: new Date().toISOString(),
   });
-  assert.equal(r.schema, "monkey-see/report@1");
+  assert.equal(r.schema, "monkey-see/report@2");
   assert.equal(r.score.points, last.points);
   // The report rounds the bonus to 4dp for readability, so compare against the
   // rounded value rather than asserting bit-equality on a float.
   assert.equal(r.score.noCrash, Number(last.noCrash.toFixed(4)));
   assert.equal(r.score.total, Math.round(last.points + last.noCrash));
   assert.equal(r.score.maxTotal, 50);
-  assert.deepEqual(r.score.perRunMonkeyIndex, [15, 20, 31]);
+  assert.deepEqual(r.score.perRunGeneralizationIndex, [15, 20, 31]);
   assert.equal(r.model.requested, "openrouter/dots-3-note-preview:free");
   // Robustness detail, and the categorical flag kept separate from the score.
   assert.equal(r.score.robustness.points, Number(last.robustness.points.toFixed(4)));
@@ -164,7 +164,7 @@ test("writeReport writes a dated, model-named JSON file", () => {
   const files = readdirSync(dir);
   assert.equal(files.length, 1);
   assert.match(files[0], /^openrouter-dots-3-note-preview-free-.*\.json$/);
-  assert.equal(JSON.parse(readFileSync(path, "utf8")).schema, "monkey-see/report@1");
+  assert.equal(JSON.parse(readFileSync(path, "utf8")).schema, "monkey-see/report@2");
 });
 
 test("a model id with path separators cannot escape the output directory", () => {

@@ -276,9 +276,9 @@ they are treated identically to `null`.
 
 ---
 
-## 7. The DO diagnostic's depth reference
+## 7. The Progress Index's depth reference
 
-The diagnostic's `depth` component needs a scale for "how many proven moves is a lot?"
+The Progress Index's `depth` component needs a scale for "how many proven moves is a lot?"
 It uses **75**, which is the reference solver's own mean proven-move count on Pool A,
 rounded from a measured **74.99**.
 
@@ -290,16 +290,16 @@ Re-derive it by reading `meanCalls` out of the dry-run report rather than recomp
 it by hand:
 
 ```bash
-node -e "import('./src/do/diagnostic.mjs').then(async m => {
+node -e "import('./src/do/progress-index.mjs').then(async m => {
   const r = JSON.parse(require('fs').readFileSync('results/do-dry-run-reference-solver-<date>.json'));
-  console.log(m.scoreDiagnostic({ boardResults: r.boardResults }).meanCalls);
+  console.log(m.scoreProgressIndex({ boardResults: r.boardResults }).meanCalls);
 })"
 ```
 
 **75 is a scale, not a pass mark.** A model that clears boards in a different order can
 legitimately make fewer calls and still be correct, so `depth` saturates at the oracle and
-never demands matching it. Changing `REFERENCE_DEPTH` in `src/do/diagnostic.mjs` rescales
-the diagnostic only — no 50-point score moves, and the oracle stays 15/15 at any value.
+never demands matching it. Changing `REFERENCE_DEPTH` in `src/do/progress-index.mjs` rescales
+the Progress Index only — no 50-point score moves, and the oracle stays 15/15 at any value.
 
 `initiation` and `breadth` need no calibration: they are fractions of boards and of tiers.
 
@@ -307,14 +307,14 @@ the diagnostic only — no 50-point score moves, and the oracle stays 15/15 at a
 
 ## 8. The adjusted total's weights
 
-`adjusted = clamp(SEE + DO − 0.5 × MI − 10 × (1 − initiationRate), 0, 100)`
+`adjusted = clamp(SEE + DO − 0.5 × GZ − 10 × (1 − initiationRate), 0, 100)`
 
 Two hand-chosen weights, both judgement calls, both recorded here rather than buried in
 the formula:
 
 | Weight | Value | Why | Where it comes from |
 |---|---|---|---|
-| `MI_WEIGHT` | 0.5 | A high Monkey Index means held-out points were collected without generalization. Removing them outright would erase a model's real ability; removing half treats surface fit as roughly half a real point. | Judgement. No derivation. |
+| `GENERALIZATION_WEIGHT` | 0.5 | A high Generalization Index means held-out points were collected without generalization. Removing them outright would erase a model's real ability; removing half treats surface fit as roughly half a real point. | Judgement. No derivation. |
 | `NO_CONFIDENT_ERROR_POINTS` | 10 | The exact size of the DO component the clawback corrects. | Not a choice — it is `poolANoDetonation`'s maximum in `src/do/score.mjs`. If that component is ever reweighted, this must follow it. |
 
 **The clamp is load-bearing.** A perfect run must read exactly 100, or the adjusted figure
@@ -322,7 +322,7 @@ cannot coexist with the oracle's calibration. `npm run self-test` asserts this d
 ("a perfect run still scores 100/100 adjusted"), along with the floor at 0 and the cap at
 100. If a weight change ever breaks it, the self-test blocks scoring.
 
-**Neither adjustment touches a 50-point score.** `SEE`, `DO`, `MI` and the diagnostic are
+**Neither adjustment touches a 50-point score.** `SEE`, `DO`, `GZ` and the Progress Index are
 all reported unchanged; the adjusted total is a reporting layer only. That is why its
 weights are not frozen at a suite version the way the 50-point weights are — nothing
 recorded before this existed is invalidated by changing them.

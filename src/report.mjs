@@ -29,12 +29,12 @@ import { adjustedTotal } from "./adjusted.mjs";
  *
  * These are the load-bearing ones. Two in particular constrain how far any
  * score can be read: DO scores a program rather than a chain of thought, and a
- * low Monkey Index is evidence of generalization but not of abstraction.
+ * low Generalization Index is evidence of generalization but not of abstraction.
  */
 export const LIMITATIONS = [
   "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and solver soundness (DO), not software engineering.",
   "DO scores a program, not a chain of thought. The model writes solve(board, mines) in a single call and never sees an individual board, so a DO score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
-  "A low Monkey Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
+  "A low Generalization Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
   "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
   "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
   "Not comparable to SWE-bench, HumanEval, or any external leaderboard. Different scale, different construction; never present these numbers alongside one.",
@@ -56,13 +56,13 @@ const slug = (model) =>
  * @param {string} opts.model         model id exactly as passed on the CLI
  * @param {Array}  opts.taskRuns      taskRuns from the final run
  * @param {object} opts.last          the runSee() summary, used for headline numbers
- * @param {number[]} opts.indices     Monkey Index for each run
+ * @param {number[]} opts.indices     Generalization Index for each run
  * @param {object} opts.reproducibility output of reproducibility()
  * @param {object} opts.config        resolved adapter config (key is NOT copied)
  */
 export const buildReport = ({ model, taskRuns, last, indices, reproducibility, config, keySource, startedAt }) => {
   return {
-    schema: "monkey-see/report@1",
+    schema: "monkey-see/report@2",
     eval: "SEE",
     timestamp: new Date().toISOString(),
     startedAt,
@@ -120,11 +120,11 @@ export const buildReport = ({ model, taskRuns, last, indices, reproducibility, c
       noCrash: last ? Number(last.noCrash.toFixed(4)) : 0,
       total: last ? Math.round(last.points + last.noCrash) : 0,
       maxTotal: 50,
-      monkeyIndex: last ? Math.round(last.index.index * 100) : null,
+      generalizationIndex: last ? Math.round(last.index.index * 100) : null,
       indexReading: last ? last.reading : null,
       seen: last ? Number(last.seen.rate.toFixed(4)) : null,
       heldOut: last ? Number(last.index.heldOut.toFixed(4)) : null,
-      perRunMonkeyIndex: indices ?? null,
+      perRunGeneralizationIndex: indices ?? null,
     },
 
     reproducibility: reproducibility
@@ -211,7 +211,7 @@ export const writeReport = (report, outDir = "results") => {
  * @param {object} opts.pool  the loadPool() result: { boards, seed, full, sha256, publishedSha256 }
  */
 export const buildDoReport = ({ model, result, config, keySource, pool, baseline, reproducibility }) => ({
-  schema: "monkey-do/report@2",
+  schema: "monkey-do/report@3",
   eval: "DO",
   timestamp: new Date().toISOString(),
 
@@ -269,7 +269,7 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
   // A second axis on the same boards, deliberately outside `score`. A solver
   // that surrendered immediately still banks score.points.poolANoDetonation,
   // so the 50 alone cannot distinguish caution from inertia; this can.
-  diagnostic: result.diagnostic,
+  progressIndex: result.progressIndex,
 
   reproduction: reproducibility
     ? {
@@ -327,14 +327,14 @@ export const writeDoReport = (report, outDir = "results") => {
 export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, reading, stability = null, paths = {} }) => {
   const seeTotal = Math.round(see.points + see.noCrash);
   return {
-    schema: "monkey-see-monkey-do/combined@1",
+    schema: "monkey-see-monkey-do/combined@2",
     model: { requested: model, endpoint: config?.endpoint ?? null },
     date: new Date().toISOString(),
     temperature: { ...temperatureStatus(config), keySource: keySource ?? null },
     see: {
       total: seeTotal,
       max: 50,
-      monkeyIndex: Math.round(see.index.index * 100),
+      generalizationIndex: Math.round(see.index.index * 100),
       reading: see.reading,
       seen: Number(see.seen.rate.toFixed(4)),
       heldOut: Number(see.index.heldOut.toFixed(4)),
@@ -356,13 +356,13 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
       reading,
     },
     // REPORTING ONLY — see src/adjusted.mjs. `combined.total` above is
-    // untouched; this is the single figure to plot once the Monkey Index and
-    // the DO diagnostic are folded in.
+    // untouched; this is the single figure to plot once the Generalization Index and
+    // the DO progress index are folded in.
     adjusted: adjustedTotal({
       seeTotal,
       doTotal: doo.score.total,
-      monkeyIndex: Math.round(see.index.index * 100),
-      initiationRate: doo.diagnostic?.initiationRate ?? 1,
+      generalizationIndex: Math.round(see.index.index * 100),
+      initiationRate: doo.progressIndex?.initiationRate ?? 1,
     }),
     stability,
     reports: paths,

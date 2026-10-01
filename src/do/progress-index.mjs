@@ -1,4 +1,4 @@
-// MONKEY DO — diagnostic, reported ALONGSIDE the 50-point score and never
+// MONKEY DO — progress index, reported ALONGSIDE the 50-point score and never
 // inside it.
 //
 // Why this exists. The 50 points measure two different things at once: whether a
@@ -51,7 +51,7 @@ const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
  * @param {Array} opts.boardResults one entry per board, as scored by scoreDo
  * @param {number} opts.referenceDepth mean proven moves to treat as full depth
  */
-export const scoreDiagnostic = ({ boardResults, referenceDepth = REFERENCE_DEPTH } = {}) => {
+export const scoreProgressIndex = ({ boardResults, referenceDepth = REFERENCE_DEPTH } = {}) => {
   const poolA = boardResults.filter((r) => r.pool === "A");
   const calls = poolA.map((r) => r.calls ?? 0);
 

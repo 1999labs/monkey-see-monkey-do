@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 import { taskA, taskB, taskC, tasks, taskById, formatValue, formatExample } from "../src/see/tasks.mjs";
 import { groundTruth } from "../src/see/reference.mjs";
-import { scoreTask, scoreSeen, monkeyIndex, heldOutCases, readIndex } from "../src/see/score.mjs";
+import { scoreTask, scoreSeen, generalizationIndex, heldOutCases, readIndex } from "../src/see/score.mjs";
 
 test("held-out sets are 50 cases each, split 20/15/15", () => {
   for (const task of tasks) {
@@ -82,7 +82,7 @@ test("undefined is not treated as equal to null", () => {
 test("monkey index pools seen and held-out across all three tasks", () => {
   const perfect = Object.fromEntries(tasks.map((t) => [t.id, t.reference]));
   const results = tasks.map((t) => scoreTask(t, t.reference));
-  const m = monkeyIndex(scoreSeen(perfect), results);
+  const m = generalizationIndex(scoreSeen(perfect), results);
   assert.equal(m.seen, 1);
   assert.equal(m.heldOut, 1);
   assert.equal(m.index, 0);
@@ -91,7 +91,7 @@ test("monkey index pools seen and held-out across all three tasks", () => {
 test("a surface-fit strategy scores materially above zero on the index", () => {
   const naiveById = Object.fromEntries(tasks.map((t) => [t.id, t.naive]));
   const results = tasks.map((t) => scoreTask(t, t.naive));
-  const m = monkeyIndex(scoreSeen(naiveById), results);
+  const m = generalizationIndex(scoreSeen(naiveById), results);
   assert.ok(m.index > 0.05, `index was ${m.index}`);
 });
 

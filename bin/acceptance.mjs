@@ -104,7 +104,7 @@ for (const [role, model] of [["strong", strong], ["weak", weak]]) {
     model,
     see: results.map((r) => r.seeTotal),
     do: results.map((r) => r.doTotal),
-    monkeyIndex: results.map((r) => Math.round(r.see.index.index * 100)),
+    generalizationIndex: results.map((r) => Math.round(r.see.index.index * 100)),
     reproducible: stability ? { see: stability.seeReproducible, do: stability.doReproducible } : null,
   };
   const s = scored[role];

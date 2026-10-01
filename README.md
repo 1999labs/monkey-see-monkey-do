@@ -161,10 +161,18 @@ If none is found, the runner prints the one command that stores one.
 
 ## Scoring
 
-Two evals, each out of 50. Four numbers come out of them: a score from each (`SEE`, `DO`), a
-generalization index for SEE (`MI`), and a progress diagnostic for DO. Only `SEE` and `DO`
-are scored; `MI` and the diagnostic are reported beside them, and an **adjusted** total folds
-both in when you want a single number to plot.
+Two evals, each out of 50, each with a second reported axis beside its score. Monkey See
+reports the **Generalization Index**: did performance carry to inputs the model was not
+shown? Monkey Do reports the **Progress Index**: did the solver make provable moves, or
+collect its points by doing nothing?
+
+The two axes are deliberately parallel, because they catch the same kind of cheat in
+opposite evals. Neither is scored. Both are reported beside their own eval's score, and an
+**adjusted** total folds them in when you want a single number to plot.
+
+They are not otherwise alike, and the difference matters: the Generalization Index is an
+unbounded *gap* with no components, subtracted from the total, while the Progress Index is a
+*bounded capability* out of 15 with three components, used to claw points back.
 
 ### Monkey See (induction, out of 50)
 
@@ -179,20 +187,20 @@ Given 8 examples of an unknown function, does the model infer the rule or copy i
 
 A naive implementation of each task scores 32–36%, **by design**: that floor is the point.
 
-#### The Monkey Index (MI): reported, not scored
+#### The Generalization Index (GZ): reported, not scored
 
-`MI = seen pass rate − held-out pass rate`, in points. It asks a different question from the
+`GZ = seen pass rate − held-out pass rate`, in points. It asks a different question from the
 score: *did performance carry from the examples the model was shown to inputs it had not
 seen?*
 
-| MI | Reading |
+| GZ | Reading |
 |---|---|
 | 0–10 | **generalizes**: held-out performance matches shown performance |
 | 11–30 | **mostly generalizes**: held-out trails shown on some cases |
 | 31–60 | **partial** |
 | 61+ | **SURFACE FIT**: shown performance carried no information about held-out |
 
-A low MI is evidence of generalization, **not proof of abstraction**: a heuristic fitted to
+A low GZ is evidence of generalization, **not proof of abstraction**: a heuristic fitted to
 one distribution would score the same. Two models can share a score and sit at opposite ends
 of this scale, which is why it is reported next to the score and never merged into it.
 
@@ -215,10 +223,10 @@ Outcomes per board: `won`, `surrender` (a correct stop), `premature_surrender`,
 Random play survives 0% of boards, so a Pool A win cannot be luck. It does not show the
 solver was *derived* rather than recalled; see the first two limitations.
 
-The reference solver scores **50/50** with a diagnostic of **15/15**. `npm run dry-run`
+The reference solver scores **50/50** with a Progress Index of **15/15**. `npm run dry-run`
 proves that on all 450 boards, and no model is scored unless it passes first.
 
-#### The DO diagnostic: reported, not scored, out of 15
+#### The Progress Index: reported, not scored, out of 15
 
 DO's 50 points measure two different things: whether a solver *cleared* a board, and whether
 it *stayed out of trouble*. A solver returning `null` on its very first call clears nothing,
@@ -226,8 +234,8 @@ so it scores 0 of the 30. It also never detonates, so it banks the full 10 for "
 confident error" and lands on **10/50**.
 
 That 10 flatters it. Ten points for a solver that did nothing reads like partial competence.
-The diagnostic grades **provable progress** on the same 450 boards and the same replay: no
-extra model calls, no extra boards, no change to the prompt.
+The Progress Index grades **provable progress** on the same 450 boards and the same replay:
+no extra model calls, no extra boards, no change to the prompt.
 
 | Component | Points | What it takes |
 |---|---|---|
@@ -240,27 +248,28 @@ quitting correctly there is not progress, and DO already scores it.
 
 ### The adjusted total: the one number to plot
 
-`SEE + DO` is out of 100 and already maxes out, so MI and the diagnostic have nowhere to go.
-The adjusted total folds both in. **It is a reporting layer only**: SEE, DO, MI and the
-diagnostic are all unchanged on every report, and the reference solver still scores 100.
+`SEE + DO` is out of 100 and already maxes out, so GZ and the Progress Index have nowhere
+to go. The adjusted total folds both in. **It is a reporting layer only**: SEE, DO, both
+indices and their components are all unchanged on every report, and the reference solver
+still scores 100.
 
 ```
-adjusted = clamp( SEE + DO  −  0.5 × MI  −  10 × (1 − initiationRate),  0, 100 )
+adjusted = clamp( SEE + DO  −  0.5 × GZ  −  10 × (1 − initiationRate),  0, 100 )
 ```
 
 The two adjustments point in **opposite directions**, which is why they are not one formula:
 
-- A high **MI inflates** a score. Memorizing the shown examples looks like competence and
+- A high **GZ inflates** a score. Memorizing the shown examples looks like competence and
   collects held-out points it has not earned, so it is **subtracted**.
-- A low **diagnostic** inflates nothing; it means a solver did nothing. Those 10 points are
+- A low **Progress Index** inflates nothing; it means a solver did nothing. Those 10 points are
   real points in the 50 and are not removed here. Instead the *unearned portion* is clawed
   back, scaled by how few boards the solver engaged on.
 
 Worked example. `gemma2:2b` scored SEE 14 + DO 10 = 24, but all 10 DO points were free (it
-made zero moves) and its MI of 13 says some of the 14 was memorization:
+made zero moves) and its GZ of 13 says some of the 14 was memorization:
 
 ```
-24  −  6.5 (MI 13 × 0.5)  −  10 (never engaged)  =  8
+24  −  6.5 (GZ 13 × 0.5)  −  10 (never engaged)  =  8
 ```
 
 The weights are hand-chosen, and this project freezes hand-chosen weights for a reason. See
@@ -286,7 +295,7 @@ measurement rather than a sample.
 
 ![Adjusted score against parameter count for five local models under 8B. The Pareto frontier runs gemma2:2b at 8, deepseek-coder:6.7b at 18, to qwen2.5-coder:7b at 20. The reference solver sits at 100, far above every model.](docs/cohort-1-local-small.svg)
 
-| Model | Params | SEE /50 | MI | DO /50 | Diag /15 | SEE+DO | **Adjusted /100** |
+| Model | Params | SEE /50 | GZ | DO /50 | Prog /15 | SEE+DO | **Adjusted /100** |
 |---|---|---|---|---|---|---|---|
 | `gemma2:2b` | 2.0 | 14 | 13 | 10 | 0 | 24 | **8** |
 | `llama3.2:3b` | 3.0 | 22 | 25 | 0 | 0 | 22 | **0** |
@@ -299,7 +308,7 @@ are dominated.
 
 #### What the numbers say
 
-**Every model failed DO outright.** All five scored **0/15 on the diagnostic and made zero
+**Every model failed DO outright.** All five scored **0/15 on the Progress Index and made zero
 moves on all 450 boards**: not one proven move on any board, for any model. This is the
 cohort's headline and it is not a close call.
 
@@ -314,13 +323,13 @@ score 0 on DO itself.
 
 So DO currently measures a binary: *did the model write real constraint propagation, or
 not?* Five for five, no. That is a sharp result about this tier, and it is also the reason
-DO has no gradient at the bottom, which is what the diagnostic was added to expose.
+DO has no gradient at the bottom, which is what the Progress Index was added to expose.
 
-**Without the diagnostic, four of these five looked like they scored 10.** Ten points is a
+**Without the Progress Index, four of these five looked like they scored 10.** Ten points is a
 quarter of the scale, and it reads as partial competence. It was not: it was the "never
 detonated" points, collected by solvers that never clicked anything. The adjusted total
 removes that padding, and llama3.2:3b goes from 22 to **0**, which is the honest reading of a
-model that aced the shown examples, collapsed on held-out ones (MI 25, the worst in the
+model that aced the shown examples, collapsed on held-out ones (GZ 25, the worst in the
 cohort), and could not produce a working solver at all.
 
 **Coding specialization beats general purpose at equal size.** Qwen and Mistral are both 7B.
@@ -338,7 +347,7 @@ of the score for 29% of the parameters, and it is the cheapest point on the fron
 Nobody should pick it from this chart.
 
 **The whole cohort is nowhere near the ceiling.** The reference solver scores 100 adjusted and
-15/15 diagnostic; the best model here scores 20 and 0/15. That gap is the finding, not a
+15/15 Progress Index; the best model here scores 20 and 0/15. That gap is the finding, not a
 disappointment, but it means this chart says nothing yet about whether the eval *discriminates
 between capable models*, because no model in it reached the range where DO starts scoring.
 See "What this cohort cannot tell you" below.
@@ -368,7 +377,7 @@ Every report carries these, and a score quoted without them is misleading:
 - **DO scores a program, not a chain of thought.** The model writes `solve(board, mines)` in a
   single call and never sees an individual board, so a DO score describes the code it emitted,
   not deduction performed at inference time. A correct solver may be recalled rather than derived.
-- **A low Monkey Index is evidence of generalization, not proof of abstraction.** It shows
+- **A low Generalization Index is evidence of generalization, not proof of abstraction.** It shows
   performance carried from shown to held-out inputs within one distribution; a heuristic fitted to
   that distribution would score the same.
 - **Neither eval controls for prior exposure.** There is no canary and no novel-format control, so
@@ -387,13 +396,13 @@ Every report carries these, and a score quoted without them is misleading:
   one afresh.
 - **Two narrow tasks.** Not a general intelligence measure, and the 50-point weights are hand-chosen
   (frozen at suite version 0.2.0).
-- **The adjusted total is derived and hand-weighted.** It subtracts `0.5 × MI` and claws back the
+- **The adjusted total is derived and hand-weighted.** It subtracts `0.5 × GZ` and claws back the
   no-confident-error points a solver did not earn, both with judgement-call weights. It moves no
   50-point score and the reference solver still reads 100, but it is a convenience for plotting,
   not an independent measurement. Quote the components.
-- **The DO diagnostic only discriminates on engagement.** Its initiation and breadth components
+- **The Progress Index only discriminates on engagement.** Its initiation and breadth components
   measure whether a solver moved at all. A cohort of solvers that never engages scores 0/15
-  uniformly, and the diagnostic then separates nothing. It explains the DO score rather than
+  uniformly, and the Progress Index then separates nothing. It explains the DO score rather than
   refining it.
 
 ## Maintaining the suite
@@ -422,7 +431,7 @@ Changing the oracle or pool classification: bump `GENERATOR_VERSION` in `pool.mj
 
 Every number the suite asserts (the naive baselines, the 0% random baseline, the
 effort cap and how it was derived, the pool's shape and acceptance rates, the
-diagnostic's depth reference of 75 and the adjusted total's weights) is
+Progress Index's depth reference of 75 and the adjusted total's weights) is
 recorded in [`docs/calibration.md`](docs/calibration.md), with the commands that
 re-derive each one. Read it before changing a held-out set, the pool, the oracle
 or the cap.
@@ -465,13 +474,13 @@ monkey-see-monkey-do/
 │   │                            and the `npm run self-test` entry point
 │   ├── prompt-digests.mjs       recorded SHA-256 of every prompt
 │   ├── report.mjs               JSON reports and the limitations they carry
-│   ├── adjusted.mjs             the adjusted total: folds MI and the DO diagnostic into
+│   ├── adjusted.mjs             the adjusted total: folds GZ and the Progress Index into
 │   │                            one figure, reported beside SEE + DO and never inside them
 │   ├── run-all.mjs              both evals, one model, combined report
 │   ├── see/                     SEE only: reference.mjs (ground truth), tasks/*.json,
 │   │                            tasks.mjs, prompt, score, run
 │   └── do/                      DO only: prompt, score, run, reference-solver.mjs,
-│       │                        diagnostic.mjs (the 15-point progress axis)
+│       │                        progress-index.mjs (the 15-point progress axis)
 │       └── minesweeper/         board.mjs, oracle.mjs, pool.mjs, pool.json
 ├── bin/                         command-line entry points, one per npm script:
 │                                gen-pool, acceptance, diagnose, providers, show-prompts,

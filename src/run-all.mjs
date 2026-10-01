@@ -69,7 +69,7 @@ const pct = (r) => `${Math.round(r * 100)}%`;
  * The combined reading.
  *
  * The one comparison the suite exists to make, and deliberately blunt. Both
- * numbers are facts about what the model emitted: SEE's Monkey Index is the gap
+ * numbers are facts about what the model emitted: SEE's Generalization Index is the gap
  * between its score on the examples it was shown and on inputs it was not; DO's
  * confident-error rate is how often the solver it wrote moved without proof.
  *
@@ -91,7 +91,7 @@ export const summarise = (see, doo) => {
   lines.push(`  SEE ${seeTotal}/50  ·  DO ${doo.score.total}/50  ·  combined ${seeTotal + doo.score.total}/100`);
   lines.push("");
   if (index >= 30 && unproven >= 0.1) {
-    lines.push("  High Monkey Index with confident errors on DO: it scored well on the");
+    lines.push("  High Generalization Index with confident errors on DO: it scored well on the");
     lines.push("  examples it was shown, and the solver it wrote then moved without");
     lines.push("  proof. Both are properties of the output; neither names a cause.");
   } else if (index <= 10 && unproven === 0) {
@@ -194,11 +194,11 @@ const main = async () => {
     const adj = adjustedTotal({
       seeTotal,
       doTotal: last.doo.score.total,
-      monkeyIndex: Math.round(last.see.index.index * 100),
-      initiationRate: last.doo.diagnostic?.initiationRate ?? 1,
+      generalizationIndex: Math.round(last.see.index.index * 100),
+      initiationRate: last.doo.progressIndex?.initiationRate ?? 1,
     });
-    console.log(`\n  ADJUSTED (see + do, less Monkey Index and unearned points)`);
-    console.log(`    ${adj.base}  -  ${adj.monkeyIndexPenalty} (index)  -  ${adj.unearnedPenalty} (unearned)  =  \x1b[1m${adj.total}/100\x1b[0m`);
+    console.log(`\n  ADJUSTED (see + do, less Generalization Index and unearned points)`);
+    console.log(`    ${adj.base}  -  ${adj.generalizationIndexPenalty} (index)  -  ${adj.unearnedPenalty} (unearned)  =  \x1b[1m${adj.total}/100\x1b[0m`);
   }
 
   if (stability) {

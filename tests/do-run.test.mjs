@@ -43,7 +43,7 @@ test("a high index plus confident errors is called out, without naming a cause",
   // must NOT assert the model "mimics" or "guesses" — those are claims about a
   // process the harness never observes.
   const s = summarise(seeFixture(55), doFixture(4));
-  assert.match(s, /High Monkey Index with confident errors/);
+  assert.match(s, /High Generalization Index with confident errors/);
   assert.match(s, /neither names a cause/);
   assert.doesNotMatch(s, /\bmimics\b|\bguesses\b|\breasoned\b|\bdeduced\b/i);
 });
@@ -62,7 +62,7 @@ test("a clean sweep is not celebrated as deduction", () => {
 test("disagreement between the evals is reported as mixed, not forced", () => {
   const s = summarise(seeFixture(50), doFixture(0));
   assert.match(s, /Mixed/);
-  assert.ok(!/High Monkey Index with confident errors/.test(s), "must not overclaim from one axis");
+  assert.ok(!/High Generalization Index with confident errors/.test(s), "must not overclaim from one axis");
 });
 
 test("the summary reports both headline numbers", () => {
@@ -422,7 +422,7 @@ const reportFixture = (overrides = {}) =>
 
 test("the report records the pool, the prompt digest, and every board outcome", () => {
   const r = reportFixture();
-  assert.equal(r.schema, "monkey-do/report@2");
+  assert.equal(r.schema, "monkey-do/report@3");
   assert.equal(r.eval, "DO");
   assert.equal(r.pool.sha256, "POOLDIGEST");
   assert.equal(r.pool.full, true);

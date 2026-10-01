@@ -17,7 +17,7 @@ import { pathToFileURL } from "node:url";
 
 import { tasks } from "./see/tasks.mjs";
 import { buildPrompt, promptDigest, allPromptDigests, PREAMBLE } from "./see/prompt.mjs";
-import { scoreTask, scoreSeen, monkeyIndex, heldOutCases, robustnessBonus, ROBUSTNESS_POINTS, unusableResult } from "./see/score.mjs";
+import { scoreTask, scoreSeen, generalizationIndex, heldOutCases, robustnessBonus, ROBUSTNESS_POINTS, unusableResult } from "./see/score.mjs";
 import { compileCandidate, runCandidate } from "./sandbox.mjs";
 import { RECORDED_DIGESTS } from "./prompt-digests.mjs";
 
@@ -28,7 +28,7 @@ import {
   POOL_A_TIERS, POOL_B_TIERS, PUBLISHED_PER_TIER, POOL_FILE, buildPublishedPool, serializePool,
 } from "./do/minesweeper/pool.mjs";
 import { scoreDo, randomBaseline } from "./do/score.mjs";
-import { scoreDiagnostic, REFERENCE_DEPTH } from "./do/diagnostic.mjs";
+import { scoreProgressIndex, REFERENCE_DEPTH } from "./do/progress-index.mjs";
 import { adjustedTotal } from "./adjusted.mjs";
 import { playBoard, loadPool } from "./do/run.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "./do/reference-solver.mjs";
@@ -99,7 +99,7 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
   // --- 4. Shown examples expose the rule ----------------------------------
   log("\n4. Shown examples expose the rule (naive must FAIL them)");
   // Exact counts, not just "less than 8". A drifting count means the shown
-  // examples were edited, and the Monkey Index would shift with them.
+  // examples were edited, and the Generalization Index would shift with them.
   const EXPECTED_NAIVE_SEEN = { A: 5, B: 5, C: 4 };
   for (const task of tasks) {
     // Only this task's naive is supplied; the other two ids resolve to
@@ -127,11 +127,11 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     check(`Task ${task.id} totals 50 held-out cases`, cases.length === 50);
   }
 
-  // --- 6. A surface-fit strategy produces a high Monkey Index ---------------
+  // --- 6. A surface-fit strategy produces a high Generalization Index ---------------
   log("\n6. A surface-fit strategy is detected (naive as stand-in)");
   const mimicResults = tasks.map((t) => scoreTask(t, t.naive));
   const mimicSeen = scoreSeen(Object.fromEntries(tasks.map((t) => [t.id, t.naive])));
-  const mimic = monkeyIndex(mimicSeen, mimicResults);
+  const mimic = generalizationIndex(mimicSeen, mimicResults);
   log(`        SEEN ${(mimic.seen * 100).toFixed(0)}%  HELD-OUT ${(mimic.heldOut * 100).toFixed(0)}%  INDEX ${(mimic.index * 100).toFixed(0)}`);
   check(
     "Surface-fit index is meaningfully above zero",
@@ -143,7 +143,7 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
   log("\n7. A perfect solver is not penalised");
   const perfectResults = tasks.map((t) => scoreTask(t, t.reference));
   const perfectSeen = scoreSeen(Object.fromEntries(tasks.map((t) => [t.id, t.reference])));
-  const perfect = monkeyIndex(perfectSeen, perfectResults);
+  const perfect = generalizationIndex(perfectSeen, perfectResults);
   check(
     "Perfect solver scores 100% held-out",
     perfect.heldOut === 1,
@@ -283,11 +283,11 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
 
   {
     // An unusable response is 50 failed, thrown cases — in the held-out arm AND
-    // the robustness bonus. Leaving it out reported a Monkey Index of -33 and a
+    // the robustness bonus. Leaving it out reported a Generalization Index of -33 and a
     // full bonus for a model that answered one task in prose.
     const results = [unusableResult(tasks[0]), scoreTask(tasks[1], tasks[1].reference), scoreTask(tasks[2], tasks[2].reference)];
     const seen = scoreSeen({ B: tasks[1].reference, C: tasks[2].reference });
-    const idx = monkeyIndex(seen, results);
+    const idx = generalizationIndex(seen, results);
     const rb = robustnessBonus(results);
     check("an unusable task counts against the held-out arm, so the index is not negative",
       Math.round(idx.index * 100) === 0 && results[0].total === 50, `index ${Math.round(idx.index * 100)}, held-out ${(idx.heldOut * 100).toFixed(0)}%`);
@@ -665,8 +665,8 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     check("an empty run scores 0, not a free bonus", scoreDo({ boardResults: [] }).total === 0);
   }
 
-  // --- 17. DO diagnostic ---------------------------------------------------
-  log("\n17. DO diagnostic (reported beside the 50, never inside it)");
+  // --- 17. DO progress index ---------------------------------------------------
+  log("\n17. DO progress index (reported beside the 50, never inside it)");
 
   {
     const rows = (outcome, n, calls, pool = "A", tier = "poolA-small") =>
@@ -678,39 +678,39 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     const acrossTiers = (outcome, calls) =>
       POOL_A_TIERS.flatMap((tier) => rows(outcome, 2, calls, "A", tier));
 
-    // The gap the diagnostic exists to close: surrendering every board scores 10
+    // The gap the progress index exists to close: surrendering every board scores 10
     // on the 50 because it never detonates, but it made no move at all. These
     // two assertions together are the reason the axis exists.
-    const inert = scoreDiagnostic({ boardResults: rows("premature_surrender", 4, 0) });
+    const inert = scoreProgressIndex({ boardResults: rows("premature_surrender", 4, 0) });
     const inertScore = scoreDo({ boardResults: rows("premature_surrender", 4, 0) });
     check("a solver that surrenders immediately scores 10/50 — the flattering score",
       inertScore.total === 10, `${inertScore.total}/50`);
-    check("…and scores 0/15 on the diagnostic, which is what separates it from a cautious solver",
+    check("…and scores 0/15 on the progress index, which is what separates it from a cautious solver",
       inert.total === 0, `${inert.total}/15`);
     check("…and is flagged inert so a reader does not have to infer it from three zeroes", inert.inert === true);
 
     check("a solver making reference-depth moves on every tier scores the full 15",
-      scoreDiagnostic({ boardResults: acrossTiers("won", 75) }).total === 15);
+      scoreProgressIndex({ boardResults: acrossTiers("won", 75) }).total === 15);
     check("depth saturates at the oracle rather than running away",
-      scoreDiagnostic({ boardResults: acrossTiers("won", 300) }).total === 15);
+      scoreProgressIndex({ boardResults: acrossTiers("won", 300) }).total === 15);
     check("a single-tier run is capped at 12 by breadth, however deep it plays",
-      scoreDiagnostic({ boardResults: rows("won", 4, 75) }).total === 12);
+      scoreProgressIndex({ boardResults: rows("won", 4, 75) }).total === 12);
     check("depth is graded, not binary — half the reference depth earns partial credit",
-      scoreDiagnostic({ boardResults: rows("won", 4, 37) }).points.depth > 2
-        && scoreDiagnostic({ boardResults: rows("won", 4, 37) }).points.depth < 3);
+      scoreProgressIndex({ boardResults: rows("won", 4, 37) }).points.depth > 2
+        && scoreProgressIndex({ boardResults: rows("won", 4, 37) }).points.depth < 3);
     check("initiation is share-of-boards, so one lucky opening cannot buy full marks",
-      scoreDiagnostic({ boardResults: [...rows("won", 1, 75), ...rows("won", 3, 0)] }).points.initiation < 5);
+      scoreProgressIndex({ boardResults: [...rows("won", 1, 75), ...rows("won", 3, 0)] }).points.initiation < 5);
     check("breadth caps a solver that only handles the smallest tier",
-      scoreDiagnostic({ boardResults: [...rows("won", 4, 75), ...rows("won", 4, 0, "A", "poolA-medium"), ...rows("won", 4, 0, "A", "poolA-large")] }).points.breadth < 5);
+      scoreProgressIndex({ boardResults: [...rows("won", 4, 75), ...rows("won", 4, 0, "A", "poolA-medium"), ...rows("won", 4, 0, "A", "poolA-large")] }).points.breadth < 5);
 
     // The invariant that matters most: adding the axis must not move the 50.
     const perfectRows = [...rows("won", 4, 75), ...rows("surrender", 4, 75, "B")];
-    check("the diagnostic does not change the 50-point score",
+    check("the progress index does not change the 50-point score",
       scoreDo({ boardResults: perfectRows }).total === 50);
-    check("Pool B is excluded from the diagnostic — quitting correctly is not progress",
-      scoreDiagnostic({ boardResults: rows("surrender", 4, 0, "B") }).total === 0);
-    check("an empty run scores 0 on the diagnostic, not a free bonus",
-      scoreDiagnostic({ boardResults: [] }).total === 0);
+    check("Pool B is excluded from the progress index — quitting correctly is not progress",
+      scoreProgressIndex({ boardResults: rows("surrender", 4, 0, "B") }).total === 0);
+    check("an empty run scores 0 on the progress index, not a free bonus",
+      scoreProgressIndex({ boardResults: [] }).total === 0);
 
     // End to end through the sandbox, on the same shape runDo produces. Sampled
     // rather than the full pool to keep the gate fast, so the deterministic
@@ -722,7 +722,7 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
       const played = loadPool({ perTier: 2 }).boards
         .filter((b) => b.pool === "A")
         .map((b) => ({ pool: b.pool, tier: b.tier, attempt: b.attempt, ...playBoard(replayBoard(b.tier, b.attempt, POOL_SEED), solver) }));
-      const g = scoreDiagnostic({ boardResults: played });
+      const g = scoreProgressIndex({ boardResults: played });
       check("the reference solver initiates on every sampled Pool A board", g.points.initiation === 5, `${g.points.initiation}/5`);
       check("the reference solver reaches every Pool A tier", g.activeTiers.length === POOL_A_TIERS.length, g.activeTiers.join(", ") || "none");
       check("the reference solver's depth is at least 70% of its own reference figure",
@@ -734,26 +734,26 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
   log("\n18. The adjusted total");
 
   {
-    const adj = (seeTotal, doTotal, monkeyIndex, initiationRate) =>
-      adjustedTotal({ seeTotal, doTotal, monkeyIndex, initiationRate });
+    const adj = (seeTotal, doTotal, generalizationIndex, initiationRate) =>
+      adjustedTotal({ seeTotal, doTotal, generalizationIndex, initiationRate });
 
     // The load-bearing invariant: a perfect run must still be 100. This is what
     // lets the adjusted figure exist at all — it is reported beside SEE + DO
     // rather than replacing them, and the oracle is not penalised for the
-    // diagnostic it has no use for.
+    // progress index it has no use for.
     check("a perfect run still scores 100/100 adjusted", adj(50, 50, 0, 1).total === 100, `${adj(50, 50, 0, 1).total}/100`);
-    check("the reference solver is not penalised by the diagnostic clawback",
+    check("the reference solver is not penalised by the progress index clawback",
       adj(50, 50, 0, 1).unearnedPenalty === 0);
-    check("a perfect run with no diagnostic supplied is not penalised either",
-      adjustedTotal({ seeTotal: 50, doTotal: 50, monkeyIndex: 0 }).total === 100);
+    check("a perfect run with no progress index supplied is not penalised either",
+      adjustedTotal({ seeTotal: 50, doTotal: 50, generalizationIndex: 0 }).total === 100);
 
     // Bounded on both sides.
     check("a surface-fitter floors at 0 rather than going negative", adj(0, 0, 100, 0).total === 0);
     check("the total is clamped at 100 even if a base ever exceeded it",
-      adjustedTotal({ seeTotal: 80, doTotal: 80, monkeyIndex: 0, initiationRate: 1 }).total === 100);
+      adjustedTotal({ seeTotal: 80, doTotal: 80, generalizationIndex: 0, initiationRate: 1 }).total === 100);
 
     // Both adjustments actually bite, and in the right direction.
-    check("the Monkey Index is subtracted, so the same scores score lower at a higher index",
+    check("the Generalization Index is subtracted, so the same scores score lower at a higher index",
       adj(24, 10, 25, 0).total < adj(24, 10, 9, 0).total);
     check("a solver that never engaged has the unearned points clawed back",
       adj(24, 10, 9, 0).unearnedPenalty === 10, `${adj(24, 10, 9, 0).unearnedPenalty}`);
@@ -764,8 +764,8 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
 
     // The clawback can never exceed the component it corrects.
     check("the clawback never exceeds the 10 points it is correcting",
-      adjustedTotal({ seeTotal: 0, doTotal: 0, monkeyIndex: 0, initiationRate: -5 }).unearnedPenalty <= 10);
-    check("a negative Monkey Index is treated as zero rather than a bonus",
+      adjustedTotal({ seeTotal: 0, doTotal: 0, generalizationIndex: 0, initiationRate: -5 }).unearnedPenalty <= 10);
+    check("a negative Generalization Index is treated as zero rather than a bonus",
       adj(24, 10, -30, 1).total === 34, `${adj(24, 10, -30, 1).total}`);
 
     // It must stay a reporting layer: SEE + DO are untouched.

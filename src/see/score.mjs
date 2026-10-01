@@ -91,7 +91,7 @@ export const scoreTask = (task, fn) => {
  * callable function cannot produce a non-throwing case. The first version left
  * such tasks out of the held-out arm and the robustness bonus entirely, while
  * the SEEN arm still counted their 8 shown examples as failures. With Task A
- * answered in prose and B and C perfect, that reported a Monkey Index of -33
+ * answered in prose and B and C perfect, that reported a Generalization Index of -33
  * (a number the interpretation table has no row for) and a full 5/5 robustness
  * bonus. Both the task points and the index are defined over all 150 cases.
  */
@@ -103,7 +103,7 @@ export const unusableResult = (task, reason = "unusable response") => ({
 });
 
 // The 8 shown examples, re-run through the returned function. This is the
-// "SEEN" arm of the Monkey Index and pools all three tasks (24 examples).
+// "SEEN" arm of the Generalization Index and pools all three tasks (24 examples).
 export const scoreSeen = (fnByTask) => {
   let correct = 0;
   let total = 0;
@@ -123,7 +123,7 @@ export const scoreSeen = (fnByTask) => {
 
 // MONKEY INDEX = (SEEN pass rate) - (HELD-OUT pass rate)
 // Both sides pool all three tasks, so the subtraction is like-for-like.
-export const monkeyIndex = (seen, taskResults) => {
+export const generalizationIndex = (seen, taskResults) => {
   const heldOutCorrect = taskResults.reduce((sum, r) => sum + r.correct, 0);
   const heldOutTotal = taskResults.reduce((sum, r) => sum + r.total, 0);
   const heldOutRate = heldOutCorrect / heldOutTotal;
@@ -135,7 +135,7 @@ export const monkeyIndex = (seen, taskResults) => {
 };
 
 /**
- * Read a Monkey Index as a statement about two score sets.
+ * Read a Generalization Index as a statement about two score sets.
  *
  * Deliberately descriptive, never interpretive. The index is a difference in
  * pass rates, so the most it can support is a claim about how far performance

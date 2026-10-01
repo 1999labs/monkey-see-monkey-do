@@ -69,7 +69,7 @@ const attach = (task) => ({
 const raw = [load("taskA.json"), load("taskB.json"), load("taskC.json")];
 raw.forEach(validate);
 
-// Order matters: the Monkey Index and the console output assume A, B, C.
+// Order matters: the Generalization Index and the console output assume A, B, C.
 export const tasks = raw.map(attach);
 
 export const [taskA, taskB, taskC] = tasks;

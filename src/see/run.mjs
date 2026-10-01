@@ -9,7 +9,7 @@
 import { complete } from "../adapters/registry.mjs";
 import { tasks, taskById } from "./tasks.mjs";
 import { buildPrompt, promptDigest, allPromptDigests } from "./prompt.mjs";
-import { scoreTask, scoreSeen, monkeyIndex, readIndex, robustnessBonus, unusableResult } from "./score.mjs";
+import { scoreTask, scoreSeen, generalizationIndex, readIndex, robustnessBonus, unusableResult } from "./score.mjs";
 import { compileCandidate, runCandidate } from "../sandbox.mjs";
 import { reproducibility } from "../fingerprint.mjs";
 import { buildReport, writeReport, LIMITATIONS } from "../report.mjs";
@@ -104,7 +104,7 @@ export const runTask = async (config, task) => {
   };
 };
 
-/** Run all three tasks and assemble the Monkey Index. */
+/** Run all three tasks and assemble the Generalization Index. */
 export const runSee = async (config, { onProgress } = {}) => {
   const taskRuns = [];
   for (const [i, task] of tasks.entries()) {
@@ -116,10 +116,10 @@ export const runSee = async (config, { onProgress } = {}) => {
   // EVERY task is scored, including one whose response was unusable: it counts
   // as 50 failed, thrown cases. Leaving it out made the held-out arm cover 100
   // cases while the seen arm covered 24, which is how a model that answered one
-  // task in prose earned a negative Monkey Index and a full robustness bonus.
+  // task in prose earned a negative Generalization Index and a full robustness bonus.
   const results = taskRuns.map((t) => t.result ?? unusableResult(taskById[t.taskId], t.compileError));
   const seen = scoreSeen(fnByTask);
-  const index = monkeyIndex(seen, results);
+  const index = generalizationIndex(seen, results);
   const robustness = robustnessBonus(results);
 
   return {
@@ -208,7 +208,7 @@ const main = async () => {
       const verdict = info.distinct === 1 ? "same answer every run" : `${info.distinct} DIFFERENT answers`;
       console.log(`    task ${taskId}: ${verdict}  [${info.prints.join(" ")}]`);
     }
-    console.log(`\n  Monkey Index across runs: ${indices.join(", ")}  (spread ${spread})`);
+    console.log(`\n  Generalization Index across runs: ${indices.join(", ")}  (spread ${spread})`);
 
     if (!rep.reproducible) {
       console.log(

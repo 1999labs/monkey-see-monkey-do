@@ -29,7 +29,7 @@ import { replayBoard, capForTier, loadPublishedPool, POOL_SEED } from "./mineswe
 import { buildPrompt, promptDigest } from "./prompt.mjs";
 import { analyse, verifyMove } from "./minesweeper/oracle.mjs";
 import { scoreDo, randomBaseline } from "./score.mjs";
-import { scoreDiagnostic } from "./diagnostic.mjs";
+import { scoreProgressIndex } from "./progress-index.mjs";
 import { buildDoReport, writeDoReport, LIMITATIONS } from "../report.mjs";
 import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "../cli.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "./reference-solver.mjs";
@@ -154,8 +154,8 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
   return {
     boardResults,
     score: scoreDo({ boardResults, baseline }),
-    // Reported beside the 50, never inside it. See src/do/diagnostic.mjs.
-    diagnostic: scoreDiagnostic({ boardResults }),
+    // Reported beside the 50, never inside it. See src/do/progress-index.mjs.
+    progressIndex: scoreProgressIndex({ boardResults }),
     usable: compileError === null,
     compileError,
     response: dryRun ? "(reference solver — no model was called)" : completion.text,
@@ -290,10 +290,10 @@ export const printDoRun = (model, out) => {
     console.log(`  ${s.unverifiedMoves} move(s) could not be verified within the oracle's budget and were given the benefit of the doubt.`);
   }
 
-  // The diagnostic is printed under the score, never added to it. `inert` is
+  // The progress index is printed under the score, never added to it. `inert` is
   // called out in words because a 0/15 next to a 10/50 reads as noise without
   // it: both numbers are explained by a solver that made no move at all.
-  const dg = out.diagnostic;
+  const dg = out.progressIndex;
   if (dg) {
     console.log(`\n  \x1b[1mDIAGNOSTIC (not part of the 50)\x1b[0m`);
     console.log(`    initiation ${dg.points.initiation.toFixed(1)}/5   depth ${dg.points.depth.toFixed(1)}/5   breadth ${dg.points.breadth.toFixed(1)}/5`);

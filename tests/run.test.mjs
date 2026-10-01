@@ -209,7 +209,7 @@ test("the bonus always stays within 0..5", () => {
 test("an unusable response counts as 50 failed, thrown cases in the index and the bonus", async () => {
   // Task A in prose, B and C perfect. The first version dropped A from the
   // held-out arm and the robustness bonus but kept its 8 shown examples in the
-  // seen arm: Monkey Index -33, robustness 5/5.
+  // seen arm: Generalization Index -33, robustness 5/5.
   const out = await runSee(fakeConfig(["I think it squares the number, mostly.", CORRECT.B, CORRECT.C]));
   assert.equal(out.taskRuns[0].result, null, "the task is still reported as unusable");
   assert.equal(Math.round(out.index.heldOut * 150), 100, "held-out pools all 150 cases");
