@@ -33,21 +33,39 @@ const DEFAULT_TIMEOUT_MS = 180_000;
  * The answer, and only the answer, out of an `output` array.
  *
  * Returns null when there is no array to walk (a proxy that returns just
- * `output_text`), so the caller can decide whether that is fatal. Returns ""
- * when the array held no `output_text` block, which is a refusal: a refusal is
- * a real answer, and an empty one.
+ * `output_text`), so the caller can decide whether that is fatal.
+ *
+ * `missed` names the shapes that carried text we did NOT take. This is the
+ * guard against silent degradation: if this adapter's idea of the response
+ * shape is ever wrong, a renamed block type or item type would otherwise make
+ * the walk find nothing and the harness would record a zero, which reads
+ * exactly like a model that could not answer. Naming the shapes we skipped
+ * turns that failure into a loud one, and it does so without having to guess
+ * what the new shape is called.
  */
-const answerFromOutput = (output) => {
+const extractAnswer = (output) => {
   if (!Array.isArray(output)) return null;
   let text = "";
+  const missed = [];
   for (const item of output) {
-    // Skips `reasoning` items, and any tool-call item this suite never asks for.
-    if (item?.type !== "message") continue;
+    // `reasoning` items are skipped deliberately: their summary and content
+    // hold chain of thought, which must never reach the code extractor or the
+    // fingerprint. They are not "missed", they are excluded on purpose.
+    if (item?.type === "reasoning") continue;
+    if (item?.type !== "message") {
+      if (typeof item?.text === "string" && item.text) missed.push(`item:${item.type ?? "untyped"}`);
+      continue;
+    }
     for (const block of item.content ?? []) {
-      if (block?.type === "output_text" && typeof block.text === "string") text += block.text;
+      if (block?.type === "output_text" && typeof block.text === "string") {
+        text += block.text;
+      } else if (typeof block?.text === "string" && block.text) {
+        // A refusal carries `refusal`, not `text`, so it stays an empty answer.
+        missed.push(`block:${block.type ?? "untyped"}`);
+      }
     }
   }
-  return text;
+  return { text, missed };
 };
 
 export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) => {
@@ -128,23 +146,6 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
         throw new AdapterError("Endpoint returned non-JSON", { status: res.status, body: text.slice(0, 500) });
       }
 
-      const answer = answerFromOutput(json.output);
-      if (answer === null) {
-        // No output array at all. Some gateways flatten the shape; take the
-        // convenience field if it is there, and fail loudly if it is not,
-        // rather than scoring a response we failed to read.
-        if (typeof json.output_text === "string") {
-          return {
-            text: json.output_text,
-            finishReason: json.status ?? null,
-            providerModel: json.model ?? model,
-            usage: null,
-            empty: json.output_text.length === 0,
-          };
-        }
-        throw new AdapterError("Response contained no output", { status: res.status, body: text.slice(0, 500) });
-      }
-
       const usage = json.usage
         ? {
             prompt_tokens: json.usage.input_tokens ?? null,
@@ -156,15 +157,52 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
           }
         : null;
 
+      const found = extractAnswer(json.output);
+
+      if (found === null || (found.text === "" && typeof json.output_text === "string")) {
+        // Either there is no output array to walk, or the walk came back empty
+        // while the response still carries a top-level convenience field. A
+        // gateway that flattens or renames its blocks populates that field, so
+        // prefer it over declaring the answer unreadable. In both branches the
+        // walk contributed nothing, so this one field is the whole answer.
+        if (typeof json.output_text === "string") {
+          return {
+            text: json.output_text,
+            finishReason: json.status ?? null,
+            providerModel: json.model ?? model,
+            usage,
+            empty: json.output_text.length === 0,
+          };
+        }
+        if (found === null) {
+          // Nothing to extract from and nothing to fall back on. Better to
+          // refuse to score than to score a response we could not read.
+          throw new AdapterError("Response contained no output", { status: res.status, body: text.slice(0, 500) });
+        }
+      }
+
+      if (found.text === "" && found.missed.length > 0) {
+        // Text we did not recognise, and no answer we did. Scoring this as an
+        // empty completion would file an adapter bug as a model failure, and
+        // the two are indistinguishable in a report. Name the shapes so the
+        // fix is a one-line change to extractAnswer.
+        throw new AdapterError(
+          `Could not extract the answer: found text in response block shape(s) this ` +
+            `adapter does not recognise (${[...new Set(found.missed)].join(", ")}), and no ` +
+            `output_text block. The provider's response format has probably changed.`,
+          { status: res.status, body: text.slice(0, 500) }
+        );
+      }
+
       return {
-        text: answer,
+        text: found.text,
         finishReason:
           json.status === "incomplete"
             ? (json.incomplete_details?.reason ?? "incomplete")
             : (json.status ?? null),
         providerModel: json.model ?? model,
         usage,
-        empty: answer.length === 0,
+        empty: found.text.length === 0,
       };
     } catch (err) {
       if (err instanceof AdapterError && !err.retryable) throw err;

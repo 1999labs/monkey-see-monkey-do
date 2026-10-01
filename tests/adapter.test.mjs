@@ -452,6 +452,41 @@ test("Responses: one user message, no instructions, no cap it did not choose", a
   assert.equal(body.max_output_tokens, 4096);
 });
 
+test("Responses: a renamed block or item type fails loudly instead of scoring zero", async () => {
+  // The dangerous kind of drift. A response shape this adapter no longer
+  // recognises would otherwise extract nothing and be recorded as an empty
+  // completion, which in a report is indistinguishable from a model that
+  // could not answer. Failing here files the bug as an adapter bug.
+  const renamedBlock = async () =>
+    jsonResponse({ status: "completed", model: "m", output: [{ type: "message", content: [{ type: "text_block", text: "SOLVER" }] }] });
+  const renamedItem = async () =>
+    jsonResponse({ status: "completed", model: "m", output: [{ type: "text", text: "SOLVER" }] });
+
+  for (const fetchImpl of [renamedBlock, renamedItem]) {
+    await assert.rejects(
+      () => responsesComplete(responsesConfig(fetchImpl), "P"),
+      /does not recognise/,
+      "must refuse to score a response it cannot read"
+    );
+  }
+});
+
+test("Responses: a renamed shape is recovered from output_text when it survives", () => {
+  // Drift the top-level convenience field absorbs is drift worth tolerating:
+  // the answer is unambiguous, so refusing to score it would be pedantry.
+  const fetchImpl = async () =>
+    jsonResponse({
+      status: "completed",
+      model: "m",
+      output: [{ type: "message", content: [{ type: "text_block", text: "S" }] }],
+      output_text: "SOLVER",
+    });
+  return responsesComplete(responsesConfig(fetchImpl), "P").then((r) => {
+    assert.equal(r.text, "SOLVER");
+    assert.equal(r.empty, false);
+  });
+});
+
 test("Responses: a reasoning item is never read as the answer", async () => {
   // The trap this adapter exists to avoid: a reasoning model puts its chain of
   // thought in output[0], ahead of the message. Reading item 0 would put prose
