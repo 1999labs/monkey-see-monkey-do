@@ -295,16 +295,27 @@ measurement rather than a sample.
 
 ![Adjusted score against parameter count for five local models under 8B. The Pareto frontier runs gemma2:2b at 8, deepseek-coder:6.7b at 18, to qwen2.5-coder:7b at 20. The reference solver sits at 100, far above every model.](docs/cohort-1-local-small.svg)
 
-| Model | Params | SEE /50 | GZ | DO /50 | Prog /15 | SEE+DO | **Adjusted /100** |
-|---|---|---|---|---|---|---|---|
-| `gemma2:2b` | 2.0 | 14 | 13 | 10 | 0 | 24 | **8** |
-| `llama3.2:3b` | 3.0 | 22 | 25 | 0 | 0 | 22 | **0** |
-| `deepseek-coder:6.7b` | 6.7 | 22 | 9 | 10 | 0 | 32 | **18** |
-| `qwen2.5-coder:7b` | 7.0 | 24 | 9 | 10 | 0 | 34 | **20** |
-| `mistral:7b-instruct` | 7.0 | 15 | 12 | 10 | 0 | 25 | **9** |
+Sorted by Adjusted, best first. **Total** is Monkey See + Monkey Do, the raw 100; **Adjusted**
+is that figure with the two indices folded in. A **●** marks a model on the Pareto frontier:
+nobody else is both cheaper and better.
 
-**Pareto frontier:** `gemma2:2b` → `deepseek-coder:6.7b` → `qwen2.5-coder:7b`. The other two
-are dominated.
+| Model | Params | Monkey See (N/50) | GZ Index | Monkey Do (N/50) | Progress Index (N/15) | Total | Adjusted | Pareto |
+|---|---|---|---|---|---|---|---|---|
+| `qwen2.5-coder:7b` | 7.0 | 24 | 9 | 10 | 0 | 34 | **20** | ● |
+| `deepseek-coder:6.7b` | 6.7 | 22 | 9 | 10 | 0 | 32 | **18** | ● |
+| `mistral:7b-instruct` | 7.0 | 15 | 12 | 10 | 0 | 25 | **9** | |
+| `gemma2:2b` | 2.0 | 14 | 13 | 10 | 0 | 24 | **8** | ● |
+| `llama3.2:3b` | 3.0 | 22 | 25 | 0 | 0 | 22 | **0** | |
+
+**Pareto frontier:** `gemma2:2b` → `deepseek-coder:6.7b` → `qwen2.5-coder:7b`, cheapest first.
+`gemma2:2b` is on it because nothing cheaper was tested and nothing below it scores higher,
+not because it is the best model here; `qwen2.5-coder:7b` is. `mistral:7b-instruct` sits at the
+same 7B as Qwen with less than half the Adjusted score, and `llama3.2:3b` is beaten on both
+axes by the smaller Gemma.
+
+Frontier membership is relative to the models in the cohort. A sub-2B model scoring above 8
+would displace Gemma from it, so "cheapest model tested" is the claim, not "cheapest model
+that exists".
 
 #### What the numbers say
 
@@ -325,8 +336,8 @@ So DO currently measures a binary: *did the model write real constraint propagat
 not?* Five for five, no. That is a sharp result about this tier, and it is also the reason
 DO has no gradient at the bottom, which is what the Progress Index was added to expose.
 
-**Without the Progress Index, four of these five looked like they scored 10.** Ten points is a
-quarter of the scale, and it reads as partial competence. It was not: it was the "never
+**Without the Progress Index, four of these five looked like they scored 10 on DO**, a fifth of
+that eval's scale, and it reads as partial competence. It was not: it was the "never
 detonated" points, collected by solvers that never clicked anything. The adjusted total
 removes that padding, and llama3.2:3b goes from 22 to **0**, which is the honest reading of a
 model that aced the shown examples, collapsed on held-out ones (GZ 25, the worst in the
@@ -341,9 +352,9 @@ at the top of the cohort, and the ranking is not a size effect in disguise.
 → 20. It is close to monotonic except that gemma2:2b outscores llama3.2:3b. A larger model
 scoring *worse*, on both axes at once.
 
-**Gemma 2 is the value pick by a wide margin.** 8 points at 2B against Qwen's 20 at 7B is 71%
+**Gemma 2 is the value pick by a wide margin.** 8 points at 2B against Qwen's 20 at 7B is 40%
 of the score for 29% of the parameters, and it is the cheapest point on the frontier. Llama
-3.2 is dominated outright: a full billion parameters more than Gemma for two points fewer.
+3.2 is dominated outright: a full billion parameters more than Gemma for eight points fewer.
 Nobody should pick it from this chart.
 
 **The whole cohort is nowhere near the ceiling.** The reference solver scores 100 adjusted and
@@ -358,7 +369,7 @@ See "What this cohort cannot tell you" below.
   of Pool A is untested. Until a strong model is run, there is no evidence DO separates
   competent solvers from each other.
 - **The adjusted total has no resolution down here.** It compresses a 34-to-22 spread in
-  `SEE+DO` into 20-to-0, and floors llama at 0. Two models with different failure modes can
+  `Total` into 20-to-0, and floors llama at 0. Two models with different failure modes can
   both land near the bottom, so read the components, not just the total.
 - **Quantization is uncontrolled.** These ran at Ollama's default (Q4 for most), which is not
   the precision a hosted provider serves. Cohort 1 is not cleanly comparable to any hosted
