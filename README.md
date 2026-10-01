@@ -93,9 +93,10 @@ If none is found, the runner prints the one command that stores one.
 ## Reading the scores
 
 **SEE** — three tasks, 50 held-out cases each, 15 points per task plus 5 for code that does not
-throw. The **Monkey Index** is `seen pass rate − held-out pass rate`: near 0 means the model
-understood the rule; 61+ means it copied the examples and understood nothing. A naive
-implementation of each task scores 32–36%, by design.
+throw. The **Monkey Index** is `seen pass rate − held-out pass rate`, reported descriptively and
+never as a claim about the model: 0–10 `generalizes — held-out performance matches shown
+performance`, 11–30 `mostly generalizes`, 31–60 `partial`, 61+ `SURFACE FIT — shown performance
+carried no information about held-out`. A naive implementation of each task scores 32–36%, by design.
 
 **DO** — the model writes `solve(board, mines)` once; it is replayed on 450 generated boards.
 Every move is checked: a move must be *provably* safe, not merely lucky.
@@ -108,18 +109,34 @@ Every move is checked: a move must be *provably* safe, not merely lucky.
 
 Outcomes per board: `won`, `surrender` (a correct stop), `premature_surrender`, `detonation`,
 `unproven_move` (safe by luck — scored like a detonation), `protocol_violation`, `stalled`.
-Random play survives 0% of boards, so any Pool A win is deduction.
+Random play survives 0% of boards, so a Pool A win cannot be luck. It does not show the solver was
+derived rather than recalled — see the first two limitations.
 
 ## Limitations
 
 Every report carries these, and a score quoted without them is misleading:
 
-- **Not a coding benchmark.** No repository, test suite, or tools; these measure inference and deduction.
-- **SEE saturates.** Frontier models score high; it discriminates best among open-weight and mid-tier models.
-- **Not comparable to SWE-bench, HumanEval, or any leaderboard.** Never present the numbers side by side.
-- **DO has residual contamination risk.** A correct solver is a textbook algorithm; a high score shows the
-  model can produce one, not that it deduced one afresh.
-- **Two narrow tasks.** Not a general intelligence measure.
+- **Not a coding benchmark.** Neither eval edits a repository, runs a test suite, or uses tools;
+  they measure rule inference (SEE) and solver soundness (DO) — the induction and deduction named
+  in the lead — not software engineering.
+- **DO scores a program, not a chain of thought.** The model writes `solve(board, mines)` in a
+  single call and never sees an individual board, so a DO score describes the code it emitted —
+  not deduction performed at inference time. A correct solver may be recalled rather than derived.
+- **A low Monkey Index is evidence of generalization, not proof of abstraction.** It shows
+  performance carried from shown to held-out inputs within one distribution; a heuristic fitted to
+  that distribution would score the same.
+- **Neither eval controls for prior exposure.** There is no canary and no novel-format control, so
+  a high score cannot be attributed to reasoning over recall of the specific task or the textbook
+  algorithm.
+- **SEE saturates.** Frontier models reach high SEE scores and it stops discriminating at the top of
+  the market; it is most informative for open-weight and mid-tier models.
+- **Not comparable to SWE-bench, HumanEval, or any external leaderboard.** Different scale, different
+  construction; never present these numbers alongside one.
+- **DO has residual contamination risk.** Constraint propagation with search is a textbook
+  algorithm, so a high DO score shows the model can produce a correct solver, not that it deduced
+  one afresh.
+- **Two narrow tasks.** Not a general intelligence measure, and the 50-point weights are hand-chosen
+  (frozen at suite version 0.2.0).
 
 ## Maintaining the suite
 

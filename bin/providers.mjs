@@ -6,7 +6,7 @@
 // prompt can return different code. Pinning removes that variable.
 
 import { listProviders } from "../src/adapters/openai.mjs";
-import { resolveKey } from "../src/key.mjs";
+import { resolveKey, setupHint } from "../src/key.mjs";
 
 const args = process.argv.slice(2);
 let model = null;
@@ -27,7 +27,10 @@ const modelId = model.slice("openrouter/".length);
 
 const { key, source } = await resolveKey("OPENROUTER_API_KEY", { flagValue: keyFlag });
 if (!key) {
-  console.error("no API key found — run: bash setup-key.sh");
+  // The same hint src/cli.mjs prints when a runner finds no key, so
+  // `npm run providers` and the eval runners never disagree about how to
+  // store one. The old message named setup-key.sh, which no longer exists.
+  console.error(setupHint("OPENROUTER_API_KEY"));
   process.exit(1);
 }
 process.env.OPENROUTER_API_KEY = key;
