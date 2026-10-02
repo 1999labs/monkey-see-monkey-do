@@ -62,11 +62,12 @@ version 0.2.0.
 
 ## What gets committed
 
-Only the **combined** report is committed: `results/combined-<model>-<date>.json`. It is
+Only the **combined** report is committed: `results/combined-<model>-<date>-<time>.json`. It is
 the evidence for every number the cohort tables and charts print, and a chart whose
-source reports are absent cannot be audited.
+source reports are absent cannot be audited. The time component (UTC) keeps a same-day
+re-run from silently overwriting earlier evidence.
 
-The per-eval reports (`<model>-<date>.json`, `do-<model>-<date>.json`) stay local. They
+The per-eval reports (`<model>-<date>-<time>.json`, `do-<model>-<date>-<time>.json`) stay local. They
 carry 450 `boardResults` and the raw model response, and nothing published cites them
 directly.
 

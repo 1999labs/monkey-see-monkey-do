@@ -139,6 +139,26 @@ test("a dry run passes its safety gate and scores 50/50", async () => {
   assert.equal(report.score.outcomes.unproven_move ?? 0, 0);
 });
 
+test("the acceptance gate survives a setup failure mid-run and still writes its report", async () => {
+  // The regression: prepareModel used to process.exit on an unknown model, so
+  // a gate that died scoring the strong model wrote NO report at all —
+  // indistinguishable from a gate nobody ran, and it lost the self-test and
+  // dry-run evidence already collected.
+  const dir = mkdtempSync(join(tmpdir(), "md-cli-accept-fail-"));
+  const r = await run("bin/acceptance.mjs", [
+    "--strong", "no-such-provider/model", "--weak", "openrouter/stub-weak",
+    "--quick", "--per-tier", "1", "--runs", "2", "--key", "sk-test", "--out", dir,
+  ]);
+  assert.equal(r.code, 1, "a gate with a failed criterion exits non-zero");
+  assert.match(r.stdout, /the strong model could be scored/);
+  assert.match(r.stdout, /the gate compared both models/);
+  const report = readReport(dir, "acceptance-");
+  const byName = Object.fromEntries(report.criteria.map((c) => [c.name, c.ok]));
+  assert.equal(byName["self-test passes"], true, "the earlier evidence is not lost");
+  assert.equal(byName["the strong model could be scored"], false, "the setup failure is recorded");
+  assert.equal(byName["the gate compared both models"], false, "the missing arm is named");
+});
+
 test("the acceptance gate rehearses end to end and tells a strong model from a weak one", async () => {
   const dir = mkdtempSync(join(tmpdir(), "md-cli-accept-"));
   const r = await run("bin/acceptance.mjs", [

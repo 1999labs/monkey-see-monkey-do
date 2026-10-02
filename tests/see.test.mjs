@@ -200,3 +200,36 @@ test("a timed-out SEE task does not stop the other tasks", async () => {
   assert.ok(out.taskRuns.every((t) => t.result === null || t.compileError !== null || t.result));
   assert.ok(out, "a report is produced regardless");
 });
+
+test("SEE records the full failure taxonomy, not a collapsed one", async () => {
+  // The regression: every 401, 429, 500 and connection refusal used to land as
+  // "provider_error" with no status, so a SEE report could not tell quota
+  // exhaustion from a broken endpoint. SEE now shares DO's classifier.
+  const { runTask } = await import("../src/see/run.mjs");
+  const statusConfig = (status) => ({
+    adapter: "openai",
+    endpoint: "https://example.test/v1/chat/completions",
+    model: "test/model",
+    apiKeyEnv: null,
+    maxRetries: 0,
+    fetchImpl: async () => ({ ok: false, status, text: async () => "nope" }),
+  });
+  const quota = await runTask(statusConfig(429), taskA);
+  assert.equal(quota.callFailure.reason, "rate_limited", "a 429 is named, not filed under provider_error");
+  assert.equal(quota.callFailure.attempts, 1, "the attempt count travels");
+  const auth = await runTask(statusConfig(401), taskA);
+  assert.equal(auth.callFailure.reason, "auth_failed");
+
+  const refusedConfig = {
+    adapter: "openai",
+    endpoint: "https://localhost.test/v1/chat/completions",
+    model: "test/model",
+    apiKeyEnv: null,
+    maxRetries: 0,
+    fetchImpl: async () => {
+      throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
+    },
+  };
+  const offline = await runTask(refusedConfig, taskA);
+  assert.equal(offline.callFailure.reason, "network_error");
+});

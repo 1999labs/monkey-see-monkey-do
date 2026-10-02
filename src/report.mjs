@@ -50,6 +50,19 @@ const slug = (model) =>
     .slice(0, 80);
 
 /**
+ * `<date>-<HHmmss>` from a report's own ISO timestamp, so the name is derived
+ * from the report rather than from when the process happens to run.
+ *
+ * Same-day re-runs of the same model used to overwrite each other silently
+ * (writeFileSync truncates), and for the COMMITTED combined reports that
+ * silently rewrote history on the next git add. Distinct model ids can also
+ * slug to the same filename (gpt-4o(2024) and gpt-4o-2024), so the date alone
+ * was never enough. The time component is UTC, matching the timestamp it is
+ * taken from.
+ */
+const fileStamp = (iso) => `${iso.slice(0, 10)}-${iso.slice(11, 19).replace(/:/g, "")}`;
+
+/**
  * The lower median of an even-length list: sorted, take the middle-low index.
  * Integer-valued by construction, and the conservative half when two disagree.
  * The headline a multi-run report plots, so a single lucky or unlucky run
@@ -214,11 +227,10 @@ export const buildReport = ({ model, taskRuns, last, indices, reproducibility, c
   };
 };
 
-/** Write the report to results/<model>-<date>.json and return the path. */
+/** Write the report to results/<model>-<date>-<time>.json and return the path. */
 export const writeReport = (report, outDir = "results") => {
   mkdirSync(outDir, { recursive: true });
-  const stamp = report.timestamp.slice(0, 10);
-  const path = join(outDir, `${slug(report.model.requested)}-${stamp}.json`);
+  const path = join(outDir, `${slug(report.model.requested)}-${fileStamp(report.timestamp)}.json`);
   writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
   return path;
 };
@@ -323,9 +335,12 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
     response: result.response,
     // Set when the model call produced nothing at all. A score beside this is
     // NOT a measurement of the model: `timeout` describes the route, not the
-    // reasoning. `empty_response` is different — the endpoint answered and
-    // said nothing, which is a real (scored) answer. Read this field before
-    // quoting any total from a run where it is non-null.
+    // reasoning. Read this field before quoting any total from a run where it
+    // is non-null. An EMPTY completion is a different event: the endpoint
+    // answered with zero-length text, the adapter RETURNS it rather than
+    // throwing, and it scores as a compile error plus protocol_violation on
+    // every board — visible here as usable: false and the compileError above,
+    // with callFailure null.
     callFailure: result.callFailure ?? null,
     // How long the one call took. On a timeout this is the budget, not a
     // measurement, so it cannot distinguish "slow" from "never coming back".
@@ -358,8 +373,7 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
 /** Write a DO report. Shares the naming scheme with SEE so results sort together. */
 export const writeDoReport = (report, outDir = "results") => {
   mkdirSync(outDir, { recursive: true });
-  const stamp = report.timestamp.slice(0, 10);
-  const path = join(outDir, `do-${slug(report.model.requested)}-${stamp}.json`);
+  const path = join(outDir, `do-${slug(report.model.requested)}-${fileStamp(report.timestamp)}.json`);
   writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
   return path;
 };
@@ -425,6 +439,12 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
     do: {
       total: doTotal,
       max: 50,
+      // An answer that could not be compiled (prose, an empty completion) is
+      // visible HERE too, not only in the gitignored per-eval report: a 0/50
+      // with usable: false and a compileError is a different fact from a 0/50
+      // the model played and lost.
+      usable: doo.usable !== false,
+      compileError: doo.compileError ?? null,
       poolAWon: Number(doo.score.poolA.won.toFixed(4)),
       poolANoConfidentError: Number(doo.score.poolA.noDetonation.toFixed(4)),
       poolBCorrectStop: Number(doo.score.poolB.correctStop.toFixed(4)),
@@ -469,8 +489,7 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
 /** Write the combined report next to the per-eval ones. */
 export const writeCombinedReport = (report, outDir = "results") => {
   mkdirSync(outDir, { recursive: true });
-  const stamp = report.date.slice(0, 10);
-  const path = join(outDir, `combined-${slug(report.model.requested)}-${stamp}.json`);
+  const path = join(outDir, `combined-${slug(report.model.requested)}-${fileStamp(report.date)}.json`);
   writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
   return path;
 };

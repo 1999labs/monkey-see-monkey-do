@@ -143,12 +143,42 @@ const render = (data) => {
   return out.join("\n");
 };
 
+/**
+ * Validate the cohort JSON before rendering. Without this, an empty or
+ * malformed points array made Math.max() return -Infinity and every coordinate
+ * NaN, and the file was still written as a "successful" render — a broken
+ * chart that looked like a working one. A chart tool whose output is published
+ * must fail loudly on input it cannot plot.
+ */
+const validate = (data, input) => {
+  const bad = (msg) => {
+    console.error(`chart: ${msg}`);
+    process.exit(1);
+  };
+  if (!data || !Array.isArray(data.points) || data.points.length === 0) {
+    bad(`${input} has no points array; there is nothing to plot`);
+  }
+  for (const [i, p] of data.points.entries()) {
+    const name = p?.model ?? `point ${i}`;
+    if (typeof p?.paramsB !== "number" || !Number.isFinite(p.paramsB)) {
+      bad(`${input}: ${name} has no numeric paramsB (got ${JSON.stringify(p?.paramsB)})`);
+    }
+    if (typeof p?.adjusted !== "number" || !Number.isFinite(p.adjusted)) {
+      bad(`${input}: ${name} has no numeric adjusted score (got ${JSON.stringify(p?.adjusted)})`);
+    }
+  }
+  if (!data.points.some((p) => p.paramsB > 0)) {
+    bad(`${input}: every paramsB is zero, so there is no x-axis to scale against`);
+  }
+};
+
 const [, , input, outputArg] = process.argv;
 if (!input) {
   console.error("usage: node bin/chart.mjs docs/cohort-1-local-small.json [out.svg]");
   process.exit(1);
 }
 const data = JSON.parse(readFileSync(input, "utf8"));
+validate(data, input);
 const svg = render(data);
 const outPath = outputArg ?? input.replace(/\.json$/, ".svg");
 writeFileSync(outPath, svg + "\n");

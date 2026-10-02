@@ -26,7 +26,7 @@ import { setTimeout as delay } from "node:timers/promises";
 export const DEFAULT_TIMEOUT_MS = 420_000;
 
 export class AdapterError extends Error {
-  constructor(message, { status, retryable = false, body, timedOut = false, timeoutMs = null } = {}) {
+  constructor(message, { status, retryable = false, body, timedOut = false, timeoutMs = null, attempts = null } = {}) {
     super(message);
     this.name = "AdapterError";
     this.status = status;
@@ -37,6 +37,11 @@ export class AdapterError extends Error {
     // answer of sorts.
     this.timedOut = timedOut;
     this.timeoutMs = timeoutMs;
+    // How many attempts this error cost: 1 for a hard refusal or a timeout
+    // (never retried), maxRetries + 1 when a retriable failure exhausted the
+    // loop. A report that cannot tell three refused attempts from one is a
+    // report that cannot explain its own zeros.
+    this.attempts = attempts;
   }
 }
 
@@ -71,6 +76,10 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
   const body = {
     model,
     messages: [{ role: "user", content: promptText }],
+    // Explicit, though it is also the default: a gateway that defaults to
+    // streaming when the field is absent would answer with SSE, and the JSON
+    // parse below would die as a confusing non-JSON error.
+    stream: false,
   };
   // Omitted, not sent, when the config declares temperature 0 unsupported:
   // several reasoning endpoints reject the parameter with HTTP 400. Such a run
@@ -138,9 +147,14 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
         } catch {
           /* not JSON, keep the raw text */
         }
+        // `attempts: attempt + 1` is correct on both paths out of here: a
+        // non-retryable status is thrown after this many attempts, and a
+        // retriable one that exhausts the loop leaves lastError holding the
+        // final attempt's count.
         lastError = new AdapterError(`HTTP ${res.status}: ${detail}`, {
           status: res.status,
           retryable,
+          attempts: attempt + 1,
           body: text.slice(0, 500),
         });
         if (retryable) continue;
@@ -151,14 +165,38 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
       try {
         json = JSON.parse(text);
       } catch {
-        throw new AdapterError("Endpoint returned non-JSON", { status: res.status, body: text.slice(0, 500) });
+        throw new AdapterError("Endpoint returned non-JSON", { status: res.status, attempts: attempt + 1, body: text.slice(0, 500) });
       }
 
       const choice = json.choices?.[0];
       if (!choice) {
         throw new AdapterError("Response contained no choices", { status: res.status, body: text.slice(0, 500) });
       }
+      // OpenRouter reports provider failures IN BAND: a choice whose provider
+      // died mid-request carries an error object beside a null content. Reading
+      // only the content scored those as "the model answered nothing" — a zero
+      // filed as a model failure when it was the route. Fail loudly instead.
+      if (choice.error) {
+        const code = choice.error.code;
+        throw new AdapterError(`provider error: ${choice.error.message ?? "no message given"}`, {
+          status: typeof code === "number" ? code : undefined,
+          retryable: code === 429 || (typeof code === "number" && code >= 500),
+          attempts: attempt + 1,
+          body: text.slice(0, 500),
+        });
+      }
       const content = choice.message?.content;
+      if (content !== null && content !== undefined && typeof content !== "string") {
+        // Text arrived in a shape this adapter does not read (e.g. an array of
+        // content parts from a gateway). Silently scoring it as empty would
+        // file a format change as a model failure, which is indistinguishable
+        // from a weak model in the report. Name the shape instead.
+        throw new AdapterError(
+          `Response content was ${Array.isArray(content) ? "an array" : typeof content}, not a string. ` +
+            `The endpoint's response format is not one this adapter reads.`,
+          { status: res.status, attempts: attempt + 1, body: text.slice(0, 500) }
+        );
+      }
       if (typeof content !== "string" || content.length === 0) {
         // An empty completion is a real (bad) answer, not a transport error.
         // Record it as such rather than silently retrying.
@@ -193,15 +231,20 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
           retryable: false,
           timedOut: true,
           timeoutMs: budget,
+          // Never retried, so the count is exactly one wait.
+          attempts: 1,
         });
       }
 
-      lastError = err instanceof AdapterError ? err : new AdapterError(String(err?.message ?? err), { retryable: true });
+      lastError =
+        err instanceof AdapterError
+          ? err
+          : new AdapterError(String(err?.message ?? err), { retryable: true, attempts: attempt + 1 });
     } finally {
       clearTimeout(timer);
     }
   }
-  throw lastError ?? new AdapterError("Request failed", { retryable: true });
+  throw lastError ?? new AdapterError("Request failed", { retryable: true, attempts: maxRetries + 1 });
 };
 
 /**

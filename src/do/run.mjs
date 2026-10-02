@@ -30,6 +30,7 @@ import { buildPrompt, promptDigest } from "./prompt.mjs";
 import { analyse, verifyMove } from "./minesweeper/oracle.mjs";
 import { scoreDo, randomBaseline } from "./score.mjs";
 import { scoreProgressIndex } from "./progress-index.mjs";
+import { describeCallFailure } from "../call-failure.mjs";
 import { buildDoReport, writeDoReport, LIMITATIONS } from "../report.mjs";
 import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "../cli.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "./reference-solver.mjs";
@@ -131,25 +132,10 @@ export const loadPool = ({ perTier = null, path } = {}) => loadPublishedPool({ p
  * @param {object} opts.baseline tier -> random survival rate
  * @param {boolean} opts.dryRun  use the reference solver, no API call
  */
-/**
- * Why a model call produced nothing, in terms a report reader can act on.
- *
- * The distinction that matters: `empty_response` means the endpoint answered
- * and declined to say anything, which is a real answer and is scored. Everything
- * else means we never got one, and the number describes the route, not the
- * model. Keeping those apart is the whole point of recording this at all.
- */
-const classifyCallFailure = (err) => {
-  const message = String(err?.message ?? err ?? "");
-  const status = err?.status;
-  if (err?.name === "AbortError" || /abort/i.test(message)) return "timeout";
-  if (/non-JSON/i.test(message)) return "non_json_response";
-  if (status === 401 || status === 403) return "auth_failed";
-  if (status === 429) return "rate_limited";
-  if (typeof status === "number") return `http_${status}`;
-  if (/fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(message)) return "network_error";
-  return "provider_error";
-};
+// The failure taxonomy lives in src/call-failure.mjs, shared with SEE. The
+// record written here is describeCallFailure's; an EMPTY completion never
+// reaches it (the adapter returns empty rather than throwing), so it scores as
+// a compile error plus protocol_violation boards and says so in the report.
 
 export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, onProgress, dryRun = false } = {}) => {
   const callStartedAt = Date.now();
@@ -175,16 +161,7 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
     try {
       completion = await complete(config, buildPrompt());
     } catch (err) {
-      callFailure = {
-        reason: classifyCallFailure(err),
-        message: String(err?.message ?? err),
-        elapsedMs: Date.now() - callStartedAt,
-        // The budget that was in force, so a report reader can tell a model
-        // that needed longer from one that would never have answered.
-        timeoutMs: err?.timeoutMs ?? config?.timeoutMs ?? null,
-        // Timeouts are not retried, so one wait is the cost of finding out.
-        attempts: err?.timedOut ? 1 : null,
-      };
+      callFailure = describeCallFailure(err, { startedAt: callStartedAt, timeoutMs: config?.timeoutMs ?? null });
     }
   }
 

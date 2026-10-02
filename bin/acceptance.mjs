@@ -41,7 +41,15 @@ const take = (name) => {
 const strong = take("--strong");
 const weak = take("--weak");
 const quick = argv.includes("--quick");
-const common = parseArgs(argv.filter((a) => a !== "--quick"));
+// Bad arguments are a setup error and must not become an unhandled crash: the
+// parse is strict (unknown flags throw), so catch it, say which token, exit 1.
+let common;
+try {
+  common = parseArgs(argv.filter((a) => a !== "--quick"));
+} catch (err) {
+  console.error(`\n  ${err.message}\n`);
+  process.exit(1);
+}
 const runs = argv.includes("--runs") || argv.includes("-r") ? common.runs : 3;
 
 if (!strong || !weak || common.help) {
@@ -77,49 +85,77 @@ const spread = (xs) => Math.max(...xs) - Math.min(...xs);
 console.log(`\nMONKEY SEE / MONKEY DO · acceptance gate${quick ? " (QUICK REHEARSAL — cannot pass the gate)" : ""}`);
 console.log(`  strong: ${strong}\n  weak:   ${weak}\n  runs:   ${runs} per model\n`);
 
-// 1. Self-test, with the full pool regeneration unless rehearsing.
+// 1. Self-test, with the full pool regeneration unless rehearsing. Every step
+// from here on is wrapped: a gate that dies at step 3 (a missing key for the
+// weak model, after the strong model's paid calls) used to write NO report at
+// all, which was indistinguishable from a gate nobody ran. A failed step is
+// recorded as a failed criterion and the report is still written.
 console.log(`1. self-test${quick ? "" : " (with full pool regeneration — a few minutes)"}...`);
-const st = await runSelfTest({ log: () => {}, full: !quick });
-record("self-test passes", st.ok, st.ok ? `${st.passed} checks` : st.failures.join("; "));
-if (!st.ok) finish();
+try {
+  const st = await runSelfTest({ log: () => {}, full: !quick });
+  record("self-test passes", st.ok, st.ok ? `${st.passed} checks` : st.failures.join("; "));
+  if (!st.ok) finish();
+} catch (err) {
+  record("self-test passes", false, String(err?.message ?? err));
+  finish();
+}
 
 // 2. Dry run on the pool.
-pool = loadPool({ perTier: quick ? common.perTier ?? 2 : null });
-console.log(`\n2. dry run on ${pool.boards.length} boards...`);
-const dry = await runDo(null, { boards: pool.boards, seed: pool.seed, dryRun: true });
-const verdict = dryRunVerdict(dry);
-record("the reference solver wins every Pool A board and stops correctly on every Pool B board",
-  verdict.ok && verdict.perfect, `${dry.score.total}/50, outcomes ${JSON.stringify(dry.score.outcomes)}`);
+try {
+  pool = loadPool({ perTier: quick ? common.perTier ?? 2 : null });
+  console.log(`\n2. dry run on ${pool.boards.length} boards...`);
+  const dry = await runDo(null, { boards: pool.boards, seed: pool.seed, dryRun: true });
+  const verdict = dryRunVerdict(dry);
+  record("the reference solver wins every Pool A board and stops correctly on every Pool B board",
+    verdict.ok && verdict.perfect, `${dry.score.total}/50, outcomes ${JSON.stringify(dry.score.outcomes)}`);
+} catch (err) {
+  record("the reference solver wins every Pool A board and stops correctly on every Pool B board",
+    false, String(err?.message ?? err));
+  finish();
+}
 
-// 3 + 4. Score both models.
+// 3 + 4. Score both models. A model that cannot be resolved, keyed or scored is
+// a failed criterion, not a lost report.
 for (const [role, model] of [["strong", strong], ["weak", weak]]) {
   console.log(`\n3. scoring the ${role} model, ${model}, ${runs} times...`);
-  const { config } = await prepareModel({ ...common, model });
-  const { runs: results, stability } = await runAll(config, {
-    runs,
-    pool,
-    onProgress: (m) => console.log(`    ${m}`),
-  });
-  scored[role] = {
-    model,
-    see: results.map((r) => r.seeTotal),
-    do: results.map((r) => r.doTotal),
-    generalizationIndex: results.map((r) => Math.round(r.see.index.index * 100)),
-    reproducible: stability ? { see: stability.seeReproducible, do: stability.doReproducible } : null,
-  };
-  const s = scored[role];
-  console.log(`    SEE ${s.see.join(", ")}   DO ${s.do.join(", ")}`);
-  if (runs >= 2) {
-    record(`${role} model is stable across ${runs} runs (within 2 points on each eval)`,
-      spread(s.see) <= 2 && spread(s.do) <= 2, `SEE spread ${spread(s.see)}, DO spread ${spread(s.do)}`);
+  try {
+    const { config } = await prepareModel({ ...common, model });
+    const { runs: results, stability } = await runAll(config, {
+      runs,
+      pool,
+      onProgress: (m) => console.log(`    ${m}`),
+    });
+    scored[role] = {
+      model,
+      see: results.map((r) => r.seeTotal),
+      do: results.map((r) => r.doTotal),
+      generalizationIndex: results.map((r) => Math.round(r.see.index.index * 100)),
+      reproducible: stability ? { see: stability.seeReproducible, do: stability.doReproducible } : null,
+    };
+    const s = scored[role];
+    console.log(`    SEE ${s.see.join(", ")}   DO ${s.do.join(", ")}`);
+    if (runs >= 2) {
+      record(`${role} model is stable across ${runs} runs (within 2 points on each eval)`,
+        spread(s.see) <= 2 && spread(s.do) <= 2, `SEE spread ${spread(s.see)}, DO spread ${spread(s.do)}`);
+    }
+  } catch (err) {
+    record(`the ${role} model could be scored`, false, String(err?.message ?? err).split("\n")[0]);
   }
 }
 
 console.log(`\n4. discrimination`);
-record("the strong model outscores the weak one on SEE",
-  mean(scored.strong.see) > mean(scored.weak.see), `${mean(scored.strong.see).toFixed(1)} vs ${mean(scored.weak.see).toFixed(1)}`);
-record("the strong model outscores the weak one on DO",
-  mean(scored.strong.do) > mean(scored.weak.do), `${mean(scored.strong.do).toFixed(1)} vs ${mean(scored.weak.do).toFixed(1)}`);
+// Both models must actually have been scored; a missing arm means the
+// comparison cannot be made, which is a failed criterion, not a crash on
+// undefined property access.
+if (scored.strong && scored.weak) {
+  record("the strong model outscores the weak one on SEE",
+    mean(scored.strong.see) > mean(scored.weak.see), `${mean(scored.strong.see).toFixed(1)} vs ${mean(scored.weak.see).toFixed(1)}`);
+  record("the strong model outscores the weak one on DO",
+    mean(scored.strong.do) > mean(scored.weak.do), `${mean(scored.strong.do).toFixed(1)} vs ${mean(scored.weak.do).toFixed(1)}`);
+} else {
+  const missing = [!scored.strong && "strong", !scored.weak && "weak"].filter(Boolean).join(" and ");
+  record("the gate compared both models", false, `the ${missing} model could not be scored, so there is nothing to compare`);
+}
 if (runs < 3) record("the acceptance gate requires three runs per model", false, `ran ${runs}`);
 
 finish();
@@ -137,7 +173,9 @@ function finish() {
     limitations: LIMITATIONS,
   };
   mkdirSync(common.out, { recursive: true });
-  const path = join(common.out, `acceptance-${report.date.slice(0, 10)}.json`);
+  // Dated AND timed: a same-day re-run of the gate must not overwrite the
+  // earlier evidence (writeFileSync truncates silently).
+  const path = join(common.out, `acceptance-${report.date.slice(0, 10)}-${report.date.slice(11, 19).replace(/:/g, "")}.json`);
   writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
   console.log(
     `\n  ${passed ? "\x1b[32m\x1b[1mGATE PASSED\x1b[0m — the suite may be published." : quick ? "\x1b[33mREHEARSAL\x1b[0m — rerun without --quick for a real verdict." : "\x1b[31m\x1b[1mGATE FAILED\x1b[0m — do not publish."}`

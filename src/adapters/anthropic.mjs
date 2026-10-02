@@ -123,9 +123,13 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
         } catch {
           /* not JSON, keep the raw text */
         }
+        // `attempts: attempt + 1` is correct on both paths out of here, as in
+        // the OpenAI adapter: a thrown non-retryable status has made this many
+        // attempts, and an exhausted loop leaves the final count on lastError.
         lastError = new AdapterError(`HTTP ${res.status}: ${detail}`, {
           status: res.status,
           retryable,
+          attempts: attempt + 1,
           body: text.slice(0, 500),
         });
         if (retryable) continue;
@@ -136,7 +140,7 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
       try {
         json = JSON.parse(text);
       } catch {
-        throw new AdapterError("Endpoint returned non-JSON", { status: res.status, body: text.slice(0, 500) });
+        throw new AdapterError("Endpoint returned non-JSON", { status: res.status, attempts: attempt + 1, body: text.slice(0, 500) });
       }
 
       const found = extractAnswer(json.content);
@@ -187,15 +191,19 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
           retryable: false,
           timedOut: true,
           timeoutMs: budget,
+          attempts: 1,
         });
       }
 
-      lastError = err instanceof AdapterError ? err : new AdapterError(String(err?.message ?? err), { retryable: true });
+      lastError =
+        err instanceof AdapterError
+          ? err
+          : new AdapterError(String(err?.message ?? err), { retryable: true, attempts: attempt + 1 });
     } finally {
       clearTimeout(timer);
     }
   }
-  throw lastError ?? new AdapterError("Request failed", { retryable: true });
+  throw lastError ?? new AdapterError("Request failed", { retryable: true, attempts: maxRetries + 1 });
 };
 
 const usageFrom = (json) => {

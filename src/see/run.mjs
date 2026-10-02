@@ -11,6 +11,7 @@ import { tasks, taskById } from "./tasks.mjs";
 import { buildPrompt, promptDigest, allPromptDigests } from "./prompt.mjs";
 import { scoreTask, scoreSeen, generalizationIndex, readIndex, robustnessBonus, unusableResult } from "./score.mjs";
 import { compileCandidate, runCandidate } from "../sandbox.mjs";
+import { describeCallFailure } from "../call-failure.mjs";
 import { reproducibility } from "../fingerprint.mjs";
 import { buildReport, writeReport, LIMITATIONS } from "../report.mjs";
 import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "../cli.mjs";
@@ -74,11 +75,10 @@ export const runTask = async (config, task) => {
   try {
     completion = await complete(config, promptText);
   } catch (err) {
-    callFailure = {
-      reason: String(err?.name === "AbortError" || /abort/i.test(err?.message ?? "") ? "timeout" : "provider_error"),
-      message: String(err?.message ?? err),
-      elapsedMs: Date.now() - startedAt,
-    };
+    // The shared taxonomy, not a local collapse: the first version here turned
+    // every 401, 429, 500 and connection refusal into "provider_error", so a
+    // SEE report could not tell quota exhaustion from a broken endpoint.
+    callFailure = describeCallFailure(err, { startedAt, timeoutMs: config?.timeoutMs ?? null });
     return {
       taskId: task.id,
       name: task.name,
@@ -95,7 +95,10 @@ export const runTask = async (config, task) => {
     };
   }
 
-  const compiled = compileCandidate(completion.text, { entry: "f" });
+  // isolateCalls: one compiled candidate answers every held-out and seen case,
+  // so no state may cross between cases. See sandbox.mjs for why this flag is
+  // SEE's and not DO's.
+  const compiled = compileCandidate(completion.text, { entry: "f", isolateCalls: true });
 
   if (!compiled.ok) {
     // An unusable response scores zero rather than aborting the run: a model

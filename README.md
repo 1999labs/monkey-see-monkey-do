@@ -54,8 +54,10 @@ end to end. See [OpenCode Go and Zen](#opencode-go-and-zen) before using those p
 because two of the three dialects have their own traps.
 
 `npm run all` runs both evals against one resolved model and writes three reports to
-`results/`: `<model>-<date>.json` (SEE), `do-<model>-<date>.json` (DO) and
-`combined-<model>-<date>.json`. `npm run see` and `npm run do` run one eval each.
+`results/`: `<model>-<date>-<time>.json` (SEE), `do-<model>-<date>-<time>.json` (DO) and
+`combined-<model>-<date>-<time>.json` (the time component is UTC, and it is there so a
+same-day re-run adds evidence instead of silently overwriting it). `npm run see` and
+`npm run do` run one eval each.
 
 Of the three, only the **combined** report is committed, because it is the evidence for
 every number the cohort tables and charts print, and a chart whose source reports are absent
@@ -508,7 +510,7 @@ or the cap.
 ### The publication gate
 
 `npm run acceptance` runs every criterion below and writes
-`results/acceptance-<date>.json`. `--quick` rehearses on a subset and can never
+`results/acceptance-<date>-<time>.json`. `--quick` rehearses on a subset and can never
 report a pass.
 
 | Criterion | Requirement |

@@ -58,6 +58,10 @@ test("sends temperature 0 and no system prompt", async () => {
   assert.equal(body.messages[0].content, "PROMPT");
   assert.equal(body.system, undefined);
   assert.equal(body.top_p, undefined);
+  // Explicit, though it is the default: a gateway that streams when the field
+  // is absent would answer with SSE, and the failure would surface as a
+  // confusing non-JSON error downstream.
+  assert.equal(body.stream, false);
 });
 
 test("sends the authorization header from the configured env var", async () => {
@@ -69,6 +73,73 @@ test("sends the authorization header from the configured env var", async () => {
   await complete(config(fetchImpl), "P");
   assert.equal(headers.authorization, "Bearer test-key-1234");
   assert.equal(headers["content-type"], "application/json");
+});
+
+// --- In-band provider errors and unrecognised shapes ------------------------
+//
+// OpenRouter reports provider failures INSIDE a choice, beside a null content.
+// Reading only the content scored those as "the model answered nothing": a
+// zero filed as a model failure when it was the route.
+
+test("an in-band choice error is thrown, not scored as an empty answer", async () => {
+  const fetchImpl = async () =>
+    jsonResponse({
+      choices: [{ message: { role: "assistant", content: null }, error: { code: 429, message: "Provider rate limit exceeded" } }],
+      model: "test/model",
+    });
+  await assert.rejects(
+    () => complete(config(fetchImpl), "PROMPT"),
+    (err) => {
+      assert.equal(err.status, 429);
+      assert.equal(err.attempts, 1);
+      assert.match(err.message, /provider error: Provider rate limit exceeded/);
+      return true;
+    }
+  );
+});
+
+test("a retriable in-band error keeps its retries", async () => {
+  let calls = 0;
+  const retryable = async () => {
+    calls++;
+    return jsonResponse({
+      choices: [{ message: { content: null }, error: { code: 503, message: "Provider unavailable" } }],
+    });
+  };
+  await assert.rejects(
+    () => complete(config(retryable, { maxRetries: 2 }), "P"),
+    (err) => {
+      assert.match(err.message, /provider error: Provider unavailable/);
+      assert.equal(err.attempts, 3, "a 503 in-band is a transport failure: three attempts, then reported");
+      return true;
+    }
+  );
+  assert.equal(calls, 3);
+});
+
+test("content in a shape this adapter does not read is named, not scored as empty", async () => {
+  // A gateway returning array-form content used to score as an empty model
+  // answer: a silent zero indistinguishable from a weak model.
+  const fetchImpl = async () =>
+    jsonResponse({ choices: [{ message: { role: "assistant", content: [{ type: "text", text: "function f(n){return n}" }] } }] });
+  await assert.rejects(
+    () => complete(config(fetchImpl), "PROMPT"),
+    /Response content was an array, not a string/
+  );
+});
+
+test("an exhausted retry loop reports the attempt count", async () => {
+  // A 429 refused three times must be distinguishable in the report from a
+  // single refusal; before the adapters recorded `attempts`, both were null.
+  const fetchImpl = async () => jsonResponse({ error: { message: "slow down" } }, 429);
+  const err = await complete(config(fetchImpl, { maxRetries: 2 }), "P").then(
+    () => {
+      throw new Error("should have thrown");
+    },
+    (e) => e
+  );
+  assert.equal(err.status, 429);
+  assert.equal(err.attempts, 3, "maxRetries + 1 attempts, all refused");
 });
 
 test("a missing API key fails loudly before any request", async () => {

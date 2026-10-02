@@ -129,6 +129,54 @@ test("no state leaks between two candidates", () => {
   assert.equal(runCandidate(b, 1).value, "B");
 });
 
+test("isolateCalls: no state leaks between two CALLS of the same candidate", () => {
+  // The regression: one context used to be reused for every call of a compiled
+  // candidate, so a submission that mutated globals or kept a closure counter
+  // behaved differently on later held-out cases — while the header promised no
+  // state leaks. SEE compiles with isolateCalls, which re-runs the defining
+  // script in a fresh realm per call, so every case starts from nothing.
+
+  // A global counter: must be 1 on every call, not 1, 2, 3, ...
+  const counter = compileCandidate("var count = 0; function f(n){ count += 1; return count; }", { isolateCalls: true });
+  assert.equal(runCandidate(counter, 1).value, 1);
+  assert.equal(runCandidate(counter, 1).value, 1);
+  assert.equal(runCandidate(counter, 1).value, 1);
+
+  // A closure over module-level state: same rule.
+  const closure = compileCandidate("let memo = 0; function f(n){ memo += 1; return memo; }", { isolateCalls: true });
+  assert.equal(runCandidate(closure, 1).value, 1);
+  assert.equal(runCandidate(closure, 1).value, 1);
+
+  // A cache on the function object: a fresh realm means a fresh function.
+  const cached = compileCandidate(
+    "function f(n){ if (!f.seen) f.seen = 0; f.seen += 1; return f.seen; }",
+    { isolateCalls: true }
+  );
+  assert.equal(runCandidate(cached, 1).value, 1);
+  assert.equal(runCandidate(cached, 1).value, 1);
+
+  // And a candidate that LEGITIMATELY computes the same value every call is
+  // unaffected by the fresh realm.
+  const pure = compileCandidate("function f(n){ return n <= 10 ? n*n : n*n - 100; }", { isolateCalls: true });
+  assert.equal(runCandidate(pure, 11).value, 21);
+  assert.equal(runCandidate(pure, 11).value, 21);
+});
+
+test("SEE compiles with per-case isolation, DO does not", () => {
+  // The flag is SEE's alone, and for a measured reason: a fresh realm per call
+  // at DO scale (~60,000 calls per run) balloons the heap until a major GC
+  // pause lands inside one call's 1000ms budget and scores a sound solver as
+  // a protocol violation. DO instead bounds the lifetime by recompiling per
+  // board, so the default mode is what it compiles with.
+  const source = "var count = 0; function f(n){ count += 1; return count; }";
+  const shared = compileCandidate(source);
+  assert.equal(runCandidate(shared, 1).value, 1);
+  assert.equal(runCandidate(shared, 1).value, 2, "the shared mode keeps state within its compile, by design");
+  const isolated = compileCandidate(source, { isolateCalls: true });
+  assert.equal(runCandidate(isolated, 1).value, 1);
+  assert.equal(runCandidate(isolated, 1).value, 1);
+});
+
 test("values survive the round trip across the vm realm boundary", () => {
   const c = compileCandidate("function f(arr) { return arr; }");
   for (const input of [[1, 2, 3], [], [-5, -1], "apple", "", 0, -1]) {

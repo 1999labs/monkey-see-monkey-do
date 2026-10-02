@@ -12,7 +12,20 @@
 //   - an infinite loop is interrupted (per-call timeout)
 //   - a thrown error is a failed case, never a harness crash
 //   - the model gets a fresh global with no require/process/fetch
-//   - no state leaks between calls or between candidates
+//   - no state leaks between candidates, ever; and none between calls in the
+//     mode the caller asks for. `isolateCalls: true` (SEE) re-runs the defining
+//     script in a FRESH realm for every call, so a submission that mutates
+//     globals or keeps a closure counter starts from zero on every case. The
+//     default shares one context per compile, which DO bounds by recompiling
+//     per board: state can never cross a board, and a solver's statefulness
+//     WITHIN one board is its own to own.
+//
+//     Why isolation is opt-in and not universal: a fresh realm per call at DO
+//     scale (~60,000 calls per run) was measured to balloon the heap past
+//     1 GB per 7,600 calls and stretch the worst call from 48ms to 440ms, until
+//     a major GC pause landed inside one call's 1000ms budget and scored a
+//     sound solver as a protocol violation. SEE pays ~500 realms per run and
+//     is unaffected; DO is not given the choice.
 //
 // What this does NOT guarantee:
 //   - memory bounds (a huge allocation will exhaust the host; vm has no cap)
@@ -122,6 +135,10 @@ const SILENT_CONSOLE = `globalThis.console = (function () {
   return c;
 })();`;
 
+// Precompiled once: it runs before every candidate call (fresh context per
+// call), so it is a Script, not a string, at that point.
+const SILENT_CONSOLE_SCRIPT = new vm.Script(SILENT_CONSOLE, { filename: "silent-console.js" });
+
 /**
  * Compile model output into a callable, or report why it could not be.
  * Returns { ok: true, call } or { ok: false, error }.
@@ -130,12 +147,16 @@ const SILENT_CONSOLE = `globalThis.console = (function () {
  * matters: a DO answer that defines a top-level helper called `f` alongside
  * `solve` used to have the HELPER called, because `f` was always probed first.
  *
+ * `isolateCalls` (SEE only): every call gets a fresh realm, so no state can
+ * cross between the cases one compiled candidate answers. See the header for
+ * why DO must not use it.
+ *
  * Top-level code that throws or times out after the function is defined (demo
  * calls such as `console.log(f())`) does not void the answer: the probe runs as
  * a separate script, so hoisted and already-initialised functions are still
  * found. The throw is reported in `topLevelError`, never scored.
  */
-export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entry = "f" } = {}) => {
+export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entry = "f", isolateCalls = false } = {}) => {
   const withoutFences = extractCode(rawCode, entry);
   if (!withoutFences) return { ok: false, error: "empty response" };
 
@@ -152,7 +173,7 @@ export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entr
   for (const attempt of attempts) {
     const sandbox = {};
     const context = vm.createContext(sandbox, { name: "monkey-see-candidate" });
-    vm.runInContext(SILENT_CONSOLE, context);
+    SILENT_CONSOLE_SCRIPT.runInContext(context);
     let script;
     try {
       script = new vm.Script(attempt.body, { filename: "candidate.js" });
@@ -179,7 +200,19 @@ export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entr
       }
     }
     if (typeof sandbox.__fn === "function") {
-      return { ok: true, call: makeCaller(sandbox, context, timeoutMs), removed, label: attempt.label, topLevelError };
+      return {
+        ok: true,
+        // In the isolated mode the CALLER gets the SCRIPT objects, not a live
+        // context: every call rebuilds the candidate in a fresh realm. In the
+        // shared mode it gets the compiled context, bounded by DO's per-board
+        // recompile.
+        call: isolateCalls
+          ? makeIsolatedCaller({ script, probe: attempt.probe }, timeoutMs)
+          : makeSharedCaller(sandbox, context, timeoutMs),
+        removed,
+        label: attempt.label,
+        topLevelError,
+      };
     }
     firstErrors.push(`${attempt.label}: ${topLevelError ?? "no callable found"}`);
   }
@@ -187,13 +220,17 @@ export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entr
   return { ok: false, error: firstErrors.join(" | ") || "could not compile", removed };
 };
 
+// vm surfaces a timeout as a generic Error with this exact message.
+const isVmTimeout = (err) => Boolean(err && /Script execution timed out/i.test(err.message));
+
 /**
- * Build a caller that runs the compiled function with a per-call timeout. The
- * arguments are inlined as JSON in a fresh script so the timeout applies to the
- * call itself, not just to compilation. SEE passes one argument; DO passes two
- * (the board and the mine count).
+ * One context shared by every call of this compile (the default). Cheap, and
+ * correct wherever the CALLER bounds the lifetime: DO recompiles per board, so
+ * nothing can cross a board. The arguments are inlined as JSON in a fresh
+ * script so the timeout applies to the call itself, and so a candidate that
+ * mutates its arguments cannot corrupt the host's task data.
  */
-const makeCaller = (sandbox, context, timeoutMs) => {
+const makeSharedCaller = (sandbox, context, timeoutMs) => {
   return (...args) => {
     const literals = args.map((a) => JSON.stringify(a === undefined ? null : a)).join(", ");
     const script = new vm.Script(`__out = __fn(${literals});`, { filename: "call.js" });
@@ -201,10 +238,62 @@ const makeCaller = (sandbox, context, timeoutMs) => {
     try {
       script.runInContext(context, { timeout: timeoutMs });
     } catch (err) {
-      // vm surfaces a timeout as a generic Error with this exact message.
-      if (err && /Script execution timed out/i.test(err.message)) {
-        return { ok: false, timedOut: true, error: `timed out after ${timeoutMs}ms` };
+      if (isVmTimeout(err)) return { ok: false, timedOut: true, error: `timed out after ${timeoutMs}ms` };
+      return { ok: false, timedOut: false, error: String(err && err.message) };
+    }
+    return { ok: true, value: sandbox.__out };
+  };
+};
+
+/**
+ * A FRESH REALM PER CALL: SEE's mode, where one compiled candidate answers
+ * ~174 independent cases and the sandbox's own header used to promise no state
+ * between calls while one context quietly leaked globals and closure counters
+ * from case to case.
+ *
+ * The defining script is re-run in a brand-new realm first, so a submission
+ * that mutates globals, keeps a closure counter, or caches on the function
+ * object starts from zero on every case. A top-level throw is handled exactly
+ * as at compile time: recorded, not scored, and the probe still runs — a
+ * function defined before the throw remains callable.
+ */
+const makeIsolatedCaller = ({ script, probe }, timeoutMs) => {
+  const probeScript = probe ? new vm.Script(probe, { filename: "probe.js" }) : null;
+  return (...args) => {
+    const literals = args.map((a) => JSON.stringify(a === undefined ? null : a)).join(", ");
+    const callScript = new vm.Script(`__out = __fn(${literals});`, { filename: "call.js" });
+
+    const sandbox = {};
+    const context = vm.createContext(sandbox, { name: "monkey-see-candidate" });
+    SILENT_CONSOLE_SCRIPT.runInContext(context);
+
+    let topLevelError = null;
+    try {
+      script.runInContext(context, { timeout: timeoutMs });
+    } catch (err) {
+      topLevelError = String(err && err.message);
+      // A bare-expression body assigns __fn directly; if even that threw, there
+      // is nothing to fall back to. At compile time such an attempt was
+      // rejected, so reaching here means the body throws only sometimes — a
+      // failed case, not a harness error.
+      if (!probeScript) return { ok: false, timedOut: isVmTimeout(err), error: topLevelError };
+    }
+    if (probeScript) {
+      try {
+        probeScript.runInContext(context, { timeout: timeoutMs });
+      } catch (err) {
+        return { ok: false, timedOut: isVmTimeout(err), error: String(err && err.message) };
       }
+    }
+    if (typeof sandbox.__fn !== "function") {
+      return { ok: false, timedOut: false, error: topLevelError ?? "no callable found" };
+    }
+
+    sandbox.__out = undefined;
+    try {
+      callScript.runInContext(context, { timeout: timeoutMs });
+    } catch (err) {
+      if (isVmTimeout(err)) return { ok: false, timedOut: true, error: `timed out after ${timeoutMs}ms` };
       return { ok: false, timedOut: false, error: String(err && err.message) };
     }
     return { ok: true, value: sandbox.__out };

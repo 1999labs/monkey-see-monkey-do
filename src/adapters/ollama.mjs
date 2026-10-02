@@ -64,6 +64,8 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
             retryable: false,
             timedOut: true,
             timeoutMs: budget,
+            // Never retried, so the count is exactly one wait.
+            attempts: 1,
           });
         }
         // Connection refused is the common case: the server is not running.
@@ -87,11 +89,20 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
         if (res.status === 404) {
           throw new AdapterError(`HTTP 404: ${detail}. Pull the model first:  ollama pull ${model}`, {
             status: 404,
+            attempts: attempt + 1,
             body: text.slice(0, 500),
           });
         }
         const retryable = res.status === 429 || res.status >= 500;
-        lastError = new AdapterError(`HTTP ${res.status}: ${detail}`, { status: res.status, retryable, body: text.slice(0, 500) });
+        // `attempts: attempt + 1` is correct on both paths out of here, as in
+        // the OpenAI adapter: a thrown non-retryable status has made this many
+        // attempts, and an exhausted loop leaves the final count on lastError.
+        lastError = new AdapterError(`HTTP ${res.status}: ${detail}`, {
+          status: res.status,
+          retryable,
+          attempts: attempt + 1,
+          body: text.slice(0, 500),
+        });
         if (retryable) continue;
         throw lastError;
       }
@@ -100,11 +111,11 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
       try {
         json = JSON.parse(text);
       } catch {
-        throw new AdapterError("Ollama returned non-JSON", { status: res.status, body: text.slice(0, 500) });
+        throw new AdapterError("Ollama returned non-JSON", { status: res.status, attempts: attempt + 1, body: text.slice(0, 500) });
       }
       const content = json?.message?.content;
       if (typeof content !== "string") {
-        throw new AdapterError("Ollama response contained no message", { status: res.status, body: text.slice(0, 500) });
+        throw new AdapterError("Ollama response contained no message", { status: res.status, attempts: attempt + 1, body: text.slice(0, 500) });
       }
       return {
         text: content,
@@ -118,10 +129,13 @@ export const complete = async (config, promptText, { timeoutMs = DEFAULT_TIMEOUT
       };
     } catch (err) {
       if (err instanceof AdapterError && !err.retryable) throw err;
-      lastError = err instanceof AdapterError ? err : new AdapterError(String(err?.message ?? err), { retryable: true });
+      lastError =
+        err instanceof AdapterError
+          ? err
+          : new AdapterError(String(err?.message ?? err), { retryable: true, attempts: attempt + 1 });
     } finally {
       clearTimeout(timer);
     }
   }
-  throw lastError ?? new AdapterError("Request failed", { retryable: true });
+  throw lastError ?? new AdapterError("Request failed", { retryable: true, attempts: maxRetries + 1 });
 };
