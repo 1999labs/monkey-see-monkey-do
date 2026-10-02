@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildReport, writeReport } from "../src/report.mjs";
+import { buildReport, writeReport, buildDoReport, writeDoReport } from "../src/report.mjs";
 import { runSee } from "../src/see/run.mjs";
 import { groundTruth } from "../src/see/reference.mjs";
 import { taskById } from "../src/see/tasks.mjs";
@@ -193,6 +193,50 @@ test("a model id with path separators cannot escape the output directory", () =>
   const path = writeReport(r, dir);
   assert.equal(readdirSync(dir).length, 1, "must not write outside the chosen directory");
   assert.ok(path.startsWith(dir), `wrote to ${path}, expected under ${dir}`);
+});
+
+test("writeReport refuses to clobber an existing report", () => {
+  // Two runs of the same model in the same second share a filename, and
+  // writeFileSync truncates. For a combined report that is committed evidence,
+  // so the collision silently discarded a score. Fail loudly instead.
+  const dir = mkdtempSync(join(tmpdir(), "monkeydo-clobber-"));
+  const r = buildReport({ model: "m", taskRuns: [], last: null, indices: [], reproducibility: null, config: {} });
+  const first = writeReport(r, dir);
+  assert.throws(
+    () => writeReport(r, dir),
+    /already exists, refusing to overwrite/,
+    "a second report at the same path must not silently replace the first"
+  );
+  assert.equal(readdirSync(dir).length, 1, "the original file must survive");
+  assert.equal(readFileSync(first, "utf8").length > 0, true);
+});
+
+test("overwrite: true replaces an existing report", () => {
+  const dir = mkdtempSync(join(tmpdir(), "monkeydo-overwrite-"));
+  const r = buildReport({ model: "m", taskRuns: [], last: null, indices: [], reproducibility: null, config: {} });
+  writeReport(r, dir);
+  writeReport(r, dir, { overwrite: true });
+  assert.equal(readdirSync(dir).length, 1, "an explicit overwrite replaces rather than adds");
+});
+
+test("writeDoReport and writeCombinedReport refuse to clobber too", () => {
+  const dir = mkdtempSync(join(tmpdir(), "monkeydo-clobber2-"));
+  const boardResults = [{ pool: "A", tier: "poolA-small", attempt: 1, outcome: "won", calls: 3 }];
+  const doReport = buildDoReport({
+    model: "m",
+    result: { boardResults, score: { total: 0 } },
+    config: {},
+    keySource: "env",
+    pool: { boards: [], full: false, seed: 1, sha256: "test" },
+    baseline: {},
+  });
+  writeDoReport(doReport, dir);
+  assert.throws(() => writeDoReport(doReport, dir), /refusing to overwrite/);
+
+  const combined = { model: { requested: "m" }, date: new Date().toISOString() };
+  writeCombinedReport(combined, dir);
+  assert.throws(() => writeCombinedReport(combined, dir), /refusing to overwrite/);
+  assert.equal(readdirSync(dir).length, 2, "one DO and one combined, neither replaced");
 });
 
 // --- Limitations and the combined report -----------------------------------

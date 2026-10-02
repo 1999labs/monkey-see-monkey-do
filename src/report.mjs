@@ -14,7 +14,7 @@
 //
 // Deliberately NOT recorded: the API key, or any fragment of it.
 
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { allPromptDigests } from "./see/prompt.mjs";
@@ -61,6 +61,36 @@ const slug = (model) =>
  * taken from.
  */
 const fileStamp = (iso) => `${iso.slice(0, 10)}-${iso.slice(11, 19).replace(/:/g, "")}`;
+
+/**
+ * Write a report, refusing to clobber one that is already there.
+ *
+ * The timestamp carries seconds, so two runs of the same model inside the same
+ * second would previously have written the same path and the second silently
+ * truncated the first (writeFileSync overwrites). For a combined report that is
+ * evidence committed to the repo, so a collision quietly discarded a score.
+ *
+ * Rather than invent a suffix and leave two files whose relationship is
+ * unclear, this fails loudly. A caller that genuinely wants to overwrite says
+ * so with `overwrite: true`.
+ *
+ * @param {string} path        destination file
+ * @param {object} report      already-serialisable report object
+ * @param {object} [opts]
+ * @param {boolean} [opts.overwrite] replace an existing file instead of throwing
+ * @returns {string} the path written
+ */
+const writeReportFile = (path, report, { overwrite = false } = {}) => {
+  if (!overwrite && existsSync(path)) {
+    throw new Error(
+      `report already exists, refusing to overwrite: ${path}\n` +
+        `  Two runs of the same model landed in the same second. Re-run; the` +
+        ` timestamp carries seconds, so the next one gets its own file.`
+    );
+  }
+  writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
+  return path;
+};
 
 /**
  * The lower median of an even-length list: sorted, take the middle-low index.
@@ -228,11 +258,10 @@ export const buildReport = ({ model, taskRuns, last, indices, reproducibility, c
 };
 
 /** Write the report to results/<model>-<date>-<time>.json and return the path. */
-export const writeReport = (report, outDir = "results") => {
+export const writeReport = (report, outDir = "results", opts = {}) => {
   mkdirSync(outDir, { recursive: true });
   const path = join(outDir, `${slug(report.model.requested)}-${fileStamp(report.timestamp)}.json`);
-  writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
-  return path;
+  return writeReportFile(path, report, opts);
 };
 
 /**
@@ -371,11 +400,10 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
 });
 
 /** Write a DO report. Shares the naming scheme with SEE so results sort together. */
-export const writeDoReport = (report, outDir = "results") => {
+export const writeDoReport = (report, outDir = "results", opts = {}) => {
   mkdirSync(outDir, { recursive: true });
   const path = join(outDir, `do-${slug(report.model.requested)}-${fileStamp(report.timestamp)}.json`);
-  writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
-  return path;
+  return writeReportFile(path, report, opts);
 };
 
 /**
@@ -487,9 +515,8 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
 };
 
 /** Write the combined report next to the per-eval ones. */
-export const writeCombinedReport = (report, outDir = "results") => {
+export const writeCombinedReport = (report, outDir = "results", opts = {}) => {
   mkdirSync(outDir, { recursive: true });
   const path = join(outDir, `combined-${slug(report.model.requested)}-${fileStamp(report.date)}.json`);
-  writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
-  return path;
+  return writeReportFile(path, report, opts);
 };

@@ -32,3 +32,6 @@ nohup.out
 
 # Private scratch notes: model cohorts, scoring experiments, todo lists.
 notes.md
+
+# Local planning docs, not part of the published suite.
+monkey-do-v2-plan.md
