@@ -1,10 +1,10 @@
 {
-  "schema": "monkey-see-monkey-do/combined@3",
+  "schema": "monkey-see-monkey-do/combined@4",
   "model": {
     "requested": "ollama/mistral:7b-instruct",
     "endpoint": "http://localhost:11434/api/chat"
   },
-  "date": "2026-10-01T16:43:18.036Z",
+  "date": "2026-10-02T19:16:31.970Z",
   "temperature": {
     "requested": 0,
     "sent": true,
@@ -13,6 +13,10 @@
     "comparable": true,
     "statement": "temperature 0 requested; the model config says it is supported",
     "keySource": "not required"
+  },
+  "callFailure": {
+    "see": [],
+    "do": null
   },
   "see": {
     "total": 15,
@@ -25,6 +29,8 @@
   "do": {
     "total": 10,
     "max": 50,
+    "usable": true,
+    "compileError": null,
     "poolAWon": 0,
     "poolANoConfidentError": 1,
     "poolBCorrectStop": 0,
@@ -85,9 +91,48 @@
       "formula": "clamp(see + do - GENERALIZATION_WEIGHT*GZ - 10*(1 - initiationRate), 0, 100)"
     }
   },
-  "stability": null,
+  "stability": {
+    "runs": 3,
+    "seeTotals": [
+      15,
+      15,
+      15
+    ],
+    "doTotals": [
+      10,
+      10,
+      10
+    ],
+    "combinedTotals": [
+      25,
+      25,
+      25
+    ],
+    "seeSpread": 0,
+    "doSpread": 0,
+    "withinTwoPoints": true,
+    "seeReproducible": true,
+    "seeVerdict": "REPRODUCIBLE",
+    "doReproducible": true,
+    "doVerdict": "REPRODUCIBLE",
+    "doPrints": [
+      "d51beb4f",
+      "d51beb4f",
+      "d51beb4f"
+    ],
+    "doCallFailures": [
+      false,
+      false,
+      false
+    ],
+    "seeCallFailures": [
+      [],
+      [],
+      []
+    ]
+  },
   "reports": {
-    "see": "results/ollama-mistral-7b-instruct-2026-10-01.json",
-    "do": "results/do-ollama-mistral-7b-instruct-2026-10-01.json"
+    "see": "results/ollama-mistral-7b-instruct-2026-10-02-191631.json",
+    "do": "results/do-ollama-mistral-7b-instruct-2026-10-02-191631.json"
   }
 }

@@ -1,10 +1,10 @@
 {
-  "schema": "monkey-see-monkey-do/combined@3",
+  "schema": "monkey-see-monkey-do/combined@4",
   "model": {
-    "requested": "ollama/gemma2:2b",
+    "requested": "ollama/llama3.2:3b",
     "endpoint": "http://localhost:11434/api/chat"
   },
-  "date": "2026-10-01T16:34:26.810Z",
+  "date": "2026-10-02T18:57:40.798Z",
   "temperature": {
     "requested": 0,
     "sent": true,
@@ -14,19 +14,25 @@
     "statement": "temperature 0 requested; the model config says it is supported",
     "keySource": "not required"
   },
+  "callFailure": {
+    "see": [],
+    "do": null
+  },
   "see": {
-    "total": 14,
+    "total": 22,
     "max": 50,
-    "generalizationIndex": 13,
+    "generalizationIndex": 25,
     "reading": "mostly generalizes: held-out trails shown on some cases",
-    "seen": 0.3333,
-    "heldOut": 0.2067
+    "seen": 0.625,
+    "heldOut": 0.3733
   },
   "do": {
-    "total": 10,
+    "total": 0,
     "max": 50,
+    "usable": true,
+    "compileError": null,
     "poolAWon": 0,
-    "poolANoConfidentError": 1,
+    "poolANoConfidentError": 0,
     "poolBCorrectStop": 0,
     "baselineGap": {
       "poolA-small": 0,
@@ -59,35 +65,74 @@
     "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 0.2.0)."
   ],
   "combined": {
-    "total": 24,
+    "total": 22,
     "max": 100,
     "reading": [
-      "MONKEY SEE   14/50   index 13  (mostly generalizes: held-out trails shown on some cases)",
-      "MONKEY DO    10/50   detonated 0% of boards, guessed on 0%",
-      "SEE 14/50  ·  DO 10/50  ·  combined 24/100",
+      "MONKEY SEE   22/50   index 25  (mostly generalizes: held-out trails shown on some cases)",
+      "MONKEY DO    0/50   detonated 0% of boards, guessed on 0%",
+      "SEE 22/50  ·  DO 0/50  ·  combined 22/100",
       "Mixed: the two evals disagree. Worth reading the per-tier DO",
       "breakdown, since a model that only handles small boards has learned",
       "to look at small boards."
     ]
   },
   "adjusted": {
-    "total": 8,
+    "total": 0,
     "max": 100,
-    "base": 24,
-    "generalizationIndexPenalty": 6.5,
+    "base": 22,
+    "generalizationIndexPenalty": 12.5,
     "unearnedPenalty": 10,
     "components": {
-      "seeTotal": 14,
-      "doTotal": 10,
-      "generalizationIndex": 13,
+      "seeTotal": 22,
+      "doTotal": 0,
+      "generalizationIndex": 25,
       "initiationRate": 0,
       "generalizationWeight": 0.5,
       "formula": "clamp(see + do - GENERALIZATION_WEIGHT*GZ - 10*(1 - initiationRate), 0, 100)"
     }
   },
-  "stability": null,
+  "stability": {
+    "runs": 3,
+    "seeTotals": [
+      22,
+      22,
+      22
+    ],
+    "doTotals": [
+      0,
+      0,
+      0
+    ],
+    "combinedTotals": [
+      22,
+      22,
+      22
+    ],
+    "seeSpread": 0,
+    "doSpread": 0,
+    "withinTwoPoints": true,
+    "seeReproducible": true,
+    "seeVerdict": "REPRODUCIBLE",
+    "doReproducible": true,
+    "doVerdict": "REPRODUCIBLE",
+    "doPrints": [
+      "cdc97198",
+      "cdc97198",
+      "cdc97198"
+    ],
+    "doCallFailures": [
+      false,
+      false,
+      false
+    ],
+    "seeCallFailures": [
+      [],
+      [],
+      []
+    ]
+  },
   "reports": {
-    "see": "results/ollama-gemma2-2b-2026-10-01.json",
-    "do": "results/do-ollama-gemma2-2b-2026-10-01.json"
+    "see": "results/ollama-llama3.2-3b-2026-10-02-185740.json",
+    "do": "results/do-ollama-llama3.2-3b-2026-10-02-185740.json"
   }
 }

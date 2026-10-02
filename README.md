@@ -348,7 +348,9 @@ node bin/chart.mjs docs/cohort-1-local-small.json docs/cohort-1-local-small.svg
 Five open-weight models under 8B, pulled from the Ollama registry and served locally on an
 Apple M2 (16 GB, 100% GPU) at Ollama's default quantization. Scored 3× each at temperature 0;
 all three runs returned byte-identical code, so every spread below is 0 and the score is a
-measurement rather than a sample.
+measurement rather than a sample. The three-run evidence for every point is committed under
+`results/combined-ollama-*-2026-10-02-*.json`, and each point in `docs/cohort-1-local-small.json`
+names the report it came from.
 
 ![Adjusted score against parameter count for five local models under 8B. The Pareto frontier runs gemma2:2b at 8, deepseek-coder:6.7b at 18, to qwen2.5-coder:7b at 20. The reference solver sits at 100, far above every model.](docs/cohort-1-local-small.svg)
 
