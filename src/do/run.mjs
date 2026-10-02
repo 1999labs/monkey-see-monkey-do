@@ -25,7 +25,7 @@ import { complete } from "../adapters/registry.mjs";
 import { compileCandidate, runCandidate } from "../sandbox.mjs";
 import { fingerprint } from "../fingerprint.mjs";
 import { asModelView, isWon, reveal, inBounds } from "./minesweeper/board.mjs";
-import { replayBoard, capForTier, loadPublishedPool, POOL_SEED } from "./minesweeper/pool.mjs";
+import { replayBoard, capForTier, loadPublishedPool, classifyBoard, POOL_SEED } from "./minesweeper/pool.mjs";
 import { buildPrompt, promptDigest } from "./prompt.mjs";
 import { analyse, verifyMove } from "./minesweeper/oracle.mjs";
 import { scoreDo, randomBaseline } from "./score.mjs";
@@ -38,6 +38,82 @@ import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 
 export { REFERENCE_SOLVER_SOURCE };
+
+/**
+ * Measure Pool A's band distribution: replay every Pool A board in instrumented
+ * mode and tabulate how many boards of each shape tier landed in each band.
+ *
+ * A measurement pass, not a score. It runs AFTER the dry-run verdict so the
+ * gate is unaffected. On the full pool this is slow (300 boards, every oracle
+ * call allocates an array of rule labels); --per-tier N limits the cost.
+ *
+ * Pool B is not classified into bands. Bands are difficulty grades computed
+ * from what the solver needed to WIN; Pool B boards are the ones the solver
+ * could not finish, so they have no "what it needed to win" to grade.
+ *
+ * Per-band `initialRevealed` (cells revealed in the opening reveal) is also
+ * returned, so a later session can test the hypothesis that Band 1 is empty
+ * because the pool's openings are too large to leave any board with only
+ * Rule 2's basic counts and saturated sets to do. The hypothesis is recorded
+ * but NOT asserted: this measurement is only here to make the test cheap
+ * later.
+ *
+ * @returns {{
+ *   histogram: Record<tier, Record<1|2|3, number>>,
+ *   total: Record<1|2|3, number>,
+ *   initialRevealedMedian: Record<1|2|3, number|null>
+ * }}
+ */
+export const measurePoolABands = ({ boards, seed = POOL_SEED, onProgress } = {}) => {
+  const histogram = {};
+  const total = { 1: 0, 2: 0, 3: 0 };
+  const initialRevealedByBand = { 1: [], 2: [], 3: [] };
+  const poolA = boards.filter((b) => b.pool === "A");
+  for (const b of poolA) {
+    histogram[b.tier] ??= { 1: 0, 2: 0, 3: 0 };
+    const board = replayBoard(b.tier, b.attempt, seed);
+    const result = classifyBoard(board, { instrument: true });
+    if (result.band == null) continue; // unclassifiable; rare but possible on capped paths
+    histogram[b.tier][result.band]++;
+    total[result.band]++;
+    initialRevealedByBand[result.band].push(result.initialRevealed);
+    onProgress?.(poolA.indexOf(b), poolA.length, b);
+  }
+  const median = (xs) => {
+    if (xs.length === 0) return null;
+    const sorted = [...xs].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  };
+  return {
+    histogram,
+    total,
+    initialRevealedMedian: {
+      1: median(initialRevealedByBand[1]),
+      2: median(initialRevealedByBand[2]),
+      3: median(initialRevealedByBand[3]),
+    },
+  };
+};
+
+/** Print the band histogram in the same plain shape as the existing dry-run tables. */
+export const printBandHistogram = ({ histogram, total, initialRevealedMedian }) => {
+  console.log(`\n  ▒▒ BAND HISTOGRAM (Pool A, dry-run measurement) ▒▒`);
+  const bandLabels = { 1: "1 (easy)", 2: "2 (chained)", 3: "3 (wall)" };
+  const tiers = Object.keys(histogram).sort();
+  for (const tier of tiers) {
+    const row = histogram[tier];
+    const n = row[1] + row[2] + row[3];
+    console.log(`    ${tier.padEnd(14)} total ${String(n).padStart(3)}  ${bandLabels[1].padEnd(13)} ${row[1]}   ${bandLabels[2].padEnd(14)} ${row[2]}   ${bandLabels[3].padEnd(10)} ${row[3]}`);
+  }
+  console.log(`    ${"TOTAL".padEnd(14)}        ${String(total[1] + total[2] + total[3]).padStart(3)}  ${bandLabels[1].padEnd(13)} ${total[1]}   ${bandLabels[2].padEnd(14)} ${total[2]}   ${bandLabels[3].padEnd(10)} ${total[3]}`);
+  // Per-band median opening reveal. A hypothesis about Band 1's emptiness is
+  // that the pool's openings are large enough that no board leaves only Rule 2
+  // to do. This number is the test for that hypothesis, recorded here so a
+  // later session can compare without rerunning the full pool.
+  const fmt = (v) => (v === null ? "n/a" : String(v));
+  console.log(`    ${"median initialRevealed".padEnd(14)}           ${bandLabels[1].padEnd(13)} ${fmt(initialRevealedMedian[1])}   ${bandLabels[2].padEnd(14)} ${fmt(initialRevealedMedian[2])}   ${bandLabels[3].padEnd(10)} ${fmt(initialRevealedMedian[3])}`);
+};
 
 /** Is this a usable move? Anything else is a protocol violation, not a wrong guess. */
 const isLegalMove = (board, move) => {
@@ -260,6 +336,11 @@ MONKEY DO
   --i-cannot-control-temperature
                  required to score a model whose config says it cannot run at
                  temperature 0. The result is stamped as not comparable.
+
+  --bands          dry-run only: print the band histogram (Pool A boards per
+                 band on each shape tier). A measurement pass, not a score.
+                 Replays every Pool A board in instrumented mode. Slow on the
+                 full pool. Combine with --per-tier N for a faster subset.
 
   REPRODUCIBILITY (optional, but strongly recommended)
 
@@ -490,6 +571,22 @@ const main = async () => {
 
   const last = runs[runs.length - 1];
   if (config) temperatureNotice(config);
+
+  // The --bands measurement is a separate pass after the gate. It does not
+  // affect the score; the dry-run verdict above has already been printed. We
+  // run it only when --bands was passed AND dry-run was too, because the
+  // measurement uses the oracle and is meaningless against a model.
+  if (args.dryRun && args.bands) {
+    console.log(`\n  measuring Pool A bands (instrumented replay)...`);
+    const measurement = measurePoolABands({
+      boards: pool.boards,
+      seed: pool.seed,
+      onProgress: (n, total) => {
+        if (n % 50 === 0) console.log(`  band ${n + 1} of ${total}...`);
+      },
+    });
+    printBandHistogram(measurement);
+  }
   const report = buildDoReport({
     model,
     result: last,

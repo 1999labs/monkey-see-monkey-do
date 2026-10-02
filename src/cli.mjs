@@ -16,7 +16,7 @@ const VALUE_FLAGS = new Set([
 ]);
 const BOOL_FLAGS = new Set([
   "--interactive", "-i", "--no-fallback", "--dry-run",
-  TEMPERATURE_OVERRIDE_FLAG, "--help", "-h",
+  TEMPERATURE_OVERRIDE_FLAG, "--help", "-h", "--bands",
 ]);
 
 /**
@@ -46,6 +46,7 @@ export const parseArgs = (argv) => {
     config: null,
     perTier: null,
     dryRun: false,
+    bands: false,
     temperatureOverride: false,
   };
   const problems = [];
@@ -72,6 +73,7 @@ export const parseArgs = (argv) => {
       if (a === "--interactive" || a === "-i") args.interactive = true;
       else if (a === "--no-fallback") args.noFallback = true;
       else if (a === "--dry-run") args.dryRun = true;
+      else if (a === "--bands") args.bands = true;
       else if (a === TEMPERATURE_OVERRIDE_FLAG) args.temperatureOverride = true;
       continue;
     }

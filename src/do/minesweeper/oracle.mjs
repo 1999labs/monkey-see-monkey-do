@@ -32,6 +32,28 @@ import { inBounds } from "./board.mjs";
 /** Default node budget for the exact search. */
 export const DEFAULT_BUDGET = 20000;
 
+/**
+ * A /developer-typed phase of one analyse() call's reasoning. Bands derive from
+ * the WORST phase seen across a board's replay:
+ *
+ *   rule2  Rule 2 alone (saturated set). Band 1 (easy).
+ *   rule5  global mine count forced a cell. Still band 2 (chained).
+ *   rule3  subset elimination. Band 2 (chained).
+ *   search exhaustive consistency check. Band 3 (wall).
+ *
+ * Order matters in worstPhase: rule2 < rule5 = rule3 < search. Rule 5 is not
+ * strictly weaker than Rule 3 in general, but neither dominates Band 1, so
+ * either being present moves a board from Band 1 to Band 2.
+ */
+export const PHASE_RANK = { rule2: 0, rule5: 1, rule3: 1, search: 2 };
+
+const worstPhase = (rules) => {
+  if (!rules || rules.length === 0) return "rule2"; // propagation fixed point with no decision — shouldn't happen because we only call this when a cell was decided
+  let worstRule = rules[0].rule;
+  for (let i = 1; i < rules.length; i++) if (PHASE_RANK[rules[i].rule] > PHASE_RANK[worstRule]) worstRule = rules[i].rule;
+  return worstRule;
+};
+
 /** A cell as seen by the reasoning code: a flat index, for Set speed. */
 const idx = (r, c, cols) => r * cols + c;
 const rowOf = (i, cols) => Math.floor(i / cols);
@@ -136,22 +158,37 @@ const buildConstraints = (grid, rows, cols, totalMines, safe, mines) => {
  *   Rule 2  saturated set     need === 0, or need === set size
  *   Rule 3  subset removal   A's set inside B's set transfers the difference
  *   Rule 5  global count     all remaining mines are accounted for
+ *
+ * `instrument` (optional) records which rule forced each newly-decided cell.
+ * Used by Phase 1 band classification; absent in normal solves, where the
+ * cost would be pointless. Cells already in safe/mines when propagate starts
+ * are NOT recorded — the caller cares about decisions made THIS call, not the
+ * history. Each entry is { cell, rule } with rule in {"rule2","rule3","rule5"}.
  */
-const propagate = (grid, rows, cols, totalMines, safe, mines) => {
+const propagate = (grid, rows, cols, totalMines, safe, mines, instrument = null) => {
   for (let pass = 0; pass < 200; pass++) {
     let changed = false;
     const cons = buildConstraints(grid, rows, cols, totalMines, safe, mines);
     const refined = cons.map((c) => refine(c, safe, mines));
 
-    for (const { need, set, list } of refined) {
+    for (let i = 0; i < refined.length; i++) {
+      const { need, set, list, global } = refined[i];
       if (need < 0 || need > list.length) return false; // contradiction
       if (list.length === 0) continue;
       // Rule 2. This is the workhorse: it resolves most of every position.
       if (need === 0) {
-        for (const cell of list) safe.add(cell);
+        for (const cell of list) {
+          const fresh = !safe.has(cell);
+          safe.add(cell);
+          if (fresh && instrument) instrument.push({ cell, rule: global ? "rule5" : "rule2" });
+        }
         changed = true;
       } else if (need === list.length) {
-        for (const cell of list) mines.add(cell);
+        for (const cell of list) {
+          const fresh = !mines.has(cell);
+          mines.add(cell);
+          if (fresh && instrument) instrument.push({ cell, rule: global ? "rule5" : "rule2" });
+        }
         changed = true;
       }
     }
@@ -179,10 +216,18 @@ const propagate = (grid, rows, cols, totalMines, safe, mines) => {
         if (rest.length === 0) continue;
         if (restNeed < 0 || restNeed > rest.length) return false; // contradiction
         if (restNeed === 0) {
-          for (const cell of rest) safe.add(cell);
+          for (const cell of rest) {
+            const fresh = !safe.has(cell);
+            safe.add(cell);
+            if (fresh && instrument) instrument.push({ cell, rule: "rule3" });
+          }
           changed = true;
         } else if (restNeed === rest.length) {
-          for (const cell of rest) mines.add(cell);
+          for (const cell of rest) {
+            const fresh = !mines.has(cell);
+            mines.add(cell);
+            if (fresh && instrument) instrument.push({ cell, rule: "rule3" });
+          }
           changed = true;
         }
       }
@@ -338,9 +383,16 @@ export const provablySafe = (grid, rows, cols, totalMines, { budget = DEFAULT_BU
  * provablySafe. Inferring it afterwards by re-running the oracle and guessing
  * would defeat the purpose.
  *
- * @returns {{ move: {row,col}|null, deducible: boolean, ambiguous: boolean, conclusive: boolean }}
+ * @returns {{ move: {row,col}|null, deducible: boolean, ambiguous: boolean, conclusive: boolean, phase?: Phase }}
+ *
+ * `phase` is recorded when `instrument: true` is passed. It is the WORST rule
+ * that fired during this call's propagation, plus `search` if the search
+ * produced the move. Bands are computed by `classifyBoard` from these phases
+ * across a whole replay. A call that did not need instrumentation returns the
+ * same shape with no `phase` field, so existing callers (provablySafe,
+ * verifyMove) are unchanged.
  */
-export const analyse = (grid, rows, cols, totalMines, { budget = DEFAULT_BUDGET } = {}) => {
+export const analyse = (grid, rows, cols, totalMines, { budget = DEFAULT_BUDGET, instrument = false } = {}) => {
   const inconclusive = { move: null, deducible: false, ambiguous: false, conclusive: false };
   // Refuse an impossible position rather than reason about it. See
   // isSolvablePosition: a -1 in the grid means a mine was clicked, which ends
@@ -349,7 +401,11 @@ export const analyse = (grid, rows, cols, totalMines, { budget = DEFAULT_BUDGET 
 
   const safe = new Set();
   const mines = new Set();
-  if (!propagate(grid, rows, cols, totalMines, safe, mines)) return inconclusive;
+  // A flat list of rule labels, in the order they fired. Worst-of determines
+  // the phase. Empty list means propagation made no decision — the search did,
+  // or the position was inconclusive.
+  const rules = instrument ? [] : null;
+  if (!propagate(grid, rows, cols, totalMines, safe, mines, rules)) return inconclusive;
 
   // A cell propagation already proved safe is the cheapest correct answer.
   // Ascending index order keeps the oracle deterministic, which the published
@@ -361,6 +417,7 @@ export const analyse = (grid, rows, cols, totalMines, { budget = DEFAULT_BUDGET 
       deducible: true,
       ambiguous: false,
       conclusive: true,
+      ...(instrument ? { phase: worstPhase(rules) } : {}),
     };
   }
 
@@ -409,6 +466,10 @@ export const analyse = (grid, rows, cols, totalMines, { budget = DEFAULT_BUDGET 
         deducible: true,
         ambiguous: false,
         conclusive: true,
+        // The search produced the move. Propagation might have fired earlier
+        // rules to a fixpoint without a decision, but the move itself came
+        // from the search, which is the worst case for band classification.
+        ...(instrument ? { phase: "search" } : {}),
       };
     }
     // A `true` reached by running out of budget proves nothing. Checked after

@@ -24,7 +24,13 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import { makeRng, newBoard, openBoard, reveal, isWon, layoutDigest, TIERS } from "./board.mjs";
-import { analyse, DEFAULT_BUDGET } from "./oracle.mjs";
+import { analyse, DEFAULT_BUDGET, PHASE_RANK } from "./oracle.mjs";
+
+/** Internal: turn the numeric worst-case band (1, 2, 3) back into the phase label. */
+const phaseToLabel = (rank) => {
+  for (const [label, r] of Object.entries(PHASE_RANK)) if (r === rank) return label;
+  return "rule2";
+};
 
 /** The published seed. Changing it invalidates every score ever reported. */
 export const POOL_SEED = 0x5eed;
@@ -168,30 +174,65 @@ export const ENDGAME_HIDDEN_FRACTION = 0.4;
 /**
  * Play one board to completion with the oracle, and classify it.
  *
+ * @param {object} board
+ * @param {{maxCalls?: number, budget?: number, instrument?: boolean}} opts
+ *   instrument: if true, every oracle call is asked for its `phase`, and the
+ *   board's band is reported alongside the existing fields. Used by Phase 1
+ *   band classification; default off so the pool generator stays fast.
+ *
  * @returns {{
  *   pool: "A"|"B"|null, won: boolean, calls: number,
  *   initialRevealed: number, stalledAt: number|null,
- *   isEndgame: boolean, hiddenAtStall: number|null
+ *   isEndgame: boolean, hiddenAtStall: number|null,
+ *   band?: 1|2|3, worstPhase?: "rule2"|"rule5"|"rule3"|"search"
  * }}
  *   pool === null means "unclassifiable" — the oracle ran out of budget, or the
  *   board was already won before any move. Such a board is not used.
+ *   `band` and `worstPhase` are present only when instrument was true; they are
+ *   meaningless on a stalled or unclassifiable board and may be absent.
  */
-export const classifyBoard = (board, { maxCalls, budget } = {}) => {
+export const classifyBoard = (board, { maxCalls, budget, instrument = false } = {}) => {
   // Default to the size-derived cap. An explicit maxCalls overrides it, which
   // tests use to exercise the capped path deliberately.
   const limit = maxCalls ?? callsFor(board.rows, board.cols, board.totalMines);
+  const phaseRank = { rule2: 1, rule5: 2, rule3: 2, search: 3 };
+  let worst = 0; // 0 = nothing decided yet; maps to "rule2" by default if board somehow finishes with no instrumentation
   let calls = 0;
   let initialRevealed = 0;
   for (let r = 0; r < board.rows; r++) for (let c = 0; c < board.cols; c++) if (board.revealed[r][c]) initialRevealed++;
 
   while (calls < limit) {
     if (isWon(board)) {
-      return { pool: "A", won: true, calls, initialRevealed, stalledAt: null, isEndgame: true, hiddenAtStall: 0 };
+      return {
+        pool: "A",
+        won: true,
+        calls,
+        initialRevealed,
+        stalledAt: null,
+        isEndgame: true,
+        hiddenAtStall: 0,
+        ...(instrument ? { band: worst === 0 ? 1 : worst, worstPhase: worst === 0 ? "rule2" : phaseToLabel(worst) } : {}),
+      };
     }
 
-    const verdict = analyse(board.visible, board.rows, board.cols, board.totalMines, budget ? { budget } : {});
+    const verdict = analyse(
+      board.visible,
+      board.rows,
+      board.cols,
+      board.totalMines,
+      { ...(budget ? { budget } : {}), ...(instrument ? { instrument: true } : {}) }
+    );
     if (!verdict.conclusive) {
-      return { pool: null, won: false, calls, initialRevealed, stalledAt: calls, isEndgame: false, hiddenAtStall: null };
+      return {
+        pool: null,
+        won: false,
+        calls,
+        initialRevealed,
+        stalledAt: calls,
+        isEndgame: false,
+        hiddenAtStall: null,
+        ...(instrument ? { band: worst === 0 ? 1 : worst, worstPhase: worst === 0 ? "rule2" : phaseToLabel(worst) } : {}),
+      };
     }
     if (verdict.deducible) {
       // The oracle is ground truth; it cannot return a mine. This guard exists so
@@ -199,6 +240,10 @@ export const classifyBoard = (board, { maxCalls, budget } = {}) => {
       // failure rather than as a silently corrupt board.
       if (board.mines[verdict.move.row][verdict.move.col]) {
         throw new Error("oracle returned a mine — refusing to classify a board it cannot reason about");
+      }
+      if (instrument && verdict.phase) {
+        const r = phaseRank[verdict.phase];
+        if (r > worst) worst = r;
       }
       reveal(board, verdict.move.row, verdict.move.col);
       calls++;
@@ -215,6 +260,7 @@ export const classifyBoard = (board, { maxCalls, budget } = {}) => {
       stalledAt: calls,
       isEndgame: hidden <= ENDGAME_HIDDEN_FRACTION,
       hiddenAtStall: Number(hidden.toFixed(4)),
+      ...(instrument ? { band: worst === 0 ? 1 : worst, worstPhase: worst === 0 ? "rule2" : phaseToLabel(worst) } : {}),
     };
   }
   // Ran out of calls without finishing. The oracle should not need this many on
@@ -229,6 +275,7 @@ export const classifyBoard = (board, { maxCalls, budget } = {}) => {
     hiddenAtStall: null,
     capped: true,
     callLimit: limit,
+    ...(instrument ? { band: worst === 0 ? 1 : worst, worstPhase: worst === 0 ? "rule2" : phaseToLabel(worst) } : {}),
   };
 };
 
