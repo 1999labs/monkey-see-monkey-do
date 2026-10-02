@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, mkdirSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -174,4 +174,41 @@ test("the acceptance gate rehearses end to end and tells a strong model from a w
   assert.equal(r.code, 1, "an unmet criterion fails the rehearsal too");
   assert.deepEqual(report.models.strong.see, [50, 50]);
   assert.ok(report.models.weak.see.every((t) => t < 30), `a surface-fit strategy should land near the naive band: ${report.models.weak.see}`);
+});
+
+test("a CLEAN rehearsal has its own exit code, distinct from PASS and from failure", async () => {
+  // The regression: every criterion clearing under --quick exited 0, so a
+  // wrapper reading exit codes could not tell a rehearsal from a passed gate.
+  const dir = mkdtempSync(join(tmpdir(), "md-cli-accept-clean-"));
+  const r = await run("bin/acceptance.mjs", [
+    "--strong", "openrouter/stub-strong", "--weak", "openrouter/stub-weak",
+    "--quick", "--per-tier", "1", "--runs", "3", "--key", "sk-test", "--out", dir,
+  ]);
+  const report = readReport(dir, "acceptance-");
+  assert.equal(report.verdict, "REHEARSAL", "quick still never passes");
+  assert.ok(report.criteria.every((c) => c.ok), "every criterion clears at three runs on the stub pair");
+  assert.equal(r.code, 2, "0 is a PASS, 1 is a failure, 2 is a clean rehearsal");
+});
+
+test("the runners execute from a repo path containing a space", async () => {
+  // The regression: the main guard compared import.meta.url against a
+  // `file://${argv[1]}` template. A repo checked out under a path like
+  // "My Code" needs percent-encoding in that URL; the template produced a
+  // different string, the guard read false, and every runner printed nothing
+  // and exited 0. A space-path copy of the working tree proves the guard fires.
+  const dir = mkdtempSync(join(tmpdir(), "md space-")) + "/My Code";
+  mkdirSync(dir, { recursive: true });
+  cpSync(ROOT + "/src", join(dir, "src"), { recursive: true });
+  cpSync(ROOT + "/package.json", join(dir, "package.json"));
+  const r = await new Promise((resolve) => {
+    const child = spawn(process.execPath, [join(dir, "src/do/run.mjs"), "--dry-run", "--per-tier", "1", "--out", dir], { cwd: dir });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => (stdout += d));
+    child.stderr.on("data", (d) => (stderr += d));
+    child.on("close", (code) => resolve({ code, stdout, stderr }));
+  });
+  assert.equal(r.code, 0, `the dry run must execute from a spaced path:\n${r.stdout}\n${r.stderr}`);
+  assert.match(r.stdout, /PASS/);
+  assert.match(r.stdout, /50\/50/);
 });

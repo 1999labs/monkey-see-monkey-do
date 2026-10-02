@@ -62,7 +62,10 @@ MONKEY SEE / MONKEY DO · acceptance gate (publication criteria)
   --weak MODEL     a small model (e.g. ollama/qwen2.5-coder:7b)
   --runs N         runs per model (default 3; the gate requires 3)
   --quick          rehearsal: skip pool regeneration, play --per-tier boards.
-                   A quick run never reports the gate as passed.
+                   A quick run never reports the gate as passed. Every
+                   criterion clearing exits 2, so a wrapper reading exit
+                   codes can tell a clean rehearsal (2) from a passed gate (0)
+                   and from a failure (1).
   --per-tier N     with --quick, boards per tier per pool
   --config FILE    model registry (default config/models.json)
   --seed, --only-provider, --no-fallback, --key   as for run-all
@@ -181,5 +184,8 @@ function finish() {
     `\n  ${passed ? "\x1b[32m\x1b[1mGATE PASSED\x1b[0m — the suite may be published." : quick ? "\x1b[33mREHEARSAL\x1b[0m — rerun without --quick for a real verdict." : "\x1b[31m\x1b[1mGATE FAILED\x1b[0m — do not publish."}`
   );
   console.log(`  ${path}\n`);
-  process.exit(passed || (quick && criteria.every((c) => c.ok)) ? 0 : 1);
+  // Three outcomes, three exit codes: 0 PASS, 2 a clean rehearsal (all
+  // criteria cleared but --quick), 1 anything else. A wrapper reading exit
+  // codes used to be unable to tell a clean rehearsal from a passed gate.
+  process.exit(passed ? 0 : quick && criteria.every((c) => c.ok) ? 2 : 1);
 }

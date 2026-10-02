@@ -56,7 +56,11 @@ export const readDotenvKey = (text, envName) => {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     } else {
-      value = value.replace(/\s+#.*$/, "");
+      // API keys do not contain "#", so a trailing comment is stripped whether
+      // or not it is preceded by a space: "KEY=sk-foo#staging" used to keep
+      // "#staging" in the key, and the resulting 401 surfaced as an
+      // auth_failure with no hint that .env parsing had caused it.
+      value = value.replace(/\s*#.*$/, "");
     }
     return value.trim() || null;
   }
@@ -98,6 +102,10 @@ export const promptForKey = (timeoutMs = 5 * 60 * 1000) =>
       process.stdout.write("\nTimed out waiting for input.\n");
       finish("");
     }, timeoutMs);
+    // A closed stdin (Ctrl-D, or --interactive in a non-TTY pipeline) emits
+    // "close" without the question's callback ever firing. Without this, the
+    // prompt sat silent for the remaining minutes of its own timeout.
+    rl.on("close", () => finish(""));
     rl.question("", (answer) => finish(String(answer).trim()));
   });
 

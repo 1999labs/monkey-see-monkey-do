@@ -34,6 +34,8 @@ import { describeCallFailure } from "../call-failure.mjs";
 import { buildDoReport, writeDoReport, LIMITATIONS } from "../report.mjs";
 import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "../cli.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "./reference-solver.mjs";
+import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
 
 export { REFERENCE_SOLVER_SOURCE };
 
@@ -515,7 +517,22 @@ const main = async () => {
   if (args.dryRun && !dryRunVerdict(last).ok) process.exit(1);
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// True when this module is the process's entry script. pathToFileURL, not a
+// template: a repo path containing a space (or any character that needs
+// percent-encoding) makes `file://${argv[1]}` a different string from
+// import.meta.url, the guard read false, and the script printed nothing and
+// exited 0. realpath, because argv[1] may be a symlinked path (macOS /var ->
+// /private/var) while import.meta.url always carries the real one.
+// The imports live at the top of the file with the others.
+const isMain = (() => {
+  try {
+    return Boolean(process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href);
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
   main().catch((err) => {
     console.error(`\n  Something went wrong: ${err?.message ?? err}\n`);
     process.exit(1);

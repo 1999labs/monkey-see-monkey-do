@@ -282,7 +282,11 @@ export const listProviders = async (model, { apiKeyEnv = "OPENROUTER_API_KEY", f
   // the endpoint list. This broke for every model id containing a slash, which
   // is nearly all of them. Only the path is interpolated, and the model id is
   // attacker-controlled only insofar as it comes from a config file, so encode
-  // the segments instead: keep the single slash, escape everything else.
+  // the segments instead: keep the single slash, escape everything else. The
+  // colon of a ":variant" id survives as %3A, which the live API also accepts
+  // (verified: "deepseek/deepseek-v4.1-flash:free" returns 200 with its own,
+  // possibly empty, endpoint list — an empty list is a real answer, meaning no
+  // provider is currently serving that variant).
   const encoded = String(model)
     .split("/")
     .map((part) => encodeURIComponent(part))

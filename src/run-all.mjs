@@ -19,6 +19,8 @@ import { reproducibility, printVerdict } from "./fingerprint.mjs";
 import { runDo, loadPool, printDoRun } from "./do/run.mjs";
 import { randomBaseline, CONFIDENT_ERRORS } from "./do/score.mjs";
 import { adjustedTotal } from "./adjusted.mjs";
+import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
 import {
   buildReport,
   writeReport,
@@ -306,7 +308,22 @@ const main = async () => {
   console.log(`  combined report: ${combinedPath}\n`);
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// True when this module is the process's entry script. pathToFileURL, not a
+// template: a repo path containing a space (or any character that needs
+// percent-encoding) makes `file://${argv[1]}` a different string from
+// import.meta.url, the guard read false, and the script printed nothing and
+// exited 0. realpath, because argv[1] may be a symlinked path (macOS /var ->
+// /private/var) while import.meta.url always carries the real one.
+// The imports live at the top of the file with the others.
+const isMain = (() => {
+  try {
+    return Boolean(process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href);
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
   main().catch((err) => {
     console.error(`\n  Something went wrong: ${err?.message ?? err}\n`);
     process.exit(1);

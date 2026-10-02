@@ -812,13 +812,27 @@ test("Messages: sends x-api-key and anthropic-version, never Bearer", async () =
   let headers;
   const fetchImpl = async (url, init) => {
     headers = init.headers;
-    return jsonResponse(messagesBody("x"));
+    return jsonResponse(messagesBody("function solve(b,m){return null}"));
   };
   await anthropicComplete(messagesConfig(fetchImpl), "PROMPT");
   assert.equal(headers["x-api-key"], "test-key-1234");
   assert.equal(headers["anthropic-version"], "2023-06-01");
   assert.equal(headers.authorization, undefined, "this dialect does not use Bearer");
   assert.equal(headers["content-type"], "application/json");
+});
+
+test("Messages: a hand-written entry with no version configured defaults instead of a 400", async () => {
+  // The header is required by the dialect, but only the presets set it — a
+  // bare api.anthropic.com entry used to fail with an opaque HTTP 400.
+  let headers;
+  const fetchImpl = async (url, init) => {
+    headers = init.headers;
+    return jsonResponse(messagesBody("function solve(b,m){return null}"));
+  };
+  await anthropicComplete(messagesConfig(fetchImpl, { anthropicVersion: undefined }), "PROMPT");
+  assert.equal(headers["anthropic-version"], "2023-06-01", "the default fills the gap");
+  await anthropicComplete(messagesConfig(fetchImpl, { anthropicVersion: "2025-09-01" }), "PROMPT");
+  assert.equal(headers["anthropic-version"], "2025-09-01", "an explicit value still wins");
 });
 
 test("Messages: a thinking block is never read as the answer", async () => {

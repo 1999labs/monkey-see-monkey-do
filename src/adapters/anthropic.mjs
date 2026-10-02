@@ -64,6 +64,12 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
   const { endpoint, model, headers = {}, fetchImpl = fetch, maxRetries = 2 } = config;
   const budget = config.timeoutMs ?? timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+  // The Messages dialect REQUIRES this header. The gogo/zen presets set it
+  // explicitly, but a hand-written api.anthropic.com entry with nothing
+  // configured used to fail with an opaque HTTP 400 instead of a setup error.
+  // The default fills that gap; an explicit anthropicVersion still wins.
+  const anthropicVersion = config.anthropicVersion ?? "2023-06-01";
+
   const apiKeyEnv = config.apiKeyEnv;
   const apiKey = apiKeyEnv ? process.env[apiKeyEnv] : null;
   if (apiKeyEnv && !apiKey) {
@@ -107,7 +113,7 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
           "content-type": "application/json",
           ...(apiKey ? { "x-api-key": apiKey } : {}),
           ...headers,
-          ...(config.anthropicVersion ? { "anthropic-version": config.anthropicVersion } : {}),
+          "anthropic-version": anthropicVersion,
         },
         body: JSON.stringify(body),
         signal: ac.signal,

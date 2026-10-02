@@ -175,7 +175,10 @@ test("readDotenvKey handles export, inline comments, and a blank value", () => {
   assert.equal(readDotenvKey("FOO='sk-2'\n", "FOO"), "sk-2");
   assert.equal(readDotenvKey("# copied from .env.example\nFOO=\n", "FOO"), null, "an empty value is no key");
   assert.equal(readDotenvKey("BAR=sk-3\n", "FOO"), null, "another variable is not this key");
-  assert.equal(readDotenvKey("sk-bare-token\n", "FOO"), "sk-bare-token", "a lone bare token is still accepted");
+  assert.equal(readDotenvKey("«redacted:sk-…»\n", "FOO"), "«redacted:sk-…»", "a lone bare token is still accepted");
+  // Unspaced trailing comments: "KEY=sk-foo#staging" used to keep "#staging"
+  // in the key, and the resulting 401 surfaced as an unexplained auth failure.
+  assert.equal(readDotenvKey("FOO=sk-4#staging\n", "FOO"), "sk-4", "API keys do not contain #");
 });
 
 test("the key file lives outside the repository", () => {

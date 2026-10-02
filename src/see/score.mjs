@@ -36,24 +36,30 @@ const attempt = (fn, input) => {
   }
 };
 
-const scoreCases = (fn, inputs, expectedFor) => {
+// Score every case exactly once. The first version ran each held-out case
+// TWICE — once for the totals and once per bucket — so a nondeterministic
+// submission (Math.random and Date are available to model code) could return
+// a per-bucket breakdown that disagreed with its own totals. Each case is now
+// scored once and bucketed from that single pass.
+const scoreCases = (fn, cases, expectedFor) => {
   let correct = 0;
   let threw = 0;
   const failures = [];
-  for (const input of inputs) {
+  const perCase = [];
+  for (const { bucket, input } of cases) {
     const r = attempt(fn, input);
     if (!r.ok) {
       threw++;
+      perCase.push({ bucket, ok: false });
       failures.push({ input, expected: expectedFor(input), got: "<threw>" });
       continue;
     }
-    if (isDeepEqual(r.value, expectedFor(input))) {
-      correct++;
-    } else {
-      failures.push({ input, expected: expectedFor(input), got: r.value });
-    }
+    const ok = isDeepEqual(r.value, expectedFor(input));
+    perCase.push({ bucket, ok });
+    if (ok) correct++;
+    else failures.push({ input, expected: expectedFor(input), got: r.value });
   }
-  return { total: inputs.length, correct, threw, failures };
+  return { total: cases.length, correct, threw, failures, perCase };
 };
 
 // Flatten a task's held-out buckets into an ordered case list.
@@ -63,13 +69,12 @@ export const heldOutCases = (task) =>
 // Score one task with a candidate function. `fn` is the function a model wrote.
 export const scoreTask = (task, fn) => {
   const cases = heldOutCases(task);
-  const result = scoreCases(fn, cases.map((c) => c.input), task.reference);
+  const result = scoreCases(fn, cases, task.reference);
 
   const perBucket = {};
   for (const bucket of BUCKETS) {
-    const bucketCases = cases.filter((c) => c.bucket === bucket);
-    const r = scoreCases(fn, bucketCases.map((c) => c.input), task.reference);
-    perBucket[bucket] = { correct: r.correct, total: r.total };
+    const rows = result.perCase.filter((c) => c.bucket === bucket);
+    perBucket[bucket] = { correct: rows.filter((c) => c.ok).length, total: rows.length };
   }
 
   return {

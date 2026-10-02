@@ -72,6 +72,25 @@ test("a throwing candidate fails every case but does not crash the harness", () 
   }
 });
 
+test("per-bucket counts come from the same pass as the totals", () => {
+  // The regression: each held-out case used to be scored TWICE (totals, then
+  // per bucket), so a nondeterministic submission could return a breakdown
+  // that disagreed with its own totals. This candidate answers correctly
+  // except on every third call, and the sums must still add up.
+  let calls = 0;
+  const flaky = (n) => {
+    calls++;
+    if (calls % 3 === 0) return -999;
+    return taskA.reference(n);
+  };
+  const r = scoreTask(taskA, flaky);
+  assert.equal(r.total, 50);
+  const bucketSum = Object.values(r.perBucket).reduce((sum, b) => sum + b.correct, 0);
+  assert.equal(bucketSum, r.correct, "per-bucket correct must sum to the total's correct");
+  const bucketTotal = Object.values(r.perBucket).reduce((sum, b) => sum + b.total, 0);
+  assert.equal(bucketTotal, 50);
+});
+
 test("undefined is not treated as equal to null", () => {
   const returnsUndefined = () => undefined;
   const r = scoreTask(taskC, returnsUndefined);
