@@ -11,10 +11,17 @@
 // DO history: the first DO prompt (digest 69200346a3f1…) called solve(board)
 // with no mine count and no stated indexing. It was replaced before any model
 // was scored; see src/do/prompt.mjs.
+//
+// Second digest f2f520b6f296… defined the current solve contract (mine count,
+// zero-based indexing) and scored the Cohort 1 reports under suite 0.2.0.
+//
+// Third digest b7a62fe68203… (suite 0.3.0) adds the verdict protocol: a second
+// function, verdict(position, claims, mines), scored on Pool B. Scores recorded
+// under either earlier digest describe a different DO and are not comparable.
 
 export const RECORDED_DIGESTS = {
   A: "043dd2b70723e976d24c623ae66b9304e7d299d6d37e38198f86a8b0b113e3da",
   B: "4f200996b3e215e5146455aba6ab22135e8eae4a0fffe48541c110b6057c18fc",
   C: "2e2bcf3413e5f02ca5ebbd05c2a367fbd90ba22dce5c5a6f529c62ee5186a728",
-  DO: "f2f520b6f29679abaa8ab0b659bb26c66358dbea912cde637cf29b027e28173c",
+  DO: "b7a62fe682039067b6f1f0eef8e34abd2ea4cab574d315da75fb053b0d6b14d8",
 };

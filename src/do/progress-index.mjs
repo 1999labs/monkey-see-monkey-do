@@ -19,7 +19,7 @@
 // not have, and which the 50-point score has no room to express.
 //
 // It is deliberately not part of the 50. The weights are hand-chosen and frozen
-// at suite version 0.2.0, and the reference solver's 50/50 is the anchor of the
+// at suite version 0.3.0, and the reference solver's 50/50 is the anchor of the
 // publication gate. Changing the split would invalidate every report already
 // written and move the oracle's score off its own calibration. This file adds
 // information without moving any existing number.

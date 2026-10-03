@@ -39,7 +39,7 @@ export const LIMITATIONS = [
   "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
   "Not comparable to SWE-bench, HumanEval, or any external leaderboard. Different scale, different construction; never present these numbers alongside one.",
   "DO has residual contamination risk. Constraint propagation with search is a textbook algorithm, so a high DO score shows the model can produce a correct solver, not that it deduced one afresh.",
-  "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 0.2.0).",
+  "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 0.3.0).",
 ];
 
 /** A filesystem-safe, readable filename for a model id. */
@@ -388,6 +388,12 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
   },
 
   boardResults: result.boardResults,
+  // Per-board verdict failures (Phase 3). Absent/null when every verdict
+  // call succeeded. When present, each entry is the truncated error string
+  // from `runVerdictCandidate` for that board key — a model can submit a
+  // working solve with a broken verdict, and the broken verdict is named
+  // here rather than hidden behind a missing score entry.
+  verdictErrors: result.verdictErrors ?? null,
 
   limitations: LIMITATIONS,
 
@@ -403,6 +409,9 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
     "no_response means the model call produced nothing, so no board was played. If solver.callFailure",
     "  is set, the score is 0 for want of an answer and is NOT evidence about the model. A timeout",
     "  there describes the route (endpoint, provider, budget), not the reasoning.",
+    "verdictErrors (Phase 3) lists per-board failures of the model's verdict(position, claims, mines)",
+    "  function. A model that ships a broken verdict is not fatal to the run — that board's",
+    "  verdict points are zeroed — but the failure is named here.",
   ],
 });
 

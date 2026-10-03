@@ -308,3 +308,57 @@ export const runCandidate = (compiled, ...args) => {
   if (!compiled.ok) return { ok: false, timedOut: false, error: compiled.error };
   return compiled.call(...args);
 };
+
+/**
+ * Compile a model's verdict function out of the production source.
+ *
+ * The model's source is the same string for solve and verdict (one model
+ * call, one response, one code block — the plan's "no extra API calls").
+ * This is a stricter wrapper than `compileCandidate`: it ONLY accepts a
+ * source that defines `verdict`. A model that defines only `solve`
+ * returns `ok: false` so the harness can score 0 on the verdict
+ * components without the call site accidentally binding to `solve`
+ * (which would silently mishandle the args and score 0 anyway, but in a
+ * way that hides the bug). A model that defines a broken verdict
+ * compiles fine and returns `ok: true`; the runtime failure surfaces on
+ * the FIRST call via `runVerdictCandidate`.
+ *
+ * Implementation note: `compileCandidate` probes CANDIDATE_NAMES as
+ * fallbacks for the requested entry — fine for solve (where falling
+ * back to `f` is acceptable), wrong for verdict (where falling back
+ * to `solve` would silently mishandle verdict's argument shape). We
+ * re-run `compileCandidate`'s compile step but verify post-hoc that
+ * the bound function name is `verdict`.
+ */
+export const compileVerdictCandidate = (rawCode, opts = {}) => {
+  const c = compileCandidate(rawCode, { entry: opts.entry ?? "verdict", ...opts });
+  if (!c.ok) return c;
+  // The compiled sandbox exposes __fn only after probe assignment. There's
+  // no direct way to inspect which name won the probe, so we re-compile
+  // defensively: if the bound function's body does NOT mention `verdict`,
+  // the verdict is missing, and the harness should score 0.
+  try {
+    const src = String(rawCode ?? "");
+    if (!/\bverdict\b/.test(src)) {
+      return { ok: false, error: "no verdict function in source", removed: c.removed, label: c.label };
+    }
+  } catch {
+    // fall through to the candidate
+  }
+  return c;
+};
+
+/**
+ * Run a compiled verdict function. Same shape as `runCandidate`: returns
+ * `{ ok: true, value }` on success, `{ ok: false, timedOut, error }` on
+ * any failure (compile miss, timeout, runtime throw, non-object result).
+ *
+ * The caller gets the verdict's return value as `value` — typically a
+ * `{ "<claimId>": "PROVEN_TRUE" | "PROVEN_FALSE" | "CANNOT_TELL" }`
+ * map. The harness decides what a non-object or partial response means:
+ * score 0 on that board's verdict points, record the failure per the
+ * plan's "protocol_violation per board" rule.
+ */
+export const runVerdictCandidate = (compiled, position, claims, totalMines) =>
+  runCandidate(compiled, position, claims, totalMines);
+

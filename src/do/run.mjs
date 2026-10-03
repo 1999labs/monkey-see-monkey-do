@@ -22,7 +22,7 @@
 //   stalled             hit the effort cap. A correct solver never should.
 
 import { complete } from "../adapters/registry.mjs";
-import { compileCandidate, runCandidate } from "../sandbox.mjs";
+import { compileCandidate, compileVerdictCandidate, runCandidate, runVerdictCandidate } from "../sandbox.mjs";
 import { fingerprint } from "../fingerprint.mjs";
 import { asModelView, isWon, reveal, inBounds } from "./minesweeper/board.mjs";
 import { replayBoard, capForTier, loadPublishedPool, classifyBoard, canonicalStuckPosition, sampleClaims, POOL_SEED } from "./minesweeper/pool.mjs";
@@ -280,21 +280,25 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
   const first = compileCandidate(completion.text, { entry: "solve" });
   const compileError = first.ok ? null : first.error;
   // The same source defines both `solve` and (in Phase 2) `verdict`. Compile
-  // them with separate entries so each pool board can use the model's
-  // solve to play and the model's verdict to score Pool B. Compiling the
-  // same source twice is the cheapest path: no sandbox re-architecture, and
-  // Phase 3's "extract verdict" work doesn't touch the existing solve path.
-  let verdictCompiled = null;
-  if (first.ok) {
-    const vTry = compileCandidate(completion.text, { entry: "verdict" });
-    if (vTry.ok) verdictCompiled = vTry;
-  }
+  // them with separate entries via the Phase 3 sandbox helpers
+  // `compileVerdictCandidate` / `runVerdictCandidate` so each Pool B board
+  // can use the model's solve to play and the model's verdict to score
+  // Pool B. A missing verdict is not fatal (the harness scores 0 on the
+  // verdict components); a broken verdict surfaces as a per-board
+  // protocol_violation, zeroing that board's verdict points but not the
+  // run.
+  const verdictCompiled = first.ok
+    ? compileVerdictCandidate(completion.text)
+    : null;
 
   // Per-board verdict answers, keyed by `${pool}:${tier}#${attempt}` — the
   // same key score.mjs uses to look up the model's claims. Built in the
   // same loop as boardResults so the sample set and the play set are tied
-  // to the same pool snapshot.
+  // to the same pool snapshot. Per-board verdict errors are tracked
+  // separately so the report can surface protocol_violation per the
+  // plan's Phase 3 contract.
   const verdictAnswers = {};
+  const verdictErrors = {};
   for (const [i, b] of boards.entries()) {
     onProgress?.(i, boards.length, b);
     if (!first.ok) {
@@ -316,15 +320,26 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
         // Pass only the claim fields verdict expects (id, row, col). The
         // model's verdict function does not need the classified status.
         const claimsForVerdict = sampled.map(({ id, row, col }) => ({ id, row, col }));
-        const result = runCandidate(verdictCompiled, { grid: pos.grid, rows: pos.rows, cols: pos.cols }, claimsForVerdict, pos.totalMines);
+        const result = runVerdictCandidate(
+          verdictCompiled,
+          { grid: pos.grid, rows: pos.rows, cols: pos.cols },
+          claimsForVerdict,
+          pos.totalMines,
+        );
+        // Per the plan, a verdict that throws or returns unusable output
+        // is a per-board protocol_violation: zero that board's verdict
+        // points (handled by the missing-key lookup in score.mjs) and
+        // surface the failure in the report. A non-object return, a
+        // wrong-type answer, or any sandbox error all count.
         if (result.ok && result.value && typeof result.value === "object") {
           verdictAnswers[key] = result.value;
+        } else {
+          verdictErrors[key] = result.error
+            ? String(result.error).slice(0, 200)
+            : "verdict returned a non-object answer";
         }
-      } catch {
-        // An exception in the model's verdict function zeroes that board's
-        // verdict points (the lookup misses → sound/sharp = false), but
-        // does not affect the rest of the run. The plan documents this
-        // shape for Phase 3.
+      } catch (err) {
+        verdictErrors[key] = String(err?.message ?? err).slice(0, 200);
       }
     }
   }
@@ -344,6 +359,13 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
     finishReason: completion.finishReason ?? null,
     responseFingerprint: fingerprint(completion.text),
     digest: promptDigest(),
+    // Per-board verdict errors. A non-empty map means at least one Pool B
+    // board's verdict call failed (throw, non-object answer, or sandbox
+    // timeout) and the harness scored that board's verdict components 0.
+    // The plan documents this as "protocol_violation per board": a model
+    // that submits a working solve with a broken verdict does not tank the
+    // run, but the broken verdict is named in the report.
+    verdictErrors: Object.keys(verdictErrors).length ? verdictErrors : null,
     dryRun,
   };
 };

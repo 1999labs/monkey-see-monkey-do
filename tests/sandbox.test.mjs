@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { compileCandidate, runCandidate, stripFences, stripModuleSyntax, DEFAULT_TIMEOUT_MS } from "../src/sandbox.mjs";
+import { compileCandidate, runCandidate, compileVerdictCandidate, runVerdictCandidate, stripFences, stripModuleSyntax, DEFAULT_TIMEOUT_MS } from "../src/sandbox.mjs";
 
 test("strips markdown fences in the shapes models actually emit", () => {
   assert.equal(stripFences("```javascript\nfunction f(n){return n}\n```"), "function f(n){return n}");
@@ -271,4 +271,81 @@ test("the entry name is probed first, so a helper called f cannot shadow solve",
 test("extra arguments reach the function", () => {
   const c = compileCandidate("function solve(board, mines) { return board.length + mines; }", { entry: "solve" });
   assert.equal(runCandidate(c, [[null], [null]], 5).value, 7);
+});
+
+// --- Phase 3: verdict extraction (sandbox exposes `verdict`) ---------------
+//
+// The model's source defines both `solve` and `verdict` in one response.
+// The sandbox exposes both via separate compile calls (entry: "solve" and
+// entry: "verdict") and runs them with different argument shapes.
+
+test("compileVerdictCandidate surfaces verdict from a source that defines both", () => {
+  const src = `function solve(board, mines) { return null; }
+  function verdict(position, claims, mines) {
+    var out = {};
+    for (var i = 0; i < claims.length; i++) out[claims[i].id] = "PROVEN_TRUE";
+    return out;
+  }`;
+  const c = compileVerdictCandidate(src);
+  assert.ok(c.ok, c.error);
+  const claims = [{ id: "a" }, { id: "b" }];
+  const result = runVerdictCandidate(c, { grid: [[1, null, null]], rows: 1, cols: 3 }, claims, 1);
+  assert.equal(result.ok, true);
+  // The verdict returns a fresh object literal inside the sandbox realm.
+  // Cross-realm objects don't share Object.prototype, so deepEqual (which
+  // is deepStrictEqual in modern Node) rejects on the prototype check.
+  // Comparing via JSON.stringify is the cross-realm-friendly assertion.
+  assert.equal(JSON.stringify(result.value), JSON.stringify({ a: "PROVEN_TRUE", b: "PROVEN_TRUE" }));
+});
+
+test("compileVerdictCandidate returns ok:false when verdict is missing", () => {
+  // The plan: "A missing `verdict` is not fatal: the model scores 0 on the
+  // verdict components, everything else as normal." The sandbox contract is
+  // the ok:false flag — the harness decides whether that's fatal.
+  const src = "function solve(board, mines) { return null; }";
+  const c = compileVerdictCandidate(src);
+  assert.equal(c.ok, false);
+});
+
+test("runVerdictCandidate reports a runtime throw as ok:false with the error", () => {
+  const src = `function verdict(position, claims, mines) { throw new Error("model bug"); }`;
+  const c = compileVerdictCandidate(src);
+  assert.ok(c.ok, c.error);
+  const result = runVerdictCandidate(c, { grid: [[null]], rows: 1, cols: 1 }, [{ id: "x" }], 0);
+  assert.equal(result.ok, false);
+  assert.equal(result.timedOut, false);
+  assert.match(result.error, /model bug/);
+});
+
+test("runVerdictCandidate returns the raw value, leaving usability to the harness", () => {
+  // The plan: "A `verdict` that throws or returns unusable output is a
+  // protocol_violation recorded per board." The sandbox surfaces the raw
+  // return — the harness's "non-object, partial answer, wrong shape"
+  // check is its own. This split lets the harness attach the per-board
+  // error to the report rather than burying it in a sandbox error string.
+  const src = `function verdict(position, claims, mines) { return 42; }`;
+  const c = compileVerdictCandidate(src);
+  assert.ok(c.ok, c.error);
+  const result = runVerdictCandidate(c, { grid: [[null]], rows: 1, cols: 1 }, [{ id: "x" }], 0);
+  assert.equal(result.ok, true);
+  assert.equal(result.value, 42);
+});
+
+test("runVerdictCandidate passes position, claims, totalMines in order", () => {
+  const src = `function verdict(position, claims, mines) {
+    return {
+      claimsCount: claims.length,
+      minesTotal: mines,
+      rows: position.rows,
+    };
+  }`;
+  const c = compileVerdictCandidate(src);
+  const result = runVerdictCandidate(
+    c,
+    { grid: [[1, null, null]], rows: 1, cols: 3 },
+    [{ id: "a" }, { id: "b" }],
+    7,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(JSON.stringify(result.value), JSON.stringify({ claimsCount: 2, minesTotal: 7, rows: 1 }));
 });
