@@ -258,8 +258,12 @@ const propagate = (grid, rows, cols, totalMines, safe, mines, instrument = null)
  *
  * Depth-first with propagation at every node. Cells are branched in ascending
  * index order so the search is deterministic.
+ *
+ * Exported for the verdict pool's cell classifier (Phase 2). The classifier
+ * uses the same machinery as `provablySafe`, so both paths share determinism,
+ * budget exhaustion semantics, and the proven-safety contract.
  */
-const isConsistent = (grid, rows, cols, totalMines, assumeSafe, assumeMines, budget) => {
+export const isConsistent = (grid, rows, cols, totalMines, assumeSafe, assumeMines, budget) => {
   // COPY the sets. This is not tidiness: cells added by propagate() are only
   // forced GIVEN the current branch's assumptions. If branch 1 assumed a cell
   // safe and propagation deduced others, those deductions do not survive into
@@ -516,6 +520,61 @@ export const verifyMove = (grid, rows, cols, totalMines, row, col, { budget = DE
     return { proven: true, conclusive: true };
   }
   return { proven: false, conclusive: !state.exhausted };
+};
+
+/**
+ * Classify one unknown cell at a stuck position, by exhaustion over every
+ * consistent mine completion. Three statuses, mutually exclusive:
+ *
+ *   provably_mine   the cell is a mine in EVERY consistent completion
+ *   provably_safe   the cell is safe in EVERY consistent completion (a mine
+ *                   in NONE)
+ *   mixed           some completion has a mine there, some have not
+ *
+ * Used by the verdict pool (Phase 2). A claim sampled at a cell that turns
+ * out to be `provably_mine` is decidable; PROVEN_FALSE on it is unsound,
+ * PROVEN_TRUE (asserting "this cell is provably a mine") and CANNOT_TELL
+ * are the sound answers. Symmetric for `provably_safe`. A `mixed` claim is
+ * only decidable as CANNOT_TELL — anything else is unsound.
+ *
+ * Built on `isConsistent` directly: one search with the cell forced mine
+ * (returns false → cell cannot be a mine → provably safe) and one with
+ * the cell forced safe (returns false → cell must be a mine). If both
+ * return true, the cell is `mixed`. The two searches are independent; a
+ * budget exhaustion on either is treated as inconclusive.
+ *
+ * @returns {{ status: "provably_mine"|"provably_safe"|"mixed"|"inconclusive" }}
+ */
+export const classifyCell = (grid, rows, cols, totalMines, row, col, { budget = DEFAULT_BUDGET } = {}) => {
+  if (!isSolvablePosition(grid, rows, cols)) return { status: "inconclusive" };
+  if (!inBounds({ rows, cols }, row, col) || !isUnknown(grid[row][col])) return { status: "inconclusive" };
+
+  const safe = new Set();
+  const mines = new Set();
+  if (!propagate(grid, rows, cols, totalMines, safe, mines)) return { status: "inconclusive" };
+
+  const cell = idx(row, col, cols);
+  // Propagation may have already decided this cell. Propagate's outputs are
+  // shared across both searches, so a cell already pinned to one side is
+  // decided for the verdict pool without running any search at all.
+  if (safe.has(cell)) return { status: "provably_safe" };
+  if (mines.has(cell)) return { status: "provably_mine" };
+
+  // Can the cell be a mine? If not, it is provably safe.
+  const stateMine = { remaining: budget, exhausted: false };
+  const consistentAsMine = isConsistent(grid, rows, cols, totalMines, safe, new Set([...mines, cell]), stateMine);
+  if (stateMine.exhausted) return { status: "inconclusive" };
+  if (!consistentAsMine) return { status: "provably_safe" };
+
+  // Can the cell be safe? If not, it is provably a mine. A separate budget:
+  // the two searches are independent and either can exhaust without the other
+  // finishing, so a single shared counter would double-count.
+  const stateSafe = { remaining: budget, exhausted: false };
+  const consistentAsSafe = isConsistent(grid, rows, cols, totalMines, new Set([...safe, cell]), mines, stateSafe);
+  if (stateSafe.exhausted) return { status: "inconclusive" };
+  if (!consistentAsSafe) return { status: "provably_mine" };
+
+  return { status: "mixed" };
 };
 
 /** The lowest-index unknown cell that no numbered constraint mentions, or null. */

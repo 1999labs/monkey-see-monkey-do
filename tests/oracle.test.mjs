@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { makeRng, newBoard, openBoard, reveal, isWon, TIERS } from "../src/do/minesweeper/board.mjs";
-import { provablySafe, DEFAULT_BUDGET } from "../src/do/minesweeper/oracle.mjs";
+import { provablySafe, classifyCell, DEFAULT_BUDGET } from "../src/do/minesweeper/oracle.mjs";
 
 // A grid written directly, so a test can state a position exactly.
 const gridOf = (rows) => rows;
@@ -114,6 +114,70 @@ test("flags are treated as unrevealed, carrying no authority", () => {
     provablySafe(plain, 2, 2, 1),
     "a flag must not change the reasoning"
   );
+});
+
+// --- classifyCell: the verdict pool's classifier (Phase 2) ----------------
+//
+// Hand-built tiny boards, one per status. Each position is small enough to
+// reason about by hand but exercises the same machinery as the published
+// pool (Rule 2, Rule 5, and the exhaustive search).
+
+test("classifyCell: a 1x3 with one numbered cell pins a mine and proves a cell safe", () => {
+  // [1, null, null]  totalMines = 1
+  //   (0,0) reveals 1, neighbour {(0,1)}. Rule 2: need=1, set size 1 → (0,1)
+  //   is a mine in every completion. Then by global count (1 mine total,
+  //   already at (0,1)), (0,2) cannot be a mine in any completion. So
+  //   (0,1) is provably_mine and (0,2) is provably_safe.
+  const g = gridOf([
+    [1, null, null],
+  ]);
+  assert.equal(classifyCell(g, 1, 3, 1, 0, 1).status, "provably_mine");
+  assert.equal(classifyCell(g, 1, 3, 1, 0, 2).status, "provably_safe");
+});
+
+test("classifyCell: a 1x2 with no information is mixed on both cells", () => {
+  // 1x2, all unknown, totalMines = 1. The mine could be on either cell, so
+  // both are mixed.
+  const g = gridOf([
+    [null, null],
+  ]);
+  assert.equal(classifyCell(g, 1, 2, 1, 0, 0).status, "mixed");
+  assert.equal(classifyCell(g, 1, 2, 1, 0, 1).status, "mixed");
+});
+
+test("classifyCell: a 2x2 with one mine has every cell mixed", () => {
+  // 2x2, all unknown, totalMines = 1. Symmetry: each cell is interchangeable
+  // with any other, so each is mixed.
+  const g = gridOf([
+    [null, null],
+    [null, null],
+  ]);
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 2; c++) {
+      assert.equal(classifyCell(g, 2, 2, 1, r, c).status, "mixed", `(${r},${c})`);
+    }
+  }
+});
+
+test("classifyCell: out-of-bounds and revealed cells return inconclusive", () => {
+  // (0,1) is revealed — a claim on a revealed cell is meaningless; the
+  // classifier reports inconclusive so the verdict checker skips it.
+  const g = gridOf([
+    [null, 1, null],
+  ]);
+  assert.equal(classifyCell(g, 1, 3, 1, 0, 1).status, "inconclusive");
+  assert.equal(classifyCell(g, 1, 3, 1, -1, 0).status, "inconclusive");
+  assert.equal(classifyCell(g, 1, 3, 1, 0, 5).status, "inconclusive");
+});
+
+test("classifyCell: a flagged cell is treated like unrevealed", () => {
+  // (0,1) is "F" — a player flag, no authority. The classifier ignores the
+  // flag exactly as it ignores null and reports the cell's true status.
+  const g = gridOf([
+    [1, "F", null],
+  ]);
+  assert.equal(classifyCell(g, 1, 3, 1, 0, 1).status, "provably_mine");
+  assert.equal(classifyCell(g, 1, 3, 1, 0, 2).status, "provably_safe");
 });
 
 // --- Properties, checked against real boards ----------------------------

@@ -24,7 +24,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import { makeRng, newBoard, openBoard, reveal, isWon, layoutDigest, TIERS } from "./board.mjs";
-import { analyse, DEFAULT_BUDGET, PHASE_RANK } from "./oracle.mjs";
+import { analyse, classifyCell, DEFAULT_BUDGET, PHASE_RANK } from "./oracle.mjs";
 
 /** Internal: turn the numeric worst-case band (1, 2, 3) back into the phase label.
  * Direct table — the band's rank (1=rule2 only, 2=rule3/rule5 fired, 3=search)
@@ -302,6 +302,117 @@ export const replayBoard = (tier, attempt, seed = POOL_SEED, boardSeed = seed) =
   const board = newBoard(tier, rng);
   openBoard(board, makeRng(boardSeed ^ (attempt * 0x85ebca6b)));
   return board;
+};
+
+/**
+ * The canonical stuck position a Pool B board reaches when the oracle plays
+ * every proven move it can. Independent of the model's play: the oracle is
+ * the only solver that "reaches" a Pool B position, so all paths that obey
+ * the prompt end here.
+ *
+ * Returns a copy of the visible grid at the stuck step, plus the total mine
+ * count (the model's only other input). The returned grid is independent of
+ * the input board — the input may continue to be mutated by other code.
+ *
+ * Used by the verdict pool's claim sampler (Phase 2). Pool A boards never
+ * reach a stuck step, so this is a no-op on Pool A (returns the position at
+ * `isWon`, which is the revealed-everything state — the claim sampler skips
+ * such positions).
+ *
+ * @returns {{ grid: number[][], rows: number, cols: number, totalMines: number, callsToStuck: number }}
+ */
+export const canonicalStuckPosition = ({ tier, attempt, pool }, seed = POOL_SEED) => {
+  const board = replayBoard(tier, attempt, seed);
+  const limit = callsFor(board.rows, board.cols, board.totalMines);
+  let calls = 0;
+  while (calls < limit) {
+    if (isWon(board)) break;
+    const verdict = analyse(board.visible, board.rows, board.cols, board.totalMines);
+    if (!verdict.conclusive || !verdict.deducible) break;
+    if (board.mines[verdict.move.row][verdict.move.col]) {
+      // Oracle returned a mine — should not happen on a stored Pool B board,
+      // which the pool generator built under the same oracle. Loud failure:
+      // a future change that breaks this would silently corrupt the verdict
+      // pool's claim sampling.
+      throw new Error(`canonicalStuckPosition: oracle returned a mine on ${pool} ${tier} #${attempt}`);
+    }
+    reveal(board, verdict.move.row, verdict.move.col);
+    calls++;
+  }
+  return {
+    grid: board.visible.map((row) => [...row]),
+    rows: board.rows,
+    cols: board.cols,
+    totalMines: board.totalMines,
+    callsToStuck: calls,
+  };
+};
+
+/**
+ * Seeded claim sampler for the verdict pool (Phase 2).
+ *
+ * Picks CLAIMS_PER_BOARD unknown cells from the canonical stuck position,
+ * deterministically, biased so the sample spans every status the model has
+ * to handle on that board. Two consecutive calls with the same inputs
+ * return the same cells, byte for byte. The board index in the seed input
+ * is the attempt, NOT the running counter, so per-tier order is the same
+ * as the pool's published order.
+ *
+ * Why the bias: the plan pins assert-everything = 0/6, which only holds
+ * if every Pool B board has at least one mixed-status claim in its sample.
+ * The published pool's stuck positions are 86% provably_mine (5393 of 6292
+ * cells classified), 14% mixed, and 0 provably_safe — so a uniform random
+ * sample of 3 from 150 boards landed 99/150 boards with all-provably_mine
+ * samples, breaking the pin. A mixed-first selection (then fill with the
+ * remaining statuses in a stable order) guarantees at least one mixed
+ * claim per board on every board that has a mixed cell, which is all 150.
+ *
+ * The picker is still a pure function of (seed, pool, tier, attempt) — it
+ * just iterates cells in a deterministic order and takes the first 3 that
+ * fit the bias rather than picking from a hash-derived index.
+ *
+ * @returns {Array<{id: string, row: number, col: number, status: "provably_mine"|"provably_safe"|"mixed"|"inconclusive"}>}
+ */
+export const CLAIMS_PER_BOARD = 3;
+
+export const sampleClaims = ({ tier, attempt, pool }, seed = POOL_SEED) => {
+  if (!TIERS[tier]) return []; // synthesized test fixture, no real board to sample
+  const pos = canonicalStuckPosition({ tier, attempt, pool }, seed);
+  // Walk every unknown cell, classify it, bucket by status, pick in this
+  // fixed order until we have CLAIMS_PER_BOARD claims:
+  //   1) one mixed (guarantees assert-everything gets caught here)
+  //   2) one provably_mine (the dominant direction in this pool)
+  //   3) one of any remaining status (mixed if more exist, else safe, else mine)
+  // Status ties (multiple cells of the same status) are broken by ascending
+  // row-major index order. The set of statuses in the result is a pure
+  // function of the board's stuck position, so two consecutive calls return
+  // the same cells.
+  const buckets = { mixed: [], provably_mine: [], provably_safe: [], inconclusive: [] };
+  for (let r = 0; r < pos.rows; r++) {
+    for (let c = 0; c < pos.cols; c++) {
+      const v = pos.grid[r][c];
+      if (v !== null && v !== "F") continue;
+      const status = classifyCell(pos.grid, pos.rows, pos.cols, pos.totalMines, r, c).status;
+      if (buckets[status]) buckets[status].push([r, c]);
+    }
+  }
+  const picks = [];
+  // Step 1: one mixed, if any.
+  if (buckets.mixed.length) picks.push(buckets.mixed[0]);
+  // Step 2: one provably_mine, if any.
+  if (buckets.provably_mine.length) picks.push(buckets.provably_mine[0]);
+  // Step 3: one more — mixed again (next defms), then safe, then inconclusive.
+  if (picks.length < CLAIMS_PER_BOARD && buckets.mixed.length > 1) picks.push(buckets.mixed[1]);
+  if (picks.length < CLAIMS_PER_BOARD && buckets.provably_safe.length) picks.push(buckets.provably_safe[0]);
+  if (picks.length < CLAIMS_PER_BOARD && buckets.inconclusive.length) picks.push(buckets.inconclusive[0]);
+  if (picks.length < CLAIMS_PER_BOARD && buckets.provably_mine.length > 1) picks.push(buckets.provably_mine[1]);
+  if (picks.length < CLAIMS_PER_BOARD && buckets.mixed.length > 2) picks.push(buckets.mixed[2]);
+  if (picks.length < CLAIMS_PER_BOARD && buckets.provably_mine.length > 2) picks.push(buckets.provably_mine[2]);
+
+  return picks.slice(0, CLAIMS_PER_BOARD).map(([row, col], i) => {
+    const r = classifyCell(pos.grid, pos.rows, pos.cols, pos.totalMines, row, col);
+    return { id: `${pool}-${tier}-${attempt}-${i}`, row, col, status: r.status };
+  });
 };
 
 /**

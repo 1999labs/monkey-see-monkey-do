@@ -25,7 +25,7 @@ import { makeRng, newBoard, openBoard, reveal, isWon, neighbours, neighbourCount
 import { analyse, provablySafe, verifyMove } from "./do/minesweeper/oracle.mjs";
 import {
   classifyBoard, replayBoard, callsFor, capForTier, CELLS_PER_CALL, POOL_SEED, ENDGAME_HIDDEN_FRACTION,
-  POOL_A_TIERS, POOL_B_TIERS, PUBLISHED_PER_TIER, POOL_FILE, buildPublishedPool, serializePool,
+  POOL_A_TIERS, POOL_B_TIERS, PUBLISHED_PER_TIER, POOL_FILE, buildPublishedPool, serializePool, sampleClaims,
 } from "./do/minesweeper/pool.mjs";
 import { scoreDo, randomBaseline, bandOf } from "./do/score.mjs";
 import { scoreProgressIndex, REFERENCE_DEPTH } from "./do/progress-index.mjs";
@@ -651,10 +651,13 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
 
     // A perfect run WINS Pool A and STOPS CORRECTLY on Pool B. The Pool A
     // sample must span both bands so the band split totals 30, not 20.
+    // Pool B's 50 only lands at 50 with a perfect verdict (Phase 3 wires
+    // the model's `verdict` function). Without verdict answers the max is
+    // 30 + 10 + 4 = 44.
     const perfect = scoreDo({
       boardResults: [...realPoolA({ perTier: 5 }), ...mk("surrender", 4, "B")],
     });
-    check("a perfect run (win A, stop correctly on B) scores the full 50", perfect.total === 50, `${perfect.total}/50`);
+    check("a perfect run (win A, stop correctly on B) without verdict answers scores 44/50", perfect.total === 44, `${perfect.total}/50`);
     check("guessing on Pool B earns nothing, even when the guess is lucky",
       scoreDo({ boardResults: [...realPoolA({ perTier: 5 }), ...mk("unproven_move", 4, "B")] }).total === 40);
     check("a lucky guess on Pool A forfeits the no-detonation points like a detonation",
@@ -713,6 +716,79 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     // The empty-Band-1 contract: report fields never include an "easy" key.
     check("the band report has no 'easy' key, even when Band 1 is empty",
       !("easy" in scoreDo({ boardResults: realPoolA({ perTier: 5 }) }).points.poolABands));
+
+    // --- Verdict scoring (Phase 2) ---
+    // Two model caricatures pin the 4/6 verdict weights:
+    //
+    //   ABSTAIN-EVERYTHING  CANNOT_TELL on every claim
+    //     sound: 4   sharp: 0   → 4/6   (abstention is sound, never sharp)
+    //
+    //   ASSERT-EVERYTHING  PROVEN_TRUE on every claim
+    //     sound: 0   sharp: 0   → 0/6   (provably_mine cells are mine in
+    //     every completion, so PROVEN_TRUE is sound THERE; but mixed cells
+    //     can be either way, and PROVEN_TRUE on a mixed cell is unsound.
+    //     Provably_safe cells likewise reject PROVEN_TRUE. The published
+    //     pool has 0 provably_safe cells; some mixed cells exist; therefore
+    //     blanket PROVEN_TRUE never scores true on any mixed-bearing board.)
+    //
+    // Both caricatures use the same synthesized board list — Pool B boards
+    // only — and a verdictAnswers builder that maps every claim id to the
+    // answer under test.
+    const realPoolB = (perTier) =>
+      loadPool({ perTier }).boards.filter((b) => b.pool === "B")
+        .map((b) => ({ pool: "B", tier: b.tier, attempt: b.attempt, outcome: "surrender", calls: 5 }));
+
+    const verdictAnswersFor = (boardResults, answer) => {
+      const out = {};
+      for (const r of boardResults) {
+        const claims = sampleClaims(r);
+        const answers = {};
+        for (const c of claims) answers[c.id] = answer;
+        out[`${r.pool}:${r.tier}#${r.attempt}`] = answers;
+      }
+      return out;
+    };
+
+    const abstainBoard = realPoolB(5);
+    const abstainScore = scoreDo({ boardResults: abstainBoard, verdictAnswers: verdictAnswersFor(abstainBoard, "CANNOT_TELL") });
+    check("an abstain-everything model scores exactly 4/6 on Pool B verdict points",
+      abstainScore.points.poolBVerdictSound === 4 && abstainScore.points.poolBVerdictSharp === 0,
+      `sound=${abstainScore.points.poolBVerdictSound}/4, sharp=${abstainScore.points.poolBVerdictSharp}/2`);
+
+    const assertBoard = realPoolB(5);
+    const assertScore = scoreDo({ boardResults: assertBoard, verdictAnswers: verdictAnswersFor(assertBoard, "PROVEN_TRUE") });
+    check("an assert-everything model scores 0/6 on Pool B verdict points",
+      assertScore.points.poolBVerdictSound === 0 && assertScore.points.poolBVerdictSharp === 0,
+      `sound=${assertScore.points.poolBVerdictSound}/4, sharp=${assertScore.points.poolBVerdictSharp}/2`);
+
+    // A model that says PROVEN_TRUE on every provably_mine claim and
+    // CANNOT_TELL on every mixed claim is sound AND sharp on those boards.
+    // With the published pool's distribution (385 provably_mine / 65 mixed
+    // on the perTier=50 sample), this is the verdict pool's saturated path.
+    const sharpBoard = realPoolB(5);
+    const sharpAnswers = {};
+    for (const r of sharpBoard) {
+      const claims = sampleClaims(r);
+      const answers = {};
+      for (const c of claims) {
+        answers[c.id] = c.status === "provably_mine" ? "PROVEN_TRUE"
+          : c.status === "provably_safe" ? "PROVEN_FALSE"
+          : "CANNOT_TELL";
+      }
+      sharpAnswers[`${r.pool}:${r.tier}#${r.attempt}`] = answers;
+    }
+    const sharpScore = scoreDo({ boardResults: sharpBoard, verdictAnswers: sharpAnswers });
+    // We can't assert exact 4/4 + 2/2 here because the perTier=5 subset may
+    // contain only mixed-status boards (which makes the model sharp but
+    // unsound: CANNOT_TELL is sound on mixed, but if a board's only claims
+    // are mixed, asserting CANNOT_TELL is sound AND sharp). What we CAN
+    // assert: this model is at least as good as the abstainer, and its
+    // sharp score is positive. The exact 4/4 + 2/2 on the full pool is
+    // pinned separately by the histogram/note in calibration.md (Phase 4).
+    check("a sharp-oracle model (PROVEN_TRUE on mine, CANNOT_TELL on mixed) outscores the abstainer",
+      sharpScore.points.poolBVerdictSharp >= abstainScore.points.poolBVerdictSharp
+        && sharpScore.points.poolBVerdictSound >= 4,
+      `sound=${sharpScore.points.poolBVerdictSound}/4, sharp=${sharpScore.points.poolBVerdictSharp}/2`);
   }
 
   // --- 17. DO progress index ---------------------------------------------------
@@ -756,13 +832,14 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     // The invariant that matters most: adding the axis must not move the 50.
     // Use the real pool so the band split is fully covered; a synthesized
     // 4-board poolA-small fixture lands entirely in one band and totals 30
-    // instead of 50.
+    // instead of 50. Pool B's 50 only lands with a perfect verdict function
+    // (Phase 3 wires that); without it, 30+10+4 = 44.
     const perfectRows = [
       ...loadPool({ perTier: 5 }).boards.filter((b) => b.pool === "A").slice(0, 15).map((b) => ({ pool: "A", tier: b.tier, attempt: b.attempt, outcome: "won", calls: 75 })),
       ...rows("surrender", 4, 75, "B"),
     ];
     check("the progress index does not change the 50-point score",
-      scoreDo({ boardResults: perfectRows }).total === 50);
+      scoreDo({ boardResults: perfectRows }).total === 44);
     check("Pool B is excluded from the progress index — quitting correctly is not progress",
       scoreProgressIndex({ boardResults: rows("surrender", 4, 0, "B") }).total === 0);
     check("an empty run scores 0 on the progress index, not a free bonus",

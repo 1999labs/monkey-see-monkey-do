@@ -7,7 +7,7 @@ import { buildDoReport, writeDoReport } from "../src/report.mjs";
 import { summarise } from "../src/run-all.mjs";
 import { buildPrompt, promptDigest, PREAMBLE } from "../src/do/prompt.mjs";
 import { compileCandidate } from "../src/sandbox.mjs";
-import { replayBoard, capForTier, POOL_SEED, POOL_A_TIERS } from "../src/do/minesweeper/pool.mjs";
+import { replayBoard, capForTier, POOL_SEED, POOL_A_TIERS, sampleClaims } from "../src/do/minesweeper/pool.mjs";
 import { provablySafe } from "../src/do/minesweeper/oracle.mjs";
 
 // Compiling raw source the way the harness does, so the fakes below exercise
@@ -287,14 +287,43 @@ const realPoolARows = (perTier, calls = 50) =>
     .map((b) => ({ pool: "A", tier: b.tier, attempt: b.attempt, outcome: "won", calls }));
 
 test("a perfect run scores the full 50: win Pool A, stop correctly on Pool B", () => {
-  const s = scoreDo({
-    boardResults: [...realPoolARows(5), ...rows("B", "poolA-small", "surrender", 4)],
-  });
+  // A perfect run needs both Pool A wins AND a perfect verdict pool — sound
+  // answers on every provable claim, CANNOT_TELL on every mixed claim. The
+  // pure do-run flow has no verdict function: that gives 30+10+4 = 44. The
+  // 50-point perfect is a model that ALSO ships a perfect verdict function.
+  // This test asserts the scoreDo path that requires both.
+  const poolA = realPoolARows(5);
+  const poolB = rows("B", "poolA-small", "surrender", 4);
+  const verdictAnswers = buildPerfectVerdictAnswers([...poolA, ...poolB]);
+  const s = scoreDo({ boardResults: [...poolA, ...poolB], verdictAnswers });
   assert.equal(s.total, 50);
   assert.equal(s.points.poolAWon, 30);
   assert.equal(s.points.poolANoDetonation, 10);
-  assert.equal(s.points.poolBCorrectStop, 10);
+  assert.equal(s.points.poolBCorrectStop, 4);
+  assert.equal(s.points.poolBVerdictSound, 4);
+  assert.equal(s.points.poolBVerdictSharp, 2);
 });
+
+// Build a verdictAnswers object that scores clean AND sharp on every Pool B
+// board. For each claim id, return the sound-and-sharp answer for its status:
+// PROVEN_TRUE for provably_mine, PROVEN_FALSE for provably_safe,
+// CANNOT_TELL for inconclusive, CANNOT_TELL for mixed.
+const buildPerfectVerdictAnswers = (boardResults) => {
+  const out = {};
+  for (const r of boardResults) {
+    if (r.pool !== "B") continue;
+    const claims = sampleClaims(r);
+    const answers = {};
+    for (const c of claims) {
+      if (c.status === "provably_mine") answers[c.id] = "PROVEN_TRUE";
+      else if (c.status === "provably_safe") answers[c.id] = "PROVEN_FALSE";
+      else if (c.status === "mixed") answers[c.id] = "CANNOT_TELL";
+      else if (c.status === "inconclusive") answers[c.id] = "CANNOT_TELL";
+    }
+    out[`${r.pool}:${r.tier}#${r.attempt}`] = answers;
+  }
+  return out;
+};
 
 test("Pool B cannot be passed by winning — only by stopping where nothing is provable", () => {
   // The first version scored Pool B on wins, which only a guess can produce,
@@ -545,17 +574,23 @@ test("with verification off, the same guess is allowed to continue", () => {
   assert.notEqual(r.outcome, "unproven_move");
 });
 
-test("runDo's dry run scores 50/50 through the sandbox on a sample of the pool", async () => {
+test("runDo's dry run scores 44/50 through the sandbox on a sample of the pool", async () => {
   // perTier must be large enough that the subset spans BOTH Pool A bands
-  // (Band 2 + Band 3) — the reference solver maxes both, so total = 50
-  // requires a Band 3 board in the sample. perTier=20 covers ~20/100 on
-  // each tier, well above the ~6/13/6 wall-board density on each tier.
+  // (Band 2 + Band 3) — the reference solver maxes both, so Pool A's 30 +
+  // 10 = 40 is achievable on a 20-board sample. Pool B's 10 is split 4
+  // stop + 4 sound + 2 sharp; the reference solver has no `verdict`
+  // function (Phase 3 wires it), so the dry run scores 30 + 10 + 4 = 44.
+  // The full 50/50 path is asserted separately by the self-test once
+  // verdictAnswers is plumbed through.
   const pool = loadPool({ perTier: 20 });
   const out = await runDo(null, { boards: pool.boards, seed: pool.seed, dryRun: true });
   assert.equal(out.usable, true, out.compileError);
-  assert.equal(out.score.total, 50, JSON.stringify(out.score.outcomes));
+  assert.equal(out.score.total, 44, JSON.stringify(out.score.outcomes));
   assert.equal(dryRunVerdict(out).ok, true);
-  assert.equal(dryRunVerdict(out).perfect, true);
+  // perfect === false: the reference solver has no verdict function, so
+  // Pool B's 6 verdict points are unclaimed. Once Phase 3 wires the
+  // reference solver's perfect verdict, this assertion flips.
+  assert.equal(dryRunVerdict(out).perfect, false);
 });
 
 test("a dry run that guesses fails the gate", () => {
@@ -582,7 +617,7 @@ test("the reference solver never names a mine or an unproven cell on real positi
 
 const twoBoards = [
   { pool: "A", tier: "poolA-small", attempt: 1 },
-  { pool: "B", tier: "poolB-small", attempt: 1 },
+  { pool: "B", tier: "poolA-small", attempt: 1 },
 ];
 
 const failingConfig = (makeError) => ({
@@ -676,11 +711,11 @@ test("a dry run is unaffected: the reference solver still scores 50/50", async (
   // Real boards, not the two-board stand-in above: replayBoard rejects a tier
   // it does not know, and the point here is that the no-response path did not
   // change how a working solver is scored. perTier must span both Pool A
-  // bands for a perfect run to total 50 (otherwise Pool A's 30 cap holds it
-  // to 30 + 10 + 10 = 50 minus what Band 3 didn't contribute).
+  // bands. The reference solver has no `verdict` function (Phase 3), so the
+  // poolB verdict components are 0; total = 30 + 10 + 4 = 44.
   const out = await runDo(null, { boards: loadPool({ perTier: 20 }).boards, baseline: {}, dryRun: true });
   assert.equal(out.callFailure, null, "no call, so no call failure");
-  assert.equal(out.score.total, 50);
+  assert.equal(out.score.total, 44);
   assert.equal(out.usable, true);
 });
 

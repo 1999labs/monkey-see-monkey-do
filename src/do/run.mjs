@@ -499,8 +499,11 @@ export const printDoRun = (model, out) => {
           `    solver never clicked a mine or an unproven cell.` +
           (v.perfect
             ? `\n    It scored 50/50: the pool's claims hold end to end through the sandbox.`
-            : `\n    It scored ${s.total}/50, not 50: the reference ran out of search budget on some\n` +
-              `    positions and surrendered early. A limit, not a fault — but worth a look.`)
+            : `\n    It scored ${s.total}/50, not 50. With Phase 2's verdict pool split, a 44/50\n` +
+              `    on the dry run is expected: the reference solver has no \`verdict\`\n` +
+              `    function, so Pool B's 6 verdict points are 0. The 4/4 it kept is\n` +
+              `    the stop-discipline component; the verdict components need a\n` +
+              `    model that emits a \`verdict(position, claims)\` function (Phase 3).`)
       );
     } else {
       console.log(`\n    \x1b[31mFAIL\x1b[0m the harness is broken:`);

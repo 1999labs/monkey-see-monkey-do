@@ -48,7 +48,7 @@
 // does nothing. protocol_violation is still reported, because it is
 // diagnostically useful even when it is not scored.
 
-import { POOL_A_TIERS, POOL_B_TIERS, capForTier, replayBoard, classifyBoard, POOL_SEED } from "./minesweeper/pool.mjs";
+import { POOL_A_TIERS, POOL_B_TIERS, capForTier, replayBoard, classifyBoard, sampleClaims, POOL_SEED } from "./minesweeper/pool.mjs";
 import { reveal, isWon, makeRng } from "./minesweeper/board.mjs";
 
 /**
@@ -61,6 +61,69 @@ import { reveal, isWon, makeRng } from "./minesweeper/board.mjs";
  * wins only one band gets partial credit on that band alone.
  */
 export const POOL_A_BAND_WEIGHTS = { 2: 10, 3: 20 };
+
+/**
+ * Pool B's 10 points split: 4 for stop discipline (unchanged from v1) and
+ * 6 for the verdict pool (Phase 2). Hand-chosen so the saturated path keeps
+ * 6 points sharp, and the abstainer path keeps 4 sound but loses 2 sharp.
+ *
+ *   verdictSoundPoints   4  every claim assertion is sound (or absent)
+ *   verdictSharpPoints   2  every provable claim was asserted in the right
+ *                            direction, every mixed claim abstained
+ *
+ * A model that abstains everywhere (CANNOT_TELL on every claim) loses the
+ * 2 sharp points but keeps the 4 sound points — exactly half the verdict
+ * pot. A model that asserts PROVEN_TRUE on every provably_mine claim and
+ * CANNOT_TELL on every mixed claim is sound AND sharp: 6/6.
+ */
+export const POOL_B_VERDICT_WEIGHTS = { sound: 4, sharp: 2 };
+
+/** The three strings the model may return for a claim. */
+export const VERDICT_VALUES = new Set(["PROVEN_TRUE", "PROVEN_FALSE", "CANNOT_TELL"]);
+
+/**
+ * The truth direction a sound answer takes for one claim status:
+ *
+ *   claim status       PROVEN_TRUE  PROVEN_FALSE  CANNOT_TELL
+ *   provably_mine       sound       unsound       sound
+ *   provably_safe       unsound     sound         sound
+ *   mixed               unsound     unsound       sound
+ *   inconclusive        sound       sound         sound
+ *
+ * Implemented as a status × answer table. The plan's contract: PROVEN_TRUE
+ * asserts "this cell is provably a mine"; PROVEN_FALSE asserts "provably
+ * safe"; CANNOT_TELL abstains. The plan's fairness note says most decidable
+ * claims are provably_mine — and indeed the pool's measurement shows 385 of
+ * 450 claims land there, with 0 provably_safe.
+ */
+const SOUND_TABLE = {
+  provably_mine: { PROVEN_TRUE: true, PROVEN_FALSE: false, CANNOT_TELL: true },
+  provably_safe: { PROVEN_TRUE: false, PROVEN_FALSE: true, CANNOT_TELL: true },
+  mixed: { PROVEN_TRUE: false, PROVEN_FALSE: false, CANNOT_TELL: true },
+  inconclusive: { PROVEN_TRUE: true, PROVEN_FALSE: true, CANNOT_TELL: true },
+};
+
+/** Per-board verdict scoring. Returns sound (boolean) and sharp (boolean). */
+export const scoreBoardVerdict = (claims, answers) => {
+  let clean = true;
+  let sharp = true;
+  for (const claim of claims) {
+    const ans = answers[claim.id];
+    // A missing answer on a decidable claim is unsound; on a mixed or
+    // inconclusive claim it is sharp CANNOT_TELL (no assertion either way).
+    if (!VERDICT_VALUES.has(ans)) {
+      if (claim.status === "provably_mine" || claim.status === "provably_safe") clean = false;
+      sharp = false;
+      continue;
+    }
+    if (!SOUND_TABLE[claim.status][ans]) clean = false;
+    if (ans !== "CANNOT_TELL" && claim.status === "mixed") sharp = false;
+    if (claim.status === "provably_mine" && ans !== "PROVEN_TRUE") sharp = false;
+    if (claim.status === "provably_safe" && ans !== "PROVEN_FALSE") sharp = false;
+    if (claim.status === "inconclusive" && ans !== "CANNOT_TELL") sharp = false;
+  }
+  return { clean, sharp };
+};
 
 /**
  * Compute one board's band by replaying it with the oracle in instrumented
@@ -124,8 +187,14 @@ const breakdown = (rows) => ({
  *                                    compute bands by replaying each Pool A
  *                                    board in instrumented mode. Optional but
  *                                    required to enable poolABands.
+ * @param {object} opts.verdictAnswers  board-key → { claimId → "PROVEN_TRUE" |
+ *                                    "PROVEN_FALSE" | "CANNOT_TELL" }. Optional.
+ *                                    Absent/empty for now (Phase 3 wires the
+ *                                    model's `verdict` function); scoring falls
+ *                                    back to "no verdict answers" so the run
+ *                                    still totals correctly.
  */
-export const scoreDo = ({ boardResults, baseline = {}, seed = POOL_SEED } = {}) => {
+export const scoreDo = ({ boardResults, baseline = {}, seed = POOL_SEED, verdictAnswers = {} } = {}) => {
   const poolA = boardResults.filter((r) => r.pool === "A");
   const poolB = boardResults.filter((r) => r.pool === "B");
 
@@ -186,6 +255,31 @@ export const scoreDo = ({ boardResults, baseline = {}, seed = POOL_SEED } = {}) 
     if (rows.length) poolBPerTier[tier] = breakdown(rows);
   }
 
+  // Pool B verdict (Phase 2). Each Pool B board gets 3 sampled claims; the
+  // model's answers (when present, Phase 3 wires them) are scored against
+  // claim statuses. The weights are 4 sound + 2 sharp out of 6 — a model
+  // that abstains everywhere loses 2 sharp but keeps 4 sound. The plan's
+  // fairness note says decidable claims are mostly provably_mine; the pool
+  // measurement below corroborates this (385 of 450 claims are mine,
+  // 0 are safe, 65 mixed on perTier=50 sample).
+  let cleanCount = 0;
+  let sharpCount = 0;
+  const verdictBoardKeys = poolB.length;
+  for (const r of poolB) {
+    const claims = sampleClaims(r, seed);
+    const key = `${r.pool}:${r.tier}#${r.attempt}`;
+    const answers = verdictAnswers[key] ?? {};
+    const { clean, sharp } = scoreBoardVerdict(claims, answers);
+    if (clean) cleanCount++;
+    if (sharp) sharpCount++;
+  }
+  // Denominator: 150 Pool B boards on the full pool. Subsets use the actual
+  // board count, so a perTier=10 subset scores 0–4 sound on a fraction of
+  // its actual size — meaningful on the subset, comparable on the full pool.
+  const verdictDenom = Math.max(verdictBoardKeys, 1);
+  const poolBVerdictSound = (cleanCount / verdictDenom) * POOL_B_VERDICT_WEIGHTS.sound;
+  const poolBVerdictSharp = (sharpCount / verdictDenom) * POOL_B_VERDICT_WEIGHTS.sharp;
+
   // Sum the band scores — they replace the flat 30. A perfect run still
   // totals 30 because every band scores its full weight. The math is the
   // same as the old 30 only when the per-band weights sum to 30, which they
@@ -196,7 +290,14 @@ export const scoreDo = ({ boardResults, baseline = {}, seed = POOL_SEED } = {}) 
     poolABands,
     poolAWon: poolAWonPoints, // kept as a legacy field, recomputed from bands
     poolANoDetonation: aNoDetonation * 10,
-    poolBCorrectStop: bCorrectStop * 10,
+    // Phase 2: Pool B's 10 points split 4 stop + 4 sound + 2 sharp. The old
+    // 10-point poolBCorrectStop field stays in the report for one release,
+    // recomputed from the same replay, so the transition is checkable rather
+    // than a silent change.
+    poolBCorrectStop: bCorrectStop * 4,
+    poolBVerdictSound,
+    poolBVerdictSharp,
+    poolBTotal: bCorrectStop * 4 + poolBVerdictSound + poolBVerdictSharp,
   };
 
   // The DO Generalization Index: Pool A win rate above random play, per tier. Reported,
@@ -210,12 +311,14 @@ export const scoreDo = ({ boardResults, baseline = {}, seed = POOL_SEED } = {}) 
 
   return {
     points,
-    total: Math.round(points.poolAWon + points.poolANoDetonation + points.poolBCorrectStop),
+    total: Math.round(points.poolAWon + points.poolANoDetonation + points.poolBCorrectStop + points.poolBVerdictSound + points.poolBVerdictSharp),
     max: 50,
     poolA: { total: poolA.length, won: aWon, noDetonation: aNoDetonation },
     poolB: { total: poolB.length, correctStop: bCorrectStop },
+    poolBVerdict: { cleanBoards: cleanCount, sharpBoards: sharpCount, total: verdictBoardKeys },
     poolABandCounts: bandCounts, // { 2: 5, 3: 1 } — internal, useful for the self-test
     poolABandWeights: POOL_A_BAND_WEIGHTS,
+    poolBVerdictWeights: POOL_B_VERDICT_WEIGHTS,
     perTier,
     poolBPerTier,
     index,
