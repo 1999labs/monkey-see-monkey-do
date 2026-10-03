@@ -188,7 +188,7 @@ test("a CLEAN rehearsal has its own exit code, distinct from PASS and from failu
   const dir = mkdtempSync(join(tmpdir(), "md-cli-accept-clean-"));
   const r = await run("bin/acceptance.mjs", [
     "--strong", "openrouter/stub-strong", "--weak", "openrouter/stub-weak",
-    "--quick", "--per-tier", "1", "--runs", "3", "--key", "sk-test", "--out", dir,
+    "--quick", "--per-tier", "20", "--runs", "3", "--key", "sk-test", "--out", dir,
   ]);
   const report = readReport(dir, "acceptance-");
   assert.equal(report.verdict, "REHEARSAL", "quick still never passes");
