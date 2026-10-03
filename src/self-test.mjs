@@ -30,7 +30,7 @@ import {
 import { scoreDo, randomBaseline, bandOf } from "./do/score.mjs";
 import { scoreProgressIndex, REFERENCE_DEPTH } from "./do/progress-index.mjs";
 import { adjustedTotal } from "./adjusted.mjs";
-import { playBoard, loadPool } from "./do/run.mjs";
+import { playBoard, loadPool, runDo } from "./do/run.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "./do/reference-solver.mjs";
 import { PREAMBLE as DO_PREAMBLE, promptDigest as doPromptDigest } from "./do/prompt.mjs";
 
@@ -967,6 +967,20 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
       const expected = sample.map((b) => `${b.pool}:${b.pool === "A" ? "won" : "surrender"}`);
       check("the reference solver wins Pool A and stops correctly on Pool B, via the sandbox",
         JSON.stringify(outcomes) === JSON.stringify(expected), outcomes.join(", "));
+    }
+
+    // Phase 2: the reference solver's `verdict(position, claims)` function
+    // must produce a fully-sound verdict pool — every claim asserted in the
+    // right direction, every mixed claim abstained. A regression here is
+    // the most likely failure for the dry-run gate, since verdict scoring
+    // is a new wiring that the rest of the suite does not exercise. The
+    // reference runDo path is the only place this code is invoked today.
+    {
+      const out = await runDo(null, { boards: loadPool({ perTier: 20 }).boards, baseline: {}, dryRun: true });
+      // Pool A Band 2 + Band 3 + no-det = 40; Pool B stop + verdict = 10.
+      // Total = 50 when both bands AND both verdict components are at full.
+      check("the reference solver's verdict pool is sound and sharp on the full pool (50/50)",
+        out.score.total === 50, `${out.score.total}/50, sound=${out.score.points?.poolBVerdictSound?.toFixed(2)}/4, sharp=${out.score.points?.poolBVerdictSharp?.toFixed(2)}/2`);
     }
 
     // "Click any hidden cell, ignoring the numbers" is blind play. It must be

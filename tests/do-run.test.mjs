@@ -88,11 +88,36 @@ const fakeDry = (outcomes, extra = {}) => ({
   ...extra,
 });
 
-test("a dry run with zero detonations passes, whatever it scored", () => {
-  const v = dryRunVerdict(fakeDry({ won: 3, surrender: 3 }));
+test("a dry run with zero detonations passes when it scores 50/50", () => {
+  // Phase 2: PASS is reserved for a fully-sound reference run (total 50/50).
+  // Zero detonations alone is necessary but not sufficient — Pool A bands
+  // and Pool B verdict components must also be at full weight.
+  const v = dryRunVerdict(fakeDry({ won: 3, surrender: 3 }, {
+    score: {
+      total: 50,
+      outcomes: { won: 3, surrender: 3 },
+      poolA: {},
+      poolB: {},
+      perTier: {},
+      poolBPerTier: {},
+      index: {},
+      points: {
+        poolABands: { chained: 10, wall: 20 },
+        poolAWon: 30,
+        poolANoDetonation: 10,
+        poolBCorrectStop: 4,
+        poolBVerdictSound: 4,
+        poolBVerdictSharp: 2,
+      },
+      poolABandCounts: { 2: 5, 3: 1 },
+      poolABandWeights: { 2: 10, 3: 20 },
+      poolBVerdict: { cleanBoards: 3, sharpBoards: 3, total: 3 },
+    },
+  }));
   assert.equal(v.ok, true, `should pass: ${v.failures.join("; ")}`);
   assert.equal(v.detonations, 0);
   assert.equal(v.played, 6);
+  assert.equal(v.perfect, true);
 });
 
 test("a dry run with ANY detonation fails loudly", () => {
@@ -118,13 +143,14 @@ test("a reference solver that fails to compile fails the gate", () => {
   assert.ok(v.failures.some((f) => /did not compile/.test(f)));
 });
 
-test("a LOW score alone does not fail the gate", () => {
-  // A low score can mean the reference ran out of search budget, which is a
-  // limit, not a fault. Failing on it would push someone toward weakening the
-  // safety bar to make it green. (The dry run on the published pool scores
-  // 50/50; the report flags anything less as worth a look.)
+test("a LOW score fails the gate with the missing component named", () => {
+  // Phase 2 reverses this rule: a low score IS the bar. A reference run
+  // that never detonates but scored below 50/50 is failing to ship a
+  // verdict function, missing a band, or running out of budget. The
+  // missing component is named explicitly so a regression points at it.
   const v = dryRunVerdict(fakeDry({ surrender: 6 }, { score: { total: 0, outcomes: { surrender: 6 } } }));
-  assert.equal(v.ok, true, "score is not the bar; safety is");
+  assert.equal(v.ok, false);
+  assert.ok(v.failures.length > 0, "a low score must produce at least one named missing component");
 });
 
 // --- Prompt --------------------------------------------------------------
@@ -574,23 +600,19 @@ test("with verification off, the same guess is allowed to continue", () => {
   assert.notEqual(r.outcome, "unproven_move");
 });
 
-test("runDo's dry run scores 44/50 through the sandbox on a sample of the pool", async () => {
+test("runDo's dry run scores 50/50 through the sandbox on a sample of the pool", async () => {
   // perTier must be large enough that the subset spans BOTH Pool A bands
   // (Band 2 + Band 3) — the reference solver maxes both, so Pool A's 30 +
   // 10 = 40 is achievable on a 20-board sample. Pool B's 10 is split 4
-  // stop + 4 sound + 2 sharp; the reference solver has no `verdict`
-  // function (Phase 3 wires it), so the dry run scores 30 + 10 + 4 = 44.
-  // The full 50/50 path is asserted separately by the self-test once
-  // verdictAnswers is plumbed through.
+  // stop + 4 sound + 2 sharp; the reference solver ships a perfect
+  // `verdict(position, claims)` function so the dry run scores 30 + 10 +
+  // 4 + 4 + 2 = 50.
   const pool = loadPool({ perTier: 20 });
   const out = await runDo(null, { boards: pool.boards, seed: pool.seed, dryRun: true });
   assert.equal(out.usable, true, out.compileError);
-  assert.equal(out.score.total, 44, JSON.stringify(out.score.outcomes));
+  assert.equal(out.score.total, 50, JSON.stringify(out.score.outcomes));
   assert.equal(dryRunVerdict(out).ok, true);
-  // perfect === false: the reference solver has no verdict function, so
-  // Pool B's 6 verdict points are unclaimed. Once Phase 3 wires the
-  // reference solver's perfect verdict, this assertion flips.
-  assert.equal(dryRunVerdict(out).perfect, false);
+  assert.equal(dryRunVerdict(out).perfect, true);
 });
 
 test("a dry run that guesses fails the gate", () => {
@@ -711,11 +733,11 @@ test("a dry run is unaffected: the reference solver still scores 50/50", async (
   // Real boards, not the two-board stand-in above: replayBoard rejects a tier
   // it does not know, and the point here is that the no-response path did not
   // change how a working solver is scored. perTier must span both Pool A
-  // bands. The reference solver has no `verdict` function (Phase 3), so the
-  // poolB verdict components are 0; total = 30 + 10 + 4 = 44.
+  // bands. The reference solver ships a perfect `verdict` function, so the
+  // pool B verdict components land at full weight; total = 50.
   const out = await runDo(null, { boards: loadPool({ perTier: 20 }).boards, baseline: {}, dryRun: true });
   assert.equal(out.callFailure, null, "no call, so no call failure");
-  assert.equal(out.score.total, 44);
+  assert.equal(out.score.total, 50);
   assert.equal(out.usable, true);
 });
 

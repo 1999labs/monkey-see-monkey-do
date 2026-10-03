@@ -152,5 +152,147 @@ export const REFERENCE_SOLVER_SOURCE = `function solve(board, mines) {
     if (budget.out) return null;
   }
   return null;
+}
+
+// Phase 2 verdict function: classify each sampled claim by exhaustive
+// search. Mirrors solve's machinery — propagate first, then run two
+// consistency tests (cell-as-mine, cell-as-safe). The answer set:
+//
+//   provably_mine     → PROVEN_TRUE   (mine in every consistent completion)
+//   provably_safe     → PROVEN_FALSE  (mine in none)
+//   mixed             → CANNOT_TELL   (some, but not all completions have it)
+//   inconclusive      → CANNOT_TELL   (search ran out of budget)
+//
+// The verdict pool is the model's answer to "is this cell mine/safe/mixed?",
+// computed by exactly the same reasoning as the oracle's classification.
+// The reference function duplicates solve's helpers because both are
+// top-level functions in this source string and cannot share lexical
+// scope; the alternative — hoisting the helpers out of solve — would
+// alter solve's runtime shape for a single new caller, which is a worse
+// trade than a copy that is provably equivalent.
+function verdict(position, claims, totalMines) {
+  // Accept either a bare grid (matching solve's signature) or a position
+  // object { grid, totalMines, rows, cols }. The harness passes the latter.
+  var grid, rows, cols;
+  if (Array.isArray(position)) { grid = position; rows = grid.length; cols = rows ? grid[0].length : 0; }
+  else { grid = position.grid; rows = position.rows; cols = position.cols; }
+  if (!rows || !cols) return {};
+  var isU = function (v) { return v === null || v === "F"; };
+  var key = function (r, c) { return r * cols + c; };
+
+  var cons = [];
+  var unknown = [];
+  for (var rr = 0; rr < rows; rr++) for (var cc = 0; cc < cols; cc++) {
+    var vv = grid[rr][cc];
+    if (typeof vv === "number" && vv >= 1 && vv <= 8) {
+      var cells = [];
+      for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        var nr = rr + dr, nc = cc + dc;
+        if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue;
+        if (isU(grid[nr][nc])) cells.push(key(nr, nc));
+      }
+      if (cells.length) cons.push({ need: vv, cells: cells });
+    } else if (isU(vv)) {
+      unknown.push(key(rr, cc));
+    }
+  }
+
+  var refine = function (s, m) {
+    return cons.map(function (con) {
+      var open = [], placed = 0;
+      for (var i = 0; i < con.cells.length; i++) {
+        var x = con.cells[i];
+        if (m.has(x)) placed++; else if (!s.has(x)) open.push(x);
+      }
+      return { need: con.need - placed, open: open, global: false };
+    });
+  };
+
+  // Local copies of propagate / consistent, scoped to verdict. These
+  // duplicate solve's body but include the global-count constraint (which
+  // solve builds inline). The duplication is deliberate: solve's helpers
+  // cannot be hoisted without altering solve's behaviour.
+  var allCons = cons.concat([{ need: totalMines, cells: unknown, global: true }]);
+  var propagate = function (s, m) {
+    for (var pass = 0; pass < 200; pass++) {
+      var changed = false;
+      var ref = refine(s, m);
+      for (var i = 0; i < ref.length; i++) {
+        var R = ref[i];
+        if (R.need < 0 || R.need > R.open.length) return false;
+        if (!R.open.length) continue;
+        if (R.need === 0) { for (var a = 0; a < R.open.length; a++) s.add(R.open[a]); changed = true; }
+        else if (R.need === R.open.length) { for (var b = 0; b < R.open.length; b++) m.add(R.open[b]); changed = true; }
+      }
+      // Rule 3 (subset elimination) — full propagation so the verifier
+      // sees the same deductions solve's search would.
+      for (var p = 0; p < ref.length; p++) for (var q = 0; q < ref.length; q++) {
+        if (p === q) continue;
+        var A = ref[p], B = ref[q];
+        if (!A.open.length || A.open.length >= B.open.length) continue;
+        var bset = new Set(B.open), inside = true;
+        for (var z = 0; z < A.open.length; z++) if (!bset.has(A.open[z])) { inside = false; break; }
+        if (!inside) continue;
+        var aset = new Set(A.open);
+        var rest = B.open.filter(function (x) { return !aset.has(x); });
+        var restNeed = B.need - A.need;
+        if (restNeed < 0 || restNeed > rest.length) return false;
+        if (restNeed === 0) { for (var d = 0; d < rest.length; d++) s.add(rest[d]); changed = true; }
+        else if (restNeed === rest.length) { for (var e = 0; e < rest.length; e++) m.add(rest[e]); changed = true; }
+      }
+      var clash = false;
+      s.forEach(function (x) { if (m.has(x)) clash = true; });
+      if (clash) return false;
+      if (!changed) return true;
+    }
+    return true;
+  };
+
+  var budget = { left: 20000, out: false };
+  var consistent = function (s0, m0) {
+    var s = new Set(s0), m = new Set(m0);
+    if (!propagate(s, m)) return false;
+    var target = -1, best = Infinity;
+    for (var i = 0; i < cons.length; i++) {
+      var open = cons[i].cells.filter(function (x) { return !s.has(x) && !m.has(x); });
+      if (open.length && open.length < best) { best = open.length; target = open[0]; }
+    }
+    if (target < 0) {
+      var left = totalMines - m.size, free = 0;
+      for (var u = 0; u < unknown.length; u++) if (!s.has(unknown[u]) && !m.has(unknown[u])) free++;
+      return left >= 0 && left <= free;
+    }
+    if (budget.left-- <= 0) { budget.out = true; return true; }
+    var withSafe = new Set(s); withSafe.add(target);
+    if (consistent(withSafe, m)) return true;
+    var withMine = new Set(m); withMine.add(target);
+    return consistent(s, withMine);
+  };
+
+  var out = {};
+  for (var k = 0; k < claims.length; k++) {
+    var claim = claims[k];
+    if (!isU(grid[claim.row][claim.col])) { out[claim.id] = "CANNOT_TELL"; continue; }
+    var cell = key(claim.row, claim.col);
+    var s = new Set(), m = new Set();
+    var passed = propagate(s, m);
+    if (!passed) { out[claim.id] = "CANNOT_TELL"; continue; }
+    if (s.has(cell)) { out[claim.id] = "PROVEN_FALSE"; continue; }
+    if (m.has(cell)) { out[claim.id] = "PROVEN_TRUE"; continue; }
+    var b1 = { left: 20000, out: false };
+    var savedBudget = budget.left; var savedOut = budget.out;
+    budget.left = 20000; budget.out = false;
+    var consistentMine = consistent(s, new Set(m).add(cell));
+    if (budget.out) { budget.left = savedBudget; budget.out = savedOut; out[claim.id] = "CANNOT_TELL"; continue; }
+    if (!consistentMine) { budget.left = savedBudget; budget.out = savedOut; out[claim.id] = "PROVEN_FALSE"; continue; }
+    budget.left = 20000; budget.out = false;
+    var consistentSafe = consistent(new Set(s).add(cell), m);
+    if (budget.out) { budget.left = savedBudget; budget.out = savedOut; out[claim.id] = "CANNOT_TELL"; continue; }
+    if (!consistentSafe) { budget.left = savedBudget; budget.out = savedOut; out[claim.id] = "PROVEN_TRUE"; continue; }
+    budget.left = savedBudget; budget.out = savedOut;
+    out[claim.id] = "CANNOT_TELL";
+  }
+  return out;
 }`;
 

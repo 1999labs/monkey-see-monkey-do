@@ -25,7 +25,7 @@ import { complete } from "../adapters/registry.mjs";
 import { compileCandidate, runCandidate } from "../sandbox.mjs";
 import { fingerprint } from "../fingerprint.mjs";
 import { asModelView, isWon, reveal, inBounds } from "./minesweeper/board.mjs";
-import { replayBoard, capForTier, loadPublishedPool, classifyBoard, POOL_SEED } from "./minesweeper/pool.mjs";
+import { replayBoard, capForTier, loadPublishedPool, classifyBoard, canonicalStuckPosition, sampleClaims, POOL_SEED } from "./minesweeper/pool.mjs";
 import { buildPrompt, promptDigest } from "./prompt.mjs";
 import { analyse, verifyMove } from "./minesweeper/oracle.mjs";
 import { scoreDo, randomBaseline } from "./score.mjs";
@@ -261,7 +261,7 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
     }
     return {
       boardResults,
-      score: scoreDo({ boardResults, baseline, seed }),
+      score: scoreDo({ boardResults, baseline, seed, verdictAnswers: {} }),
       progressIndex: scoreProgressIndex({ boardResults }),
       usable: false,
       compileError: null,
@@ -279,7 +279,22 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
 
   const first = compileCandidate(completion.text, { entry: "solve" });
   const compileError = first.ok ? null : first.error;
+  // The same source defines both `solve` and (in Phase 2) `verdict`. Compile
+  // them with separate entries so each pool board can use the model's
+  // solve to play and the model's verdict to score Pool B. Compiling the
+  // same source twice is the cheapest path: no sandbox re-architecture, and
+  // Phase 3's "extract verdict" work doesn't touch the existing solve path.
+  let verdictCompiled = null;
+  if (first.ok) {
+    const vTry = compileCandidate(completion.text, { entry: "verdict" });
+    if (vTry.ok) verdictCompiled = vTry;
+  }
 
+  // Per-board verdict answers, keyed by `${pool}:${tier}#${attempt}` — the
+  // same key score.mjs uses to look up the model's claims. Built in the
+  // same loop as boardResults so the sample set and the play set are tied
+  // to the same pool snapshot.
+  const verdictAnswers = {};
   for (const [i, b] of boards.entries()) {
     onProgress?.(i, boards.length, b);
     if (!first.ok) {
@@ -289,11 +304,34 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
     const compiled = i === 0 ? first : compileCandidate(completion.text, { entry: "solve" });
     const board = replayBoard(b.tier, b.attempt, seed);
     boardResults.push({ pool: b.pool, tier: b.tier, attempt: b.attempt, ...playBoard(board, compiled) });
+
+    // Verdict pool: only Pool B. The canonical stuck position is the
+    // position after the oracle's proven moves — independent of how this
+    // solver played. The verdict function classifies the 3 sampled claims.
+    if (verdictCompiled && verdictCompiled.ok && b.pool === "B") {
+      const key = `${b.pool}:${b.tier}#${b.attempt}`;
+      try {
+        const pos = canonicalStuckPosition(b, seed);
+        const sampled = sampleClaims(b, seed);
+        // Pass only the claim fields verdict expects (id, row, col). The
+        // model's verdict function does not need the classified status.
+        const claimsForVerdict = sampled.map(({ id, row, col }) => ({ id, row, col }));
+        const result = runCandidate(verdictCompiled, { grid: pos.grid, rows: pos.rows, cols: pos.cols }, claimsForVerdict, pos.totalMines);
+        if (result.ok && result.value && typeof result.value === "object") {
+          verdictAnswers[key] = result.value;
+        }
+      } catch {
+        // An exception in the model's verdict function zeroes that board's
+        // verdict points (the lookup misses → sound/sharp = false), but
+        // does not affect the rest of the run. The plan documents this
+        // shape for Phase 3.
+      }
+    }
   }
 
   return {
     boardResults,
-    score: scoreDo({ boardResults, baseline, seed }),
+    score: scoreDo({ boardResults, baseline, seed, verdictAnswers }),
     // Reported beside the 50, never inside it. See src/do/progress-index.mjs.
     progressIndex: scoreProgressIndex({ boardResults }),
     usable: compileError === null,
@@ -393,6 +431,41 @@ export const dryRunVerdict = (out) => {
     failures.push(`${unplayed} board(s) could not be played (protocol violation).`);
   }
   if (!out.usable) failures.push(`the reference solver did not compile: ${out.compileError}`);
+  // Phase 2: Pool B's verdict components are part of the reference run's
+  // 50/50 contract. A reference run that drops points on the verdict pool
+  // is missing a fully-sound verdict function — the same kind of fault as
+  // dropping points on Pool A. Named explicitly so a regression points at
+  // the missing component rather than just saying "44/50".
+  const verdictSound = out.score.points?.poolBVerdictSound ?? 0;
+  const verdictSharp = out.score.points?.poolBVerdictSharp ?? 0;
+  if (verdictSound < 4) {
+    failures.push(
+      `Pool B verdict sound: ${verdictSound.toFixed(2)}/4. The reference solver must ship a ` +
+        `\`verdict(position, claims)\` function whose every claim is sound, OR the run cannot ` +
+        `claim 50/50.`
+    );
+  }
+  if (verdictSharp < 2) {
+    failures.push(
+      `Pool B verdict sharp: ${verdictSharp.toFixed(2)}/2. The reference solver must ` +
+        `assert each provable claim in the correct direction and abstain on every mixed claim.`
+    );
+  }
+  // Per-band Pool A coverage: every band that has a weight must land at
+  // full weight for 50/50. A band absent from the report (zero assigned
+  // boards in the subset) is itself the missing component — named the
+  // same way a partial score is.
+  const bands = out.score.points?.poolABands ?? {};
+  if ((bands.chained ?? 0) < 10) {
+    failures.push(
+      `Pool A Band 2 (chained): ${(bands.chained ?? 0).toFixed(2)}/10. The subset must cover Band 2 boards.`
+    );
+  }
+  if ((bands.wall ?? 0) < 20) {
+    failures.push(
+      `Pool A Band 3 (wall): ${(bands.wall ?? 0).toFixed(2)}/20. The subset must cover Band 3 boards.`
+    );
+  }
   return { ok: failures.length === 0, failures, played, detonations, guesses, unplayed, perfect: out.score.total === 50 };
 };
 
@@ -494,17 +567,24 @@ export const printDoRun = (model, out) => {
     console.log(`    detonations:    ${v.detonations}`);
     console.log(`    unproven moves: ${v.guesses}`);
     if (v.ok) {
-      console.log(
-        `\n    \x1b[32mPASS\x1b[0m the harness is sound: every board was played and the reference\n` +
-          `    solver never clicked a mine or an unproven cell.` +
-          (v.perfect
-            ? `\n    It scored 50/50: the pool's claims hold end to end through the sandbox.`
-            : `\n    It scored ${s.total}/50, not 50. With Phase 2's verdict pool split, a 44/50\n` +
-              `    on the dry run is expected: the reference solver has no \`verdict\`\n` +
-              `    function, so Pool B's 6 verdict points are 0. The 4/4 it kept is\n` +
-              `    the stop-discipline component; the verdict components need a\n` +
-              `    model that emits a \`verdict(position, claims)\` function (Phase 3).`)
-      );
+      // v.ok covers the harness soundness (no detonations, no unproven
+      // moves, no compile failure). PASS is reserved for a fully-sound
+      // reference run: total === 50. Anything less is FAIL with the
+      // missing component named.
+      if (v.perfect) {
+        console.log(
+          `\n    \x1b[32mPASS\x1b[0m the harness is sound: every board was played and the reference\n` +
+            `    solver never clicked a mine or an unproven cell.\n` +
+            `    It scored 50/50: the pool's claims hold end to end through the sandbox.`
+        );
+      } else {
+        console.log(
+          `\n    \x1b[31mFAIL\x1b[0m the harness ran without detonations but did not score 50/50:\n` +
+            `    scored ${s.total}/50. The missing components are named below.`
+        );
+        for (const f of v.failures) console.log(`      - ${f}`);
+        console.log(`\n    Do not trust any DO score until this passes.`);
+      }
     } else {
       console.log(`\n    \x1b[31mFAIL\x1b[0m the harness is broken:`);
       for (const f of v.failures) console.log(`      - ${f}`);
