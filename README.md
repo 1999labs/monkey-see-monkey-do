@@ -241,15 +241,32 @@ of this scale, which is why it is reported next to the score and never merged in
 
 ### Monkey Do (deduction, out of 50)
 
-The model writes `solve(board, mines)` **once**. That single function is replayed on 450
-generated boards, and every move is checked for *proof*: a move must be provably safe, not
-merely lucky.
+The model writes **two** functions **once**: `solve(board, mines)` for playing
+the board, and `verdict(position, claims, mines)` for asserting what the
+canonical stuck position proves about sampled cells. Both are replayed on
+450 generated boards, every move checked for *proof*: a move must be
+provably safe, not merely lucky.
 
 | Component | Points | What it takes |
 |---|---|---|
-| Pool A | 30 | Wins each of 300 boards that pure deduction can solve, every move proven |
-| No confident error | 10 | Never detonates, never guesses, never breaks |
-| Pool B | 10 | On 150 boards reaching an unprovable position, plays all proven moves then correctly returns `null` |
+| Pool A — Band 2 (chained) | 10 | Wins the boards where Rule 3 (subset elimination) is enough |
+| Pool A — Band 3 (wall)    | 20 | Wins the boards where the exhaustive search is required |
+| No confident error       | 10 | Never detonates, never guesses, never breaks |
+| Pool B — stop discipline  |  4 | On 150 boards reaching an unprovable position, plays all proven moves then correctly returns `null` |
+| Pool B — verdict sound    |  4 | On the 150 stuck positions, every claim answer is truth-consistent (or absent) |
+| Pool B — verdict sharp    |  2 | On the 150 stuck positions, every provable claim was asserted in the right direction and every mixed claim was abstained |
+
+A reference solver that gets every band and every verdict claim right
+scores **50/50**. The pool's Band 1 rung (Rule 2 alone) is empty on the
+published pool, so it contributes nothing — see `docs/calibration.md`
+section 9 for the measured 0 / 275 / 25 histogram and Amendment A.
+
+> **DO scores recorded before suite 0.3.0 describe a different DO and are
+> not comparable.** The 50 points have a new meaning (band split + verdict
+> split); Pool B was a single 10-point coin flip on stop discipline, now
+> it is 4 + 4 + 2 across stop and verdict. Re-run any old cohort against
+> the current prompt if a number needs to be on the same scale as a current
+> one.
 
 Outcomes per board: `won`, `surrender` (a correct stop), `premature_surrender`,
 `detonation`, `unproven_move` (safe by luck, **scored like a detonation**),
@@ -279,6 +296,11 @@ real and common failure rather than a harness fault.
 
 This is deliberately kept separate from `protocol_violation`, which means the model *did*
 answer and the answer was unusable. One is a wrong answer, the other is a missing one.
+
+A missing `verdict` is **not fatal**: a submission that defines only `solve` is scored on
+everything else, and Pool B's verdict components score 0. A `verdict` that throws or returns
+unusable output is recorded per board as a `verdictErrors` entry in the report; that board's
+verdict points are zeroed, the rest of the run is unaffected.
 
 The reference solver scores **50/50** with a Progress Index of **15/15**. `npm run dry-run`
 proves that on all 450 boards, and no model is scored unless it passes first.

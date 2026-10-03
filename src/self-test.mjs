@@ -983,6 +983,19 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
         out.score.total === 50, `${out.score.total}/50, sound=${out.score.points?.poolBVerdictSound?.toFixed(2)}/4, sharp=${out.score.points?.poolBVerdictSharp?.toFixed(2)}/2`);
     }
 
+    // Phase 4 #1: reference solver also reports 15/15 on the Progress Index.
+    // The PI is reported beside the 50, not inside it. A regression here
+    // (a future change that breaks the reference's depth, initiation, or
+    // breadth) would silently degrade the published progress index's anchor.
+    // The full-pool path is the only place that exercises all three
+    // components; the perTier=2 fixture in section 17 caps breadth at 12.
+    {
+      const out = await runDo(null, { boards: loadPool({ perTier: 20 }).boards, baseline: {}, dryRun: true });
+      const g = scoreProgressIndex({ boardResults: out.boardResults });
+      check("the reference solver reports 15/15 on the Progress Index",
+        g.total === 15, `${g.total}/15 (initiation=${g.points.initiation}, depth=${g.points.depth.toFixed(2)}, breadth=${g.points.breadth})`);
+    }
+
     // "Click any hidden cell, ignoring the numbers" is blind play. It must be
     // recorded as WRONG REASONING — a detonation — and never as a protocol
     // violation, because a broken solver and a reckless one must not score alike.

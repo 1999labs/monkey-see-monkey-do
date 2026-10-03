@@ -17,7 +17,11 @@ only record of what the current numbers mean.
 - [4. DO: the effort cap](#4-do-the-effort-cap)
 - [5. The board pool](#5-the-board-pool)
 - [6. The deduction rules](#6-the-deduction-rules)
-- [7. Changing any of this](#7-changing-any-of-this)
+- [7. The Progress Index's depth reference](#7-the-progress-indexs-depth-reference)
+- [8. The adjusted total's weights](#8-the-adjusted-totals-weights)
+- [9. DO: Pool A bands (Phase 1)](#9-do-pool-a-bands-phase-1)
+- [10. DO: Pool B verdict pool (Phase 2)](#10-do-pool-b-verdict-pool-phase-2)
+- [11. Changing any of this](#11-changing-any-of-this)
 
 ---
 
@@ -335,7 +339,147 @@ node bin/chart.mjs docs/cohort-1-local-small.json
 
 ---
 
-## 9. Changing any of this
+## 9. DO: Pool A bands (Phase 1)
+
+Pool A's 30 points used to be a coin flip — every model that won one board won
+30, and every model that lost one won 0. Bands split that into a ladder so a
+model that can do easy logic but not hard logic gets partial credit.
+
+### The classification
+
+Each Pool A board is replayed with the oracle in instrumented mode. The
+worst rule the replay needs decides the band:
+
+- **Band 1 (easy)** — every safe move derivable by Rule 2 alone: saturated
+  sets, no subset elimination, no search.
+- **Band 2 (chained)** — Rule 3 (subset elimination) or Rule 5 (global mine
+  count) needed at least once, but never the search.
+- **Band 3 (wall)** — the exact search ran at some point in the replay. These
+  are the positions where propagation stalls and only a consistency check
+  proves the next move.
+
+### Measured histogram
+
+`npm run dry-run -- --bands` runs the classification on every Pool A board:
+
+```
+  BAND HISTOGRAM (Pool A, dry-run measurement)
+    poolA-large    total 100  1 (easy)       0   2 (chained)    94   3 (wall)   6
+    poolA-medium   total 100  1 (easy)       0   2 (chained)    87   3 (wall)  13
+    poolA-small    total 100  1 (easy)       0   2 (chained)    94   3 (wall)   6
+    TOTAL                 300  1 (easy)       0   2 (chained)   275   3 (wall)  25
+```
+
+Band 1 is empty on every shape. The pool's openings are large enough that
+propagation almost always needs subset elimination at some point in the
+replay. Re-generating the pool with sparser openings would give Band 1 boards,
+but that breaks the byte-identical promise for a cosmetic rung.
+
+### The two-band ladder (Amendment A)
+
+Pool A's 30 points split **10 (Band 2, chained) / 20 (Band 3, wall)**, since
+Band 1 has none. A board is `won` with every move proven, as before. Each
+band's contribution is `boards-won-in-band / boards-assigned-to-band × weight`:
+
+- Band 2: 10 × (won / assigned) → 10/10 max
+- Band 3: 20 × (won / assigned) → 20/20 max
+
+The report field is `poolABands: { chained, wall }`. There is no dead `easy`
+key. The empty-band contract is pinned in the self-test.
+
+### Median initial-revealed per band
+
+The histogram also prints the median number of cells the opening reveal
+exposes, per band:
+
+| Band | Median `initialRevealed` |
+|---|---|
+| Band 2 (chained) | 53 cells |
+| Band 3 (wall)    | 27 cells |
+
+Smaller openings land on Band 3 more often — that is the published
+correlation, not a causal one. The "Band 1 is empty because the openings
+are large" story remains a hypothesis; the data above is the measurement.
+
+### Re-deriving
+
+```bash
+npm run dry-run -- --bands    # 450 boards, instrumented replay, ~30s
+```
+
+The histogram is recomputed on every dry run with `--bands`. The self-test
+pins the totals (0 / 275 / 25) so the bands cannot drift without
+self-test failing.
+
+---
+
+## 10. DO: Pool B verdict pool (Phase 2)
+
+Pool B's 10 points split 4 (stop discipline) + 6 (verdict discipline), so a
+model that stops correctly but cannot reason about stuck positions gets
+partial credit, and a model that reasons correctly but does not stop gets
+penalised.
+
+### The verdict function
+
+The model writes a second function in the same response as the solver:
+
+```js
+verdict(position, claims, mines)
+//   claims: [{ id, row, col }]
+// returns { "<claimId>": "PROVEN_TRUE" | "PROVEN_FALSE" | "CANNOT_TELL" }
+```
+
+`position` is the canonical stuck board view — the position after the oracle
+plays all proven moves, deterministic per board, independent of the model's
+play. A claim of PROVEN_TRUE asserts the cell is provably a mine.
+PROVEN_FALSE asserts provably safe. CANNOT_TELL admits the position does
+not decide it.
+
+### How claims are sampled
+
+Three claims per board, sampled from the canonical stuck position with the
+sampler doing a mixed-first pass and then filling with the remaining
+statuses. Two consecutive calls with the same inputs return identical
+cells — the sampler is a pure function of the board.
+
+The published pool's stuck positions are 86% provably_mine, 14% mixed,
+and 0 provably_safe (out of 5393 classified cells across all 150 Pool B
+boards). The mixed-first bias is what makes every board's sample
+include at least one mixed claim; without it, 99/150 boards would have
+all-provably_mine samples and a blanket PROVEN_TRUE would score the
+verdict pool.
+
+### Scoring
+
+A board is `clean` if every response to a decidable claim is
+truth-consistent and no mixed claim was asserted; CANNOT_TELL on
+anything is always sound. A board is `sharp` if, in addition to clean,
+every provable claim was asserted in the right direction and every
+mixed claim was abstained.
+
+| Component | Weight | Formula |
+|---|---|---|
+| Stop discipline | 4 pts | 4 × (correct stops / 150) |
+| Verdict sound   | 4 pts | 4 × (clean boards / 150) |
+| Verdict sharp   | 2 pts | 2 × (sharp boards / 150) |
+
+A model that abstains everywhere (CANNOT_TELL on every claim) loses the
+2 sharp but keeps the 4 sound: 4/6 on the verdict pool. A model that
+asserts PROVEN_TRUE on every claim scores 0/6, because every Pool B
+board has at least one mixed cell and PROVEN_TRUE on a mixed claim is
+unsound.
+
+### Re-deriving
+
+```bash
+npm run self-test   # 149/149; pins the 4/6 abstainer, 0/6 assert-everything
+npm run dry-run    # the reference solver hits 6/6 on a full pool
+```
+
+---
+
+## 11. Changing any of this
 
 The rule is that **the pool and the harness must never be able to drift apart.**
 `capForTier` is the single source of the cap, and `do/run.mjs` calls it rather

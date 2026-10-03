@@ -339,6 +339,16 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
     // without forcing the reader to know the plan.
     poolABandWeights: result.score.poolABandWeights ?? { 2: 10, 3: 20 },
     poolABandCounts: result.score.poolABandCounts ?? {},
+    // Pool B's three verdict-pool components (Phase 4 #2): additive,
+    // self-explanatory, no overlap with the legacy fields above. Named
+    // exactly as the plan names them.
+    poolBStopPoints: result.score.points?.poolBCorrectStop ?? 0,
+    verdictSoundPoints: result.score.points?.poolBVerdictSound ?? 0,
+    verdictSharpPoints: result.score.points?.poolBVerdictSharp ?? 0,
+    poolBTotal: result.score.points?.poolBTotal ?? (result.score.points?.poolBCorrectStop ?? 0),
+    // Verdict bookkeeping: how many boards counted toward sound/sharp on
+    // the run. Empty verdictErrors key means every verdict call succeeded.
+    poolBVerdict: result.score.poolBVerdict,
     perTier: result.score.perTier,
     poolBPerTier: result.score.poolBPerTier,
     index: result.score.index,

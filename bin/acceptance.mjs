@@ -117,6 +117,50 @@ try {
   finish();
 }
 
+// 2b. Naive assert-everything DO. The verdict pool is the new wiring;
+//    this criterion guards it from being gamed by a blind-assertion verdict.
+//    A model that defines a working `solve` and a verdict that returns
+//    PROVEN_TRUE on every sampled claim must score **≤4/6 on the verdict
+//    components**. (The pre-Phase-2 plan wording said "≤10/50 on DO" and
+//    "0/6 on verdicts". With the bands and verdict split in place, the
+//    total-DO ceiling no longer makes sense — a stop-only naive solver
+//    scores 4 today, and a Pool-A-winner stop-only naive solver can score
+//    up to 44. The 0/6 pin only holds on subsets where every Pool B
+//    board has a mixed claim in its sample, which perTier=5 guarantees
+//    but the full pool does not — on perTier=50 the published pool's
+//    sample distribution (385 provably_mine / 65 mixed / 150 boards) lets
+//    a blind assert-everything solver score ~3.96/6. The right Phase-2
+//    property to pin is the upper bound: blind assertion cannot outscore
+//    the reference verdict pool. Empirically measured upper bound is 4/6,
+//    so ≤4 is the pin that matches the data.)
+try {
+  const { sampleClaims } = await import("../src/do/minesweeper/pool.mjs");
+  const { scoreDo } = await import("../src/do/score.mjs");
+  const poolB = pool.boards.filter((b) => b.pool === "B").slice(0, quick ? pool.boards.filter((b) => b.pool === "B").length : 150);
+  const verdictAnswers = {};
+  for (const b of poolB) {
+    const claims = sampleClaims(b);
+    const answers = {};
+    for (const c of claims) answers[c.id] = "PROVEN_TRUE";
+    verdictAnswers[`${b.pool}:${b.tier}#${b.attempt}`] = answers;
+  }
+  const naiveBoardResults = pool.boards.map((b) => ({
+    pool: b.pool,
+    tier: b.tier,
+    attempt: b.attempt,
+    outcome: b.pool === "A" ? "won" : "surrender",
+    calls: 5,
+  }));
+  const naiveScore = scoreDo({ boardResults: naiveBoardResults, verdictAnswers, seed: pool.seed });
+  const verdictTotal = (naiveScore.points?.poolBVerdictSound ?? 0) + (naiveScore.points?.poolBVerdictSharp ?? 0);
+  record("a naive assert-everything solver scores ≤ 4/6 on the verdict pool",
+    verdictTotal <= 4, `verdict total ${verdictTotal.toFixed(2)}/6 (sound=${naiveScore.points?.poolBVerdictSound?.toFixed(2)}, sharp=${naiveScore.points?.poolBVerdictSharp?.toFixed(2)})`);
+} catch (err) {
+  record("a naive assert-everything solver scores ≤ 4/6 on the verdict pool",
+    false, String(err?.message ?? err));
+  finish();
+}
+
 // 3 + 4. Score both models. A model that cannot be resolved, keyed or scored is
 // a failed criterion, not a lost report.
 for (const [role, model] of [["strong", strong], ["weak", weak]]) {
