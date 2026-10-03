@@ -26,11 +26,10 @@ import { fileURLToPath } from "node:url";
 import { makeRng, newBoard, openBoard, reveal, isWon, layoutDigest, TIERS } from "./board.mjs";
 import { analyse, DEFAULT_BUDGET, PHASE_RANK } from "./oracle.mjs";
 
-/** Internal: turn the numeric worst-case band (1, 2, 3) back into the phase label. */
-const phaseToLabel = (rank) => {
-  for (const [label, r] of Object.entries(PHASE_RANK)) if (r === rank) return label;
-  return "rule2";
-};
+/** Internal: turn the numeric worst-case band (1, 2, 3) back into the phase label.
+ * Direct table — the band's rank (1=rule2 only, 2=rule3/rule5 fired, 3=search)
+ * is what to grep against and is not the same as PHASE_RANK's relative ordering. */
+const phaseToLabel = (rank) => ({ 1: "rule2", 2: "rule3", 3: "search" }[rank] ?? "rule2");
 
 /** The published seed. Changing it invalidates every score ever reported. */
 export const POOL_SEED = 0x5eed;
@@ -223,6 +222,11 @@ export const classifyBoard = (board, { maxCalls, budget, instrument = false } = 
       { ...(budget ? { budget } : {}), ...(instrument ? { instrument: true } : {}) }
     );
     if (!verdict.conclusive) {
+      // Unclassifiable: oracle ran out of budget or the board was already won.
+      // Band is meaningless here — propagation never decided anything AND the
+      // search never finished. Returning the fallback "worst === 0 → band 1"
+      // would mark an unclassifiable board as the easy rung and inflate the
+      // Band 1 count, which the rest of the suite reads as a measurement.
       return {
         pool: null,
         won: false,
@@ -231,7 +235,6 @@ export const classifyBoard = (board, { maxCalls, budget, instrument = false } = 
         stalledAt: calls,
         isEndgame: false,
         hiddenAtStall: null,
-        ...(instrument ? { band: worst === 0 ? 1 : worst, worstPhase: worst === 0 ? "rule2" : phaseToLabel(worst) } : {}),
       };
     }
     if (verdict.deducible) {
@@ -260,7 +263,9 @@ export const classifyBoard = (board, { maxCalls, budget, instrument = false } = 
       stalledAt: calls,
       isEndgame: hidden <= ENDGAME_HIDDEN_FRACTION,
       hiddenAtStall: Number(hidden.toFixed(4)),
-      ...(instrument ? { band: worst === 0 ? 1 : worst, worstPhase: worst === 0 ? "rule2" : phaseToLabel(worst) } : {}),
+      // Pool B boards aren't banded — bands are a Pool A difficulty grade.
+      // Recording one here would let scoring.mjs mis-attribute Pool B wins
+      // to a band, which doesn't exist for Pool B.
     };
   }
   // Ran out of calls without finishing. The oracle should not need this many on
@@ -275,7 +280,6 @@ export const classifyBoard = (board, { maxCalls, budget, instrument = false } = 
     hiddenAtStall: null,
     capped: true,
     callLimit: limit,
-    ...(instrument ? { band: worst === 0 ? 1 : worst, worstPhase: worst === 0 ? "rule2" : phaseToLabel(worst) } : {}),
   };
 };
 

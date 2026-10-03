@@ -3,6 +3,7 @@
 // 50 points:
 //
 //   Pool A  won                   30    board cleared, every move proven
+//     split as 10 (Band 2, chained) + 20 (Band 3, wall) — see poolABands
 //   Pool A  no confident error    10    never detonated, guessed, or broke
 //   Pool B  correct stop          10    played every proven move, then
 //                                       returned null where nothing is provable
@@ -10,6 +11,23 @@
 // Pool A is split in two deliberately. A solver that returns null immediately
 // never loses a board and learns nothing — so "not losing" alone cannot tell
 // caution from competence. The 30/10 split rewards WINNING over not losing.
+//
+// BANDS (Phase 1 onward). Pool A's 30 points were previously awarded as a flat
+// fraction of won-boards. That meant a model that could do the easy half but
+// not the hard half got zero, and a model that could do the hard half but not
+// the easy half also got zero. The 30 are now split across two bands by the
+// oracle-measured difficulty of the board:
+//
+//   Band 2 (chained)  10 pts  every safe move derivable by Rules 2 + 3, but
+//                             never the exhaustive search
+//   Band 3 (wall)     20 pts  requires the exact search at some point
+//
+// Band 1 (easy, Rule 2 alone) was measured empty on all three shapes — the
+// pool's openings are large enough that subset elimination is always needed.
+// The plan documented this fallback: empty bands contribute zero, the 30
+// redistribute across those that have any, with weights chosen so that a
+// model that wins only Band 3 still gets 20 of 30 and a model that wins only
+// Band 2 still gets 10. See poolABands in the report for the per-band score.
 //
 // POOL B WAS UNWINNABLE BY DESIGN, and is now scored on what the prompt asks.
 // Every Pool B board reaches a position where no cell can be proven safe. The
@@ -30,8 +48,33 @@
 // does nothing. protocol_violation is still reported, because it is
 // diagnostically useful even when it is not scored.
 
-import { POOL_A_TIERS, POOL_B_TIERS, capForTier, replayBoard, POOL_SEED } from "./minesweeper/pool.mjs";
+import { POOL_A_TIERS, POOL_B_TIERS, capForTier, replayBoard, classifyBoard, POOL_SEED } from "./minesweeper/pool.mjs";
 import { reveal, isWon, makeRng } from "./minesweeper/board.mjs";
+
+/**
+ * Band point weights — the 30 Pool A points distributed across the bands that
+ * actually contain boards on the published pool (Phase 1 measurement:
+ * Band 1 empty, Band 2 = 275, Band 3 = 25).
+ *
+ * Each band's score is (boards won in band / boards assigned to band) × weight.
+ * Weights are hand-chosen so a perfect run still totals 30 and a model that
+ * wins only one band gets partial credit on that band alone.
+ */
+export const POOL_A_BAND_WEIGHTS = { 2: 10, 3: 20 };
+
+/**
+ * Compute one board's band by replaying it with the oracle in instrumented
+ * mode. Pool A boards only; Pool B is intentionally not banded.
+ *
+ * Cheap (one board replay), but called once per Pool A board per run. For
+ * the published pool's 300 Pool A boards, the cumulative cost is a few seconds
+ * — acceptable for a measurement pass that also informs scoring.
+ */
+export const bandOf = ({ tier, attempt, pool }, seed = POOL_SEED) => {
+  if (pool !== "A") return null;
+  const board = replayBoard(tier, attempt, seed);
+  return classifyBoard(board, { instrument: true }).band;
+};
 
 /**
  * Outcomes that forfeit Pool A's 10 no-detonation points.
@@ -77,10 +120,51 @@ const breakdown = (rows) => ({
  * @param {object} opts
  * @param {Array} opts.boardResults  one entry per board: { pool, tier, outcome, calls }
  * @param {object} opts.baseline     tier -> random survival rate on Pool A
+ * @param {number} opts.seed         the pool seed (default published). Used to
+ *                                    compute bands by replaying each Pool A
+ *                                    board in instrumented mode. Optional but
+ *                                    required to enable poolABands.
  */
-export const scoreDo = ({ boardResults, baseline = {} }) => {
+export const scoreDo = ({ boardResults, baseline = {}, seed = POOL_SEED } = {}) => {
   const poolA = boardResults.filter((r) => r.pool === "A");
   const poolB = boardResults.filter((r) => r.pool === "B");
+
+  // Tag each Pool A board with its band. Two passes over the same board list
+  // would double the cost, so we walk once and reuse the lookup for the
+  // win-rate and the per-band score below.
+  const bandByKey = new Map();
+  const bandCounts = {}; // band -> assigned count
+  for (const r of poolA) {
+    const key = `${r.pool}:${r.tier}#${r.attempt}`;
+    let band = bandByKey.get(key);
+    if (band === undefined) {
+      band = bandOf({ pool: r.pool, tier: r.tier, attempt: r.attempt }, seed);
+      bandByKey.set(key, band);
+    }
+    if (band != null) bandCounts[band] = (bandCounts[band] ?? 0) + 1;
+  }
+
+  // Per-band won counts.
+  const bandWon = {};
+  for (const r of poolA) {
+    if (r.outcome !== "won") continue;
+    const key = `${r.pool}:${r.tier}#${r.attempt}`;
+    const band = bandByKey.get(key);
+    if (band == null) continue;
+    bandWon[band] = (bandWon[band] ?? 0) + 1;
+  }
+
+  // Per-band score: fraction of assigned boards won, weighted.
+  // Band 1 is omitted from the report per the amended plan — measured empty
+  // on all three shapes, so its contribution is structurally zero and the
+  // reader does not need to see "0/0".
+  const poolABands = {};
+  for (const [band, weight] of Object.entries(POOL_A_BAND_WEIGHTS)) {
+    const assigned = bandCounts[band] ?? 0;
+    if (assigned === 0) continue; // skip empty bands, per plan
+    const won = bandWon[band] ?? 0;
+    poolABands[labelForBand(Number(band))] = Number(((won / assigned) * weight).toFixed(2));
+  }
 
   const aWon = share(poolA, is("won"));
   const aNoDetonation = share(poolA, (r) => !CONFIDENT_ERRORS.has(r.outcome));
@@ -102,8 +186,15 @@ export const scoreDo = ({ boardResults, baseline = {} }) => {
     if (rows.length) poolBPerTier[tier] = breakdown(rows);
   }
 
+  // Sum the band scores — they replace the flat 30. A perfect run still
+  // totals 30 because every band scores its full weight. The math is the
+  // same as the old 30 only when the per-band weights sum to 30, which they
+  // do by construction.
+  const poolAWonPoints = Object.values(poolABands).reduce((a, b) => a + b, 0);
+
   const points = {
-    poolAWon: aWon * 30,
+    poolABands,
+    poolAWon: poolAWonPoints, // kept as a legacy field, recomputed from bands
     poolANoDetonation: aNoDetonation * 10,
     poolBCorrectStop: bCorrectStop * 10,
   };
@@ -123,6 +214,8 @@ export const scoreDo = ({ boardResults, baseline = {} }) => {
     max: 50,
     poolA: { total: poolA.length, won: aWon, noDetonation: aNoDetonation },
     poolB: { total: poolB.length, correctStop: bCorrectStop },
+    poolABandCounts: bandCounts, // { 2: 5, 3: 1 } — internal, useful for the self-test
+    poolABandWeights: POOL_A_BAND_WEIGHTS,
     perTier,
     poolBPerTier,
     index,
@@ -130,6 +223,8 @@ export const scoreDo = ({ boardResults, baseline = {} }) => {
     unverifiedMoves: boardResults.reduce((n, r) => n + (r.unverifiedMoves ?? 0), 0),
   };
 };
+
+const labelForBand = (n) => (n === 2 ? "chained" : n === 3 ? "wall" : `band${n}`);
 
 /** A count of every outcome, including the ones that are not scored. */
 export const tally = (rows) => {

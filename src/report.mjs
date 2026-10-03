@@ -329,9 +329,16 @@ export const buildDoReport = ({ model, result, config, keySource, pool, baseline
   score: {
     total: result.score.total,
     max: result.score.max,
-    points: result.score.points,
+    points: result.score.points ?? {},
     poolA: result.score.poolA,
     poolB: result.score.poolB,
+    // Pool A band breakdown: { chained, wall } each 0..10 or 0..20 per band
+    // weight. Empty bands are absent (Band 1 measured empty on all shapes).
+    poolABands: result.score.points?.poolABands ?? {},
+    // Per-band weights and board counts, so the report is self-describing
+    // without forcing the reader to know the plan.
+    poolABandWeights: result.score.poolABandWeights ?? { 2: 10, 3: 20 },
+    poolABandCounts: result.score.poolABandCounts ?? {},
     perTier: result.score.perTier,
     poolBPerTier: result.score.poolBPerTier,
     index: result.score.index,

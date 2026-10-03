@@ -27,7 +27,7 @@ import {
   classifyBoard, replayBoard, callsFor, capForTier, CELLS_PER_CALL, POOL_SEED, ENDGAME_HIDDEN_FRACTION,
   POOL_A_TIERS, POOL_B_TIERS, PUBLISHED_PER_TIER, POOL_FILE, buildPublishedPool, serializePool,
 } from "./do/minesweeper/pool.mjs";
-import { scoreDo, randomBaseline } from "./do/score.mjs";
+import { scoreDo, randomBaseline, bandOf } from "./do/score.mjs";
 import { scoreProgressIndex, REFERENCE_DEPTH } from "./do/progress-index.mjs";
 import { adjustedTotal } from "./adjusted.mjs";
 import { playBoard, loadPool } from "./do/run.mjs";
@@ -639,11 +639,24 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     const mk = (outcome, n, pool = "A", tier = "poolA-small") =>
       Array.from({ length: n }, (_, i) => ({ pool, tier, attempt: i + 1, outcome, calls: 5 }));
 
-    // A perfect run WINS Pool A and STOPS CORRECTLY on Pool B.
-    const perfect = scoreDo({ boardResults: [...mk("won", 4), ...mk("surrender", 4, "B")] });
+    // Synthesized board lists are OK for outcome-only checks. Band-sensitive
+    // checks use the real pool via `realPoolA({ perTier })` so both bands
+    // appear — Pool A boards span two bands (Band 2 + Band 3) and a
+    // synthesized poolA-small only list can land entirely in one band.
+    const realPoolA = ({ perTier, outcome = "won" }) =>
+      loadPool({ perTier }).boards
+        .filter((b) => b.pool === "A")
+        .slice(0, perTier * POOL_A_TIERS.length)
+        .map((b) => ({ pool: b.pool, tier: b.tier, attempt: b.attempt, outcome, calls: 5 }));
+
+    // A perfect run WINS Pool A and STOPS CORRECTLY on Pool B. The Pool A
+    // sample must span both bands so the band split totals 30, not 20.
+    const perfect = scoreDo({
+      boardResults: [...realPoolA({ perTier: 5 }), ...mk("surrender", 4, "B")],
+    });
     check("a perfect run (win A, stop correctly on B) scores the full 50", perfect.total === 50, `${perfect.total}/50`);
     check("guessing on Pool B earns nothing, even when the guess is lucky",
-      scoreDo({ boardResults: [...mk("won", 4), ...mk("unproven_move", 4, "B")] }).total === 40);
+      scoreDo({ boardResults: [...realPoolA({ perTier: 5 }), ...mk("unproven_move", 4, "B")] }).total === 40);
     check("a lucky guess on Pool A forfeits the no-detonation points like a detonation",
       scoreDo({ boardResults: mk("unproven_move", 4) }).total === scoreDo({ boardResults: mk("detonation", 4) }).total);
     const mixed = scoreDo({ boardResults: [...mk("won", 4), ...mk("surrender", 4, "B")] });
@@ -663,6 +676,43 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
       scoreDo({ boardResults: mk("protocol_violation", 4) }).total === 0);
 
     check("an empty run scores 0, not a free bonus", scoreDo({ boardResults: [] }).total === 0);
+
+    // --- Band scoring (Phase 1) ---
+    // The reference solver wins every Pool A board, so band scores equal
+    // their full weights. The histogram has Band 1 empty on every shape
+    // (measured 0/275/25), so the report carries only chained + wall.
+    const perfectBands = scoreDo({ boardResults: realPoolA({ perTier: 5 }) }).points.poolABands;
+    check("the reference solver's band scores sum to the 30-point Pool A pot",
+      perfectBands.chained === 10 && perfectBands.wall === 20
+        && Object.keys(perfectBands).length === 2
+        && Object.keys(perfectBands).every((k) => k !== "easy"),
+      `poolABands=${JSON.stringify(perfectBands)}`);
+    check("the band split is reported beside the 30, not instead of it",
+      scoreDo({ boardResults: realPoolA({ perTier: 5 }) }).points.poolAWon === 30,
+      `${scoreDo({ boardResults: realPoolA({ perTier: 5 }) }).points.poolAWon}/30`);
+
+    // A solver that wins only Band 2 (chained) keeps its 10, loses Band 3's 20.
+    // We tag every Pool A board as won, then mutate the band 3 boards to a
+    // non-won outcome to simulate a solver that handles only chained logic.
+    const chainOnly = realPoolA({ perTier: 5 });
+    const bandByKey = new Map();
+    for (const r of chainOnly) {
+      const band = bandOf({ pool: r.pool, tier: r.tier, attempt: r.attempt });
+      bandByKey.set(`${r.tier}#${r.attempt}`, band);
+    }
+    for (const r of chainOnly) {
+      if (bandByKey.get(`${r.tier}#${r.attempt}`) === 3) r.outcome = "premature_surrender";
+    }
+    const partial = scoreDo({ boardResults: chainOnly });
+    // Chain-only should score full 10 on chained, 0 on wall, plus 10 no-det.
+    // Total = 10 + 0 + 10 = 20. (No Pool B in this fixture.)
+    check("a solver that wins only Band 2 (chained) keeps its 10 and loses Band 3's 20",
+      partial.points.poolABands.chained === 10 && partial.points.poolABands.wall === 0 && partial.total === 20,
+      `poolABands=${JSON.stringify(partial.points.poolABands)}, total=${partial.total}/50`);
+
+    // The empty-Band-1 contract: report fields never include an "easy" key.
+    check("the band report has no 'easy' key, even when Band 1 is empty",
+      !("easy" in scoreDo({ boardResults: realPoolA({ perTier: 5 }) }).points.poolABands));
   }
 
   // --- 17. DO progress index ---------------------------------------------------
@@ -704,7 +754,13 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
       scoreProgressIndex({ boardResults: [...rows("won", 4, 75), ...rows("won", 4, 0, "A", "poolA-medium"), ...rows("won", 4, 0, "A", "poolA-large")] }).points.breadth < 5);
 
     // The invariant that matters most: adding the axis must not move the 50.
-    const perfectRows = [...rows("won", 4, 75), ...rows("surrender", 4, 75, "B")];
+    // Use the real pool so the band split is fully covered; a synthesized
+    // 4-board poolA-small fixture lands entirely in one band and totals 30
+    // instead of 50.
+    const perfectRows = [
+      ...loadPool({ perTier: 5 }).boards.filter((b) => b.pool === "A").slice(0, 15).map((b) => ({ pool: "A", tier: b.tier, attempt: b.attempt, outcome: "won", calls: 75 })),
+      ...rows("surrender", 4, 75, "B"),
+    ];
     check("the progress index does not change the 50-point score",
       scoreDo({ boardResults: perfectRows }).total === 50);
     check("Pool B is excluded from the progress index — quitting correctly is not progress",
@@ -768,10 +824,14 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     check("a negative Generalization Index is treated as zero rather than a bonus",
       adj(24, 10, -30, 1).total === 34, `${adj(24, 10, -30, 1).total}`);
 
-    // It must stay a reporting layer: SEE + DO are untouched.
+    // It must stay a reporting layer: SEE + DO are untouched. The exact DO total
+    // is band-dependent (a 4-board sample from one tier may not span both
+    // bands), so we use whatever scoreDo produces — the assertion is that
+    // adjusted equals it, not that it equals a specific number.
     const wonRows = Array.from({ length: 4 }, (_, i) => ({ pool: "A", tier: "poolA-small", attempt: i + 1, outcome: "won", calls: 75 }));
+    const wonTotal = scoreDo({ boardResults: wonRows }).total;
     check("the adjusted figure does not change the SEE or DO totals",
-      scoreDo({ boardResults: wonRows }).total === 40 && adj(40, 0, 0, 0).base === 40);
+      adj(wonTotal, 0, 0, 0).base === wonTotal, `doTotal=${wonTotal}`);
   }
 
   // --- 19. DO prompt and harness ------------------------------------------

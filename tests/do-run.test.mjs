@@ -7,7 +7,7 @@ import { buildDoReport, writeDoReport } from "../src/report.mjs";
 import { summarise } from "../src/run-all.mjs";
 import { buildPrompt, promptDigest, PREAMBLE } from "../src/do/prompt.mjs";
 import { compileCandidate } from "../src/sandbox.mjs";
-import { replayBoard, capForTier, POOL_SEED } from "../src/do/minesweeper/pool.mjs";
+import { replayBoard, capForTier, POOL_SEED, POOL_A_TIERS } from "../src/do/minesweeper/pool.mjs";
 import { provablySafe } from "../src/do/minesweeper/oracle.mjs";
 
 // Compiling raw source the way the harness does, so the fakes below exercise
@@ -277,9 +277,18 @@ test("a move on an already-revealed cell is a protocol violation", () => {
 const rows = (pool, tier, outcome, n) =>
   Array.from({ length: n }, (_, i) => ({ pool, tier, attempt: i + 1, outcome, calls: 5 }));
 
+// Pool A boards span two bands (Band 2 + Band 3) and a synthesized poolA-small
+// list of 4 attempts may land entirely in Band 2 — partial credit rather than
+// the full 30. Use a real-pool fixture for the full-marks test.
+const realPoolARows = (perTier, calls = 50) =>
+  loadPool({ perTier }).boards
+    .filter((b) => b.pool === "A")
+    .slice(0, perTier * POOL_A_TIERS.length)
+    .map((b) => ({ pool: "A", tier: b.tier, attempt: b.attempt, outcome: "won", calls }));
+
 test("a perfect run scores the full 50: win Pool A, stop correctly on Pool B", () => {
   const s = scoreDo({
-    boardResults: [...rows("A", "poolA-small", "won", 4), ...rows("B", "poolA-small", "surrender", 4)],
+    boardResults: [...realPoolARows(5), ...rows("B", "poolA-small", "surrender", 4)],
   });
   assert.equal(s.total, 50);
   assert.equal(s.points.poolAWon, 30);
@@ -537,7 +546,11 @@ test("with verification off, the same guess is allowed to continue", () => {
 });
 
 test("runDo's dry run scores 50/50 through the sandbox on a sample of the pool", async () => {
-  const pool = loadPool({ perTier: 1 });
+  // perTier must be large enough that the subset spans BOTH Pool A bands
+  // (Band 2 + Band 3) — the reference solver maxes both, so total = 50
+  // requires a Band 3 board in the sample. perTier=20 covers ~20/100 on
+  // each tier, well above the ~6/13/6 wall-board density on each tier.
+  const pool = loadPool({ perTier: 20 });
   const out = await runDo(null, { boards: pool.boards, seed: pool.seed, dryRun: true });
   assert.equal(out.usable, true, out.compileError);
   assert.equal(out.score.total, 50, JSON.stringify(out.score.outcomes));
@@ -662,8 +675,10 @@ test("a no_response report survives the report builder", async () => {
 test("a dry run is unaffected: the reference solver still scores 50/50", async () => {
   // Real boards, not the two-board stand-in above: replayBoard rejects a tier
   // it does not know, and the point here is that the no-response path did not
-  // change how a working solver is scored.
-  const out = await runDo(null, { boards: loadPool({ perTier: 1 }).boards, baseline: {}, dryRun: true });
+  // change how a working solver is scored. perTier must span both Pool A
+  // bands for a perfect run to total 50 (otherwise Pool A's 30 cap holds it
+  // to 30 + 10 + 10 = 50 minus what Band 3 didn't contribute).
+  const out = await runDo(null, { boards: loadPool({ perTier: 20 }).boards, baseline: {}, dryRun: true });
   assert.equal(out.callFailure, null, "no call, so no call failure");
   assert.equal(out.score.total, 50);
   assert.equal(out.usable, true);

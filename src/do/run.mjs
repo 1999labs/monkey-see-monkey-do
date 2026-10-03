@@ -261,7 +261,7 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
     }
     return {
       boardResults,
-      score: scoreDo({ boardResults, baseline }),
+      score: scoreDo({ boardResults, baseline, seed }),
       progressIndex: scoreProgressIndex({ boardResults }),
       usable: false,
       compileError: null,
@@ -293,7 +293,7 @@ export const runDo = async (config, { boards, seed = POOL_SEED, baseline = {}, o
 
   return {
     boardResults,
-    score: scoreDo({ boardResults, baseline }),
+    score: scoreDo({ boardResults, baseline, seed }),
     // Reported beside the 50, never inside it. See src/do/progress-index.mjs.
     progressIndex: scoreProgressIndex({ boardResults }),
     usable: compileError === null,
@@ -441,7 +441,25 @@ export const printDoRun = (model, out) => {
     }
   }
 
-  console.log(`\n  POOL A won            ${s.points.poolAWon.toFixed(1)}/30`);
+  // Per-band breakdown — only show bands that actually have boards in the
+  // pool, so a reader never sees "chained 0/0". Weights are 10 (chained) and
+  // 20 (wall) per the amended plan; a band that is absent from poolABands has
+  // zero assigned boards and zero contribution.
+  const weights = s.poolABandWeights;
+  const bands = s.points.poolABands;
+  const counts = s.poolABandCounts;
+  const bandOrder = [
+    { key: "chained", label: "Band 2 (chained)" },
+    { key: "wall", label: "Band 3 (wall)" },
+  ];
+  console.log(`\n  POOL A by band (30 points split across bands that have boards)`);
+  for (const { key, label } of bandOrder) {
+    if (bands[key] === undefined) continue;
+    const w = weights[key === "chained" ? 2 : 3];
+    const assigned = counts[key === "chained" ? 2 : 3] ?? 0;
+    console.log(`    ${label.padEnd(20)} ${bands[key].toFixed(1)}/${w}  (${assigned} boards)`);
+  }
+  console.log(`  POOL A won            ${s.points.poolAWon.toFixed(1)}/30`);
   console.log(`  POOL A no conf. error ${s.points.poolANoDetonation.toFixed(1)}/10`);
   console.log(`  POOL B correct stop   ${s.points.poolBCorrectStop.toFixed(1)}/10`);
   console.log(`\n  ${s.total}/50`);

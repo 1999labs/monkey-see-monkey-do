@@ -43,9 +43,12 @@ test("the CLI runners work end to end, write their reports, and score a correct 
   const log = join(seeDir, "requests.jsonl");
 
   // Run concurrently: each child pays for the self-test gate.
+  // DO needs per-tier coverage of both Pool A bands (Band 2 + Band 3) to
+  // score the full 50 — otherwise Band 3's 20 points are simply absent
+  // from the subset. SEE has no such constraint.
   const [doRun, allRun, seeRun] = await Promise.all([
-    run("src/do/run.mjs", ["-m", "openrouter/stub-model", "--key", "sk-test", "--per-tier", "1", "--out", doDir]),
-    run("src/run-all.mjs", ["-m", "openrouter/stub-model", "--key", "sk-test", "--per-tier", "1", "--out", allDir]),
+    run("src/do/run.mjs", ["-m", "openrouter/stub-model", "--key", "sk-test", "--per-tier", "20", "--out", doDir]),
+    run("src/run-all.mjs", ["-m", "openrouter/stub-model", "--key", "sk-test", "--per-tier", "20", "--out", allDir]),
     // Ollama needs no key at all.
     run("src/see/run.mjs", ["-m", "ollama/stub-model", "-s", "7", "--out", seeDir], { STUB_FETCH_LOG: log }),
   ]);
@@ -129,7 +132,10 @@ test("a model configured without temperature-0 support is refused unless the awk
 
 test("a dry run passes its safety gate and scores 50/50", async () => {
   const dir = mkdtempSync(join(tmpdir(), "md-cli-dry-"));
-  const r = await run("src/do/run.mjs", ["--dry-run", "--per-tier", "2", "--out", dir]);
+  // perTier must cover both Pool A bands (Band 2 + Band 3) so the reference
+  // solver can score 30 + 10 + 10 = 50; with a small subset it scores 30 +
+  // 10 + 10 - (Band 3's contribution) because the subset has no wall boards.
+  const r = await run("src/do/run.mjs", ["--dry-run", "--per-tier", "20", "--out", dir]);
   assert.equal(r.code, 0, `${r.stdout}\n${r.stderr}`);
   assert.match(r.stdout, /PASS/);
   assert.match(r.stdout, /50\/50/);
@@ -201,7 +207,7 @@ test("the runners execute from a repo path containing a space", async () => {
   cpSync(ROOT + "/src", join(dir, "src"), { recursive: true });
   cpSync(ROOT + "/package.json", join(dir, "package.json"));
   const r = await new Promise((resolve) => {
-    const child = spawn(process.execPath, [join(dir, "src/do/run.mjs"), "--dry-run", "--per-tier", "1", "--out", dir], { cwd: dir });
+    const child = spawn(process.execPath, [join(dir, "src/do/run.mjs"), "--dry-run", "--per-tier", "20", "--out", dir], { cwd: dir });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (d) => (stdout += d));
