@@ -329,6 +329,95 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
   }
 
   // ===================================================================
+  // MONKEY SEE — sample efficiency (Phase 4, suite 1.0.0)
+  //
+  // The runner loops over sample levels 2, 4, 8, 16. Level 8 is the
+  // backward-compat slot — its prompt and digest must be unchanged from
+  // suite 0.x.x so every old SEE score remains comparable to a new run.
+  // Levels 2, 4, 16 are NEW prompt slots; their digests are pinned in
+  // src/prompt-digests.mjs and the runner produces per-level metrics.
+  // ===================================================================
+  log("\n\n\x1b[1mMONKEY SEE — sample levels · self-test\x1b[0m\n");
+
+  const { SAMPLE_LEVELS, SAMPLE_WEIGHTS, weightedSum, scoreTaskAcrossLevels } =
+    await import("./see/score.mjs");
+
+  // (a) Levels are exactly the four pinned in Phase 1, with the right
+  // weights and the right order.
+  check("SAMPLE_LEVELS is [2, 4, 8, 16]",
+    JSON.stringify(SAMPLE_LEVELS) === "[2,4,8,16]",
+    JSON.stringify(SAMPLE_LEVELS));
+  check("SAMPLE_WEIGHTS sums to 1.0",
+    Math.abs(Object.values(SAMPLE_WEIGHTS).reduce((s, w) => s + w, 0) - 1.0) < 1e-9,
+    `sum=${Object.values(SAMPLE_WEIGHTS).reduce((s, w) => s + w, 0)}`);
+
+  // (b) Level-8 prompt digests match the recorded (backward-compat gate).
+  for (const task of tasks) {
+    const actual = promptDigest(task, 8);
+    check(`task ${task.id} level-8 prompt digest is unchanged (backward-compat)`,
+      actual === RECORDED_DIGESTS[task.id],
+      `recorded=${RECORDED_DIGESTS[task.id].slice(0, 16)}…, actual=${actual.slice(0, 16)}…`);
+  }
+
+  // (c) The new levels (2, 4, 16) have digests pinned in SEE_LEVEL_DIGESTS
+  // and each prompt's actual digest matches the pin.
+  const { SEE_LEVEL_DIGESTS } = await import("./prompt-digests.mjs");
+  for (const level of [2, 4, 16]) {
+    for (const task of tasks) {
+      const key = `${task.id}-${level}`;
+      const expected = SEE_LEVEL_DIGESTS[key];
+      const actual = promptDigest(task, level);
+      check(`level ${level} digest for task ${task.id} matches the pinned value`,
+        actual === expected,
+        `recorded=${expected?.slice(0, 16) ?? "MISSING"}…, actual=${actual.slice(0, 16)}…`);
+    }
+  }
+
+  // (d) Each task now has 16 shown examples (was 8). The first 8 are the
+  // old suite-0.x.x examples — verified by re-rendering the level-8 prompt
+  // and checking its digest against the recorded pin. (Already covered by
+  // (b).)
+  check("each task ships 16 shown examples (Phase 4 raised the ceiling from 8)",
+    tasks.every((t) => t.shown.length === 16),
+    `lengths=${tasks.map((t) => t.shown.length).join(", ")}`);
+
+  // (e) A synthetic audit: the reference oracle, run through the same
+  // scoring path a real model would take (sandbox compile + per-case call),
+  // scores 50/50 at every level. This proves the per-level path is sound
+  // end to end.
+  const runLevelsModule = await import("./see/run-levels.mjs");
+  const audit = await runLevelsModule.runAllLevels(null, { dryRun: true });
+
+  for (const id of ["A", "B", "C"]) {
+    const t = audit.perTask[id];
+    check(`synthetic audit: task ${id} weighted rate is 100% (reference oracle)`,
+      t.weightedRate > 0.999,
+      `weightedRate=${t.weightedRate.toFixed(4)}`);
+    check(`synthetic audit: task ${id} gzMean is 0 (oracle matches itself on every level)`,
+      Math.abs(t.gzMean) < 1e-9,
+      `gzMean=${t.gzMean.toFixed(6)}`);
+  }
+
+  // (f) Per-level GZ pooled across tasks is 0 (reference oracle matches
+  // held-out perfectly at every level).
+  for (const [level, e] of Object.entries(audit.perLevel)) {
+    check(`synthetic audit: pooled GZ at level ${level} is 0`,
+      Math.abs(e.gz) < 1e-9,
+      `gz=${e.gz?.toFixed(6)}`);
+  }
+
+  // (g) Robustness bonus is 5/5 against the reference oracle (no throws).
+  check("synthetic audit: robustness is 5/5 against the reference oracle",
+    audit.robustness.points === 5,
+    `points=${audit.robustness.points}, threw=${audit.robustness.threw}/${audit.robustness.total}`);
+
+  // (h) The synthetic audit's total = 45 (weighted rates × 15) + 5 = 50.
+  const expectedPoints = Object.values(audit.perTask).reduce((s, t) => s + t.weightedRate * 15, 0);
+  check("synthetic audit: 45 + 5 = 50/50 against the reference oracle",
+    Math.abs(expectedPoints + audit.robustness.points - 50) < 1e-9,
+    `taskPoints=${expectedPoints.toFixed(2)}, robustness=${audit.robustness.points}`);
+
+  // ===================================================================
   // MONKEY DO
   //
   // The same discipline as SEE: validate the eval before scoring a model.

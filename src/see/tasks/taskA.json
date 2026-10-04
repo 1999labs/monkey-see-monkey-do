@@ -3,18 +3,127 @@
   "name": "Arithmetic with a hidden threshold",
   "signatureHint": "The function takes one integer argument: f(n)",
   "shown": [
-    { "input": 2, "output": 4 },
-    { "input": 4, "output": 16 },
-    { "input": 6, "output": 36 },
-    { "input": 8, "output": 64 },
-    { "input": 11, "output": 21 },
-    { "input": 13, "output": 69 },
-    { "input": 9, "output": 81 },
-    { "input": 15, "output": 125 }
+    {
+      "input": 2,
+      "output": 4
+    },
+    {
+      "input": 4,
+      "output": 16
+    },
+    {
+      "input": 6,
+      "output": 36
+    },
+    {
+      "input": 8,
+      "output": 64
+    },
+    {
+      "input": 11,
+      "output": 21
+    },
+    {
+      "input": 13,
+      "output": 69
+    },
+    {
+      "input": 9,
+      "output": 81
+    },
+    {
+      "input": 15,
+      "output": 125
+    },
+    {
+      "input": -5,
+      "output": 25
+    },
+    {
+      "input": -7,
+      "output": 49
+    },
+    {
+      "input": -2,
+      "output": 4
+    },
+    {
+      "input": -3,
+      "output": 9
+    },
+    {
+      "input": -9,
+      "output": 81
+    },
+    {
+      "input": 17,
+      "output": 189
+    },
+    {
+      "input": 19,
+      "output": 261
+    },
+    {
+      "input": 21,
+      "output": 341
+    }
   ],
   "heldOut": {
-    "core": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, -1, 2, 4, 11, 12, 15, 18, 20, 25],
-    "boundary": [10, 11, 11, 12, 12, 11, 12, 13, 10, 11, 12, 13, 14, 10, 11],
-    "adversarial": [15, 16, 18, 20, 25, 30, 35, 40, 50, 60, 70, 80, 90, 100, 11]
+    "core": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      0,
+      -1,
+      2,
+      4,
+      11,
+      12,
+      15,
+      18,
+      20,
+      25
+    ],
+    "boundary": [
+      10,
+      11,
+      11,
+      12,
+      12,
+      11,
+      12,
+      13,
+      10,
+      11,
+      12,
+      13,
+      14,
+      10,
+      11
+    ],
+    "adversarial": [
+      15,
+      16,
+      18,
+      20,
+      25,
+      30,
+      35,
+      40,
+      50,
+      60,
+      70,
+      80,
+      90,
+      100,
+      11
+    ]
   }
 }

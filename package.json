@@ -13,6 +13,7 @@
     "self-test:full": "node src/self-test.mjs --full",
     "prompts": "node bin/show-prompts.mjs",
     "see": "node src/see/run.mjs",
+    "see:levels": "node src/see/run-levels.mjs",
     "do": "node src/do/run.mjs",
     "dry-run": "node src/do/run.mjs --dry-run",
     "dry-run:chain": "node src/do/chain/dry-run.mjs",

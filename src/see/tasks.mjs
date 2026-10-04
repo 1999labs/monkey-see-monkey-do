@@ -37,7 +37,14 @@ const validate = (task) => {
   const problems = [];
   if (!groundTruth[task.id]) problems.push(`no ground truth registered for id "${task.id}"`);
   if (!Array.isArray(task.shown)) problems.push("shown must be an array");
-  else if (task.shown.length !== 8) problems.push(`shown must have 8 examples, has ${task.shown.length}`);
+  else if (task.shown.length < 2 || task.shown.length > 16) {
+    // Phase 4 raised the ceiling from 8 to 16 to support the level-16
+    // prompt. Each task now ships 16 shown examples so all four sample
+    // levels (2, 4, 8, 16) have data to draw from. Level 8 is the
+    // backward-compat slot: the first 8 entries are the previous
+    // byte-identical examples.
+    problems.push(`shown must have 2-16 examples, has ${task.shown.length}`);
+  }
   for (const entry of task.shown ?? []) {
     // Shown entries carry an output: they are rendered into the prompt.
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
