@@ -260,6 +260,7 @@ export const runAllLevels = async (config, { dryRun = false } = {}) => {
     points: totalHeldOut ? 5 * (1 - totalThrows / totalHeldOut) : 0,
     threw: totalThrows,
     total: totalHeldOut,
+    rate: totalHeldOut ? 1 - totalThrows / totalHeldOut : 0,
     crashed: totalThrows > 0,
   };
 

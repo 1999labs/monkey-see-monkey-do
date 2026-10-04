@@ -127,3 +127,19 @@ export const chainIdOf = (chain) => `${chain.band}#${chain.attempt}`;
  * level, not here.
  */
 export const isEmpty = (submitted) => !Array.isArray(submitted) || submitted.length === 0;
+
+/**
+ * Phase 5: the chain engagement rate. The fraction of the 50 chains on
+ * which the model's submission made at least ONE legal step (full credit
+ * or partial credit). An empty submission (`[]` on every chain) scores
+ * engagement 0, which the adjusted formula then claws back as 10 free
+ * points the model would otherwise collect.
+ *
+ * @param {Array} perChain   the scoreRun() per-chain array
+ * @returns {number}  fraction 0-1
+ */
+export const chainEngagementRate = (perChain) => {
+  if (!Array.isArray(perChain) || perChain.length === 0) return 0;
+  const engaged = perChain.filter((c) => c.fullCredit || c.partial).length;
+  return engaged / perChain.length;
+};

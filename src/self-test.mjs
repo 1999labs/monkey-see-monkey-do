@@ -965,51 +965,72 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
   }
 
   // --- 18. The adjusted total (reported, never scored) -------------------
+  // Suite 1.0.0: the formula uses the SEE gzMean and the DO v2 chain
+  // engagement rate. The legacy `initiationRate` (Minesweeper progress
+  // index initiation) is gone with the DO pivot — see the long header in
+  // src/adjusted.mjs for the rationale.
   log("\n18. The adjusted total");
 
   {
-    const adj = (seeTotal, doTotal, generalizationIndex, initiationRate) =>
-      adjustedTotal({ seeTotal, doTotal, generalizationIndex, initiationRate });
+    // The new-field shortcut mirrors the old one for symmetry with the
+    // rest of the test block.
+    const adj = (seeTotal, doTotal, gzMean, chainEngagementRate) =>
+      adjustedTotal({ seeTotal, doTotal, gzMean, chainEngagementRate });
 
     // The load-bearing invariant: a perfect run must still be 100. This is what
     // lets the adjusted figure exist at all — it is reported beside SEE + DO
-    // rather than replacing them, and the oracle is not penalised for the
-    // progress index it has no use for.
+    // rather than replacing them, and the oracle is not penalised for any
+    // progress metric it has no use for.
     check("a perfect run still scores 100/100 adjusted", adj(50, 50, 0, 1).total === 100, `${adj(50, 50, 0, 1).total}/100`);
-    check("the reference solver is not penalised by the progress index clawback",
+    check("the reference solver is not penalised by the chain-engagement clawback",
       adj(50, 50, 0, 1).unearnedPenalty === 0);
-    check("a perfect run with no progress index supplied is not penalised either",
-      adjustedTotal({ seeTotal: 50, doTotal: 50, generalizationIndex: 0 }).total === 100);
+    check("a perfect run with no engagement supplied is not penalised either",
+      adjustedTotal({ seeTotal: 50, doTotal: 50, gzMean: 0 }).total === 100);
 
     // Bounded on both sides.
     check("a surface-fitter floors at 0 rather than going negative", adj(0, 0, 100, 0).total === 0);
     check("the total is clamped at 100 even if a base ever exceeded it",
-      adjustedTotal({ seeTotal: 80, doTotal: 80, generalizationIndex: 0, initiationRate: 1 }).total === 100);
+      adjustedTotal({ seeTotal: 80, doTotal: 80, gzMean: 0, chainEngagementRate: 1 }).total === 100);
 
     // Both adjustments actually bite, and in the right direction.
     check("the Generalization Index is subtracted, so the same scores score lower at a higher index",
-      adj(24, 10, 25, 0).total < adj(24, 10, 9, 0).total);
+      adj(24, 10, 25, 1).total < adj(24, 10, 9, 1).total);
     check("a solver that never engaged has the unearned points clawed back",
       adj(24, 10, 9, 0).unearnedPenalty === 10, `${adj(24, 10, 9, 0).unearnedPenalty}`);
-    check("a solver that engaged on every board keeps the no-confident-error points",
+    check("a solver that engaged on every chain keeps the no-confident-error points",
       adj(24, 10, 9, 1).unearnedPenalty === 0);
     check("engagement claws back proportionally, not all-or-nothing",
       adj(24, 10, 9, 0.5).unearnedPenalty === 5, `${adj(24, 10, 9, 0.5).unearnedPenalty}`);
 
     // The clawback can never exceed the component it corrects.
     check("the clawback never exceeds the 10 points it is correcting",
-      adjustedTotal({ seeTotal: 0, doTotal: 0, generalizationIndex: 0, initiationRate: -5 }).unearnedPenalty <= 10);
+      adjustedTotal({ seeTotal: 0, doTotal: 0, gzMean: 0, chainEngagementRate: -5 }).unearnedPenalty <= 10);
     check("a negative Generalization Index is treated as zero rather than a bonus",
       adj(24, 10, -30, 1).total === 34, `${adj(24, 10, -30, 1).total}`);
 
-    // It must stay a reporting layer: SEE + DO are untouched. The exact DO total
-    // is band-dependent (a 4-board sample from one tier may not span both
-    // bands), so we use whatever scoreDo produces — the assertion is that
-    // adjusted equals it, not that it equals a specific number.
-    const wonRows = Array.from({ length: 4 }, (_, i) => ({ pool: "A", tier: "poolA-small", attempt: i + 1, outcome: "won", calls: 75 }));
-    const wonTotal = scoreDo({ boardResults: wonRows }).total;
-    check("the adjusted figure does not change the SEE or DO totals",
-      adj(wonTotal, 0, 0, 0).base === wonTotal, `doTotal=${wonTotal}`);
+    // Three edge-case pins the user named: all-engaged, never-engaged,
+    // partially-engaged.
+    check("all-engaged: chainEngagementRate=1 → no clawback, unearnedPenalty=0",
+      adj(45, 50, 0, 1).unearnedPenalty === 0,
+      `unearnedPenalty=${adj(45, 50, 0, 1).unearnedPenalty}`);
+    check("never-engaged: chainEngagementRate=0 → full claw, unearnedPenalty=10",
+      adj(45, 50, 0, 0).unearnedPenalty === 10,
+      `unearnedPenalty=${adj(45, 50, 0, 0).unearnedPenalty}`);
+    check("partially-engaged: chainEngagementRate=0.5 → linear half-claw",
+      adj(45, 50, 0, 0.5).unearnedPenalty === 5,
+      `unearnedPenalty=${adj(45, 50, 0, 0.5).unearnedPenalty}`);
+
+    // Synthetic combined-report round-trip: SEE 50 + DO 50 + gzMean 0 +
+    // engagement 1 → adjusted 100/100. The gate the user named in the
+    // Phase 5 spec.
+    const synthetic = adjustedTotal({ seeTotal: 50, doTotal: 50, gzMean: 0, chainEngagementRate: 1 });
+    check("synthetic round-trip (SEE 50, DO 50, gzMean 0, engagement 1) → 100/100 adjusted",
+      synthetic.total === 100 && synthetic.max === 100,
+      `total=${synthetic.total}, max=${synthetic.max}`);
+
+    // It must stay a reporting layer: SEE + DO are untouched.
+    check("the adjusted figure does not change the SEE + DO base",
+      adj(45, 50, 100, 0).base === 95, `base=${adj(45, 50, 100, 0).base}`);
   }
 
   // --- 19. DO prompt and harness ------------------------------------------
