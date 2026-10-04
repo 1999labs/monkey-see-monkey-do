@@ -8,52 +8,72 @@
 //   L30 10 points  (10 chains)
 //   L50 10 points  (10 chains)
 //
-// PER-CHAIN SCORING (Phase 2):
-//   chain_score = (correctSteps / expectedSteps)  clamped at [0, 1]
-//   "correct" means: the rule was applicable at the recorded start position
-//   AND applying it produced the recorded `next` state.
+// PER-CHAIN SCORING (Phase 3, generalised for any valid derivation):
+//   The scorer accepts ANY derivation the model returns, regardless of how
+//   many steps it took. The contract:
+//     - every step is rule-applicable at its recorded start position, AND
+//     - applying the rule produces the recorded `next` state, AND
+//     - the final state after all steps equals the chain's target.
 //
-//   PLUS a completion bonus: chain_score += 0.05 if the final state equals
-//   the chain's target. This is small because Phase 2 only scores the
-//   reference solver, which always reaches the target; the bonus is here
-//   so Phase 3's generalised scorer (any valid derivation, not just the
-//   reference's) keeps the "reach the target" signal in the score.
+//   If ALL three hold: chain_score = 1.0 (full credit for that chain).
+//   Otherwise: chain_score = (correctSteps / submittedSteps), where
+//   correctSteps counts the steps that replayed successfully and
+//   submittedSteps is the total the model emitted. An empty array
+//   (no derivation found) scores 0.
+//
+//   The previous (Phase 2) definition added a fractional COMPLETION_BONUS
+//   per chain; that was a reference-solver-only convenience. Phase 3
+//   removes it: completion IS the score. A model that finds a shorter
+//   route gets the same 1.0 as one that follows the pool's recorded path
+//   — both are full-credit derivations. The fraction below 1.0 only ever
+//   appears when the model failed mid-way, which is what "partial credit"
+//   should mean.
 //
 // BAND SCORE = mean(chain scores across the 10 chains in the band) × 10.
 //   A perfect run is 10 per band × 5 bands = 50.
 //
-//   The mean is unweighted: every chain contributes equally, so the bands
-//   grade difficulty by "what fraction of chains you got right", not by
-//   some length-derived weight. This is the same shape SEE uses for its
-//   held-out sets.
-//
-// Phase 2 scope: the reference solver is the only "model" we test against.
-// The scorer is written so Phase 3 can drop in the model's solver without
-// changes — only the function that produces the steps differs.
+// Why "any valid derivation" rather than "the shortest": the plan pins
+// sustained deduction as the eval's value proposition. A solver that finds
+// a SHORTER route is still proving a chain — the difficulty is in reaching
+// the target by legal moves, not in matching the pool's recorded length.
+// Per-band lengths (5/10/20/30/50) are the *target* difficulty of each band;
+// a chain is banded by the nominal length, but its score is binary
+// (reached / not-reached) once any valid derivation is in hand.
 
 import { verifyDerivation } from "./reference.mjs";
 import { POOL_BANDS } from "./generator.mjs";
 
-/** The completion bonus per chain when the final state matches the target. */
-export const COMPLETION_BONUS = 0.05;
-
 /**
  * Score one chain's submitted derivation against the recorded (start, target).
  *
- * @param {object} chain     { start, target, length, steps (the recorded reference) }
- * @param {Array}  submitted [{rule, start, next}, ...]
- * @returns {{ correctSteps, expectedSteps, reachedTarget, chainScore, band }}
+ *   fullCredit   true when every step is legal AND the final state equals
+ *                the target — the chain earns 1.0 regardless of how many
+ *                steps it took.
+ *   partial      true when some steps were legal but the chain failed
+ *                mid-way (a wrong step at position k, or never reached the
+ *                target). Chain score = correctSteps / submittedSteps.
+ *
+ * @returns {{ fullCredit, partial, correctSteps, submittedSteps, reachedTarget, chainScore, band }}
  */
 export const scoreChain = (chain, submitted) => {
-  const expected = chain.length;
-  const v = verifyDerivation(chain.start, chain.target, submitted);
+  const submittedSteps = Array.isArray(submitted) ? submitted.length : 0;
+  const v = verifyDerivation(chain.start, chain.target, Array.isArray(submitted) ? submitted : []);
   const correctSteps = v.correctSteps;
   const reachedTarget = v.reachedTarget;
-  const base = expected > 0 ? correctSteps / expected : 0;
-  const chainScore = Math.min(1, base + (reachedTarget ? COMPLETION_BONUS : 0));
+  const fullCredit = v.ok && reachedTarget;
+  let chainScore;
+  if (fullCredit) {
+    chainScore = 1;
+  } else if (submittedSteps > 0) {
+    chainScore = correctSteps / submittedSteps;
+  } else {
+    chainScore = 0;
+  }
   return {
+    fullCredit,
+    partial: !fullCredit && correctSteps > 0,
     correctSteps,
-    expectedSteps: expected,
+    submittedSteps,
     reachedTarget,
     chainScore: Number(chainScore.toFixed(4)),
     band: chain.band,
@@ -71,7 +91,7 @@ export const scoreChain = (chain, submitted) => {
  * @returns {{
  *   total: number, max: 50,
  *   perBand: Record<string, { score, points, max, chains }>,
- *   perChain: Array<{ id, band, correctSteps, expectedSteps, reachedTarget, chainScore }>
+ *   perChain: Array<{ id, band, fullCredit, partial, correctSteps, submittedSteps, reachedTarget, chainScore }>
  * }}
  */
 export const scoreRun = ({ chains, submittedPerChain = {} }) => {
@@ -86,13 +106,12 @@ export const scoreRun = ({ chains, submittedPerChain = {} }) => {
     perBand[c.band].chains.push(result);
   }
 
-  // Mean per band, scaled to the band's 10-point weight.
   for (const band of POOL_BANDS) {
     const b = perBand[band.name];
     const n = b.chains.length;
     const mean = n ? b.chains.reduce((s, x) => s + x.chainScore, 0) / n : 0;
     b.score = Number(mean.toFixed(4));
-    b.points = Number((mean * band.count).toFixed(2)); // max equals the band weight (10 here)
+    b.points = Number((mean * band.count).toFixed(2)); // max equals the band's 10-point weight
   }
 
   const total = Number(Object.values(perBand).reduce((s, b) => s + b.points, 0).toFixed(2));
@@ -101,3 +120,10 @@ export const scoreRun = ({ chains, submittedPerChain = {} }) => {
 
 /** Stable id for a chain: `<band>#<attempt>`. */
 export const chainIdOf = (chain) => `${chain.band}#${chain.attempt}`;
+
+/**
+ * An empty submission is legal — it scores 0 per chain, not protocol_violation.
+ * A broken solver (one that throws or returns garbage) is handled at the run
+ * level, not here.
+ */
+export const isEmpty = (submitted) => !Array.isArray(submitted) || submitted.length === 0;

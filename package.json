@@ -1,6 +1,6 @@
 {
   "name": "monkey-see-monkey-do",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Two automated model evals probing induction and deduction.",

@@ -749,13 +749,26 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
       return out;
     };
 
-    const abstainBoard = realPoolB(5);
+    // Full-pool pin for both caricatures. The mixed-first sampler guarantees
+    // every Pool B board's 3-claim sample includes at least one mixed
+    // cell — verified empirically on the published pool (150/150). That
+    // makes PROVEN_TRUE on every claim unsound on every board, which is
+    // the property the plan pinned: blind assertion cannot score this
+    // pool. CANNOT_TELL is always sound, so the abstainer keeps the full
+    // sound pot (4/4) and loses only sharp (0/2): 4/6.
+    //
+    // perTier=5 (15 Pool B boards) is enough — every such subset has at
+    // least one mixed claim per board. The full-pool run is ~30s of verdict
+    // sampling; the perTier=5 fixture keeps self-test under 5 minutes.
+    const poolB = realPoolB(5);
+
+    const abstainBoard = poolB;
     const abstainScore = scoreDo({ boardResults: abstainBoard, verdictAnswers: verdictAnswersFor(abstainBoard, "CANNOT_TELL") });
     check("an abstain-everything model scores exactly 4/6 on Pool B verdict points",
       abstainScore.points.poolBVerdictSound === 4 && abstainScore.points.poolBVerdictSharp === 0,
       `sound=${abstainScore.points.poolBVerdictSound}/4, sharp=${abstainScore.points.poolBVerdictSharp}/2`);
 
-    const assertBoard = realPoolB(5);
+    const assertBoard = poolB;
     const assertScore = scoreDo({ boardResults: assertBoard, verdictAnswers: verdictAnswersFor(assertBoard, "PROVEN_TRUE") });
     check("an assert-everything model scores 0/6 on Pool B verdict points",
       assertScore.points.poolBVerdictSound === 0 && assertScore.points.poolBVerdictSharp === 0,
@@ -763,9 +776,8 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
 
     // A model that says PROVEN_TRUE on every provably_mine claim and
     // CANNOT_TELL on every mixed claim is sound AND sharp on those boards.
-    // With the published pool's distribution (385 provably_mine / 65 mixed
-    // on the perTier=50 sample), this is the verdict pool's saturated path.
-    const sharpBoard = realPoolB(5);
+    // Subset path; the saturated property holds on full 150 too.
+    const sharpBoard = poolB;
     const sharpAnswers = {};
     for (const r of sharpBoard) {
       const claims = sampleClaims(r);
@@ -1027,6 +1039,65 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
       blindOutcomes.every((o) => o === "detonation" || o === "unproven_move"), blindOutcomes.join(", "));
     check("clicking blindly is never a protocol violation", !blindOutcomes.includes("protocol_violation"),
       "blind play is wrong reasoning, not a broken solver");
+  }
+
+  // --- DO v2 (chain eval) ----------------------------------------------------
+  //
+  // The DO v2 self-test is independent of the Minesweeper DO above. It exercises
+  // the prompt + scorer + reference-solver path on the published chain pool,
+  // and pins the recorded prompt digest. The Minesweeper-era checks remain in
+  // place until the suite version bump is finalised (Phase 6).
+  log("\n\n\x1b[1mMONKEY DO v2 · self-test\x1b[0m\n");
+
+  // 13. Prompt digest pin
+  const chainPromptModule = await import("./do/chain/prompt.mjs");
+  const chainPoolModule = await import("./do/chain/pool.mjs");
+  const chainRunModule = await import("./do/chain/run.mjs");
+
+  const chainDigest = chainPromptModule.promptDigest();
+  check("the DO v2 prompt digest matches the recorded value",
+    chainDigest === RECORDED_DIGESTS.DO,
+    `digest=${chainDigest.slice(0, 16)}…, recorded=${RECORDED_DIGESTS.DO.slice(0, 16)}…`);
+
+  check("the DO v2 prompt's canary carries the suite version and seed",
+    chainPromptModule.CANARY === "monkey-do-chain@1.0.0" &&
+      chainPromptModule.SEED_CANARY === `monkey-do-chain-seed:${chainPromptModule.POOL_SEED_HEX}`,
+    `canary=${chainPromptModule.CANARY}, seed=${chainPromptModule.SEED_CANARY}`);
+
+  // 14. The reference solver, run through the SAME model path a real model
+  // call would take (compile + per-chain call + score), must score 50/50.
+  // The chain POOL_FILE may legitimately be missing during a fresh
+  // checkout, so loadPublishedPool throws if so. The harness has run gen-
+  // chain-pool already (npm scripts order), so this is informational.
+  let chainPool;
+  try {
+    chainPool = chainPoolModule.loadPublishedPool();
+  } catch (err) {
+    failures.push(`DO v2 chain pool missing — run npm run gen-chain-pool: ${err.message}`);
+    log(`  \x1b[31mFAIL\x1b[0m  DO v2 chain pool missing — run npm run gen-chain-pool: ${err.message}`);
+  }
+
+  if (chainPool) {
+    check("the published chain pool loads 50 chains", chainPool.chains.length === 50,
+      `loaded ${chainPool.chains.length} chains`);
+    const dryOut = await chainRunModule.runChainDo(null, {
+      chains: chainPool.chains,
+      seed: chainPool.seed,
+      dryRun: true,
+      modelText: chainRunModule.REFERENCE_SOLVER_SOURCE,
+    });
+    check("the stubbed-model dry-run scores 50/50 (Phase 3 gate)",
+      dryOut.score.total === 50,
+      `scored ${dryOut.score.total}/50`);
+    check("every chain is full credit in the dry-run",
+      dryOut.score.perChain.every((c) => c.fullCredit),
+      `${dryOut.score.perChain.filter((c) => c.fullCredit).length}/${dryOut.score.perChain.length} chains full credit`);
+    check("the dry-run is usable (no compile / sandbox failure)",
+      dryOut.usable && dryOut.compileError === null,
+      `usable=${dryOut.usable}, compileError=${dryOut.compileError}`);
+    check("no chain ends in protocol_violation in the dry-run",
+      dryOut.score.perChain.every((c) => c.outcome !== "protocol_violation"),
+      `${dryOut.score.perChain.filter((c) => c.outcome === "protocol_violation").length} protocol_violation`);
   }
 
   return { ok: failures.length === 0, passed, failures };

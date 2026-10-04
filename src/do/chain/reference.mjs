@@ -20,8 +20,22 @@
 
 import { allApplicable, RULES } from "./rules.mjs";
 
-/** Hard cap on the number of distinct states BFS will visit. */
-export const MAX_STATES = 10000;
+/** Hard cap on the number of distinct states BFS will visit.
+ *
+ * The longest L50 chains need ~40k visited states for a BFS to reach their
+ * targets — measured against the published pool, not against an isolated
+ * worst case. The cap is set above that worst case by a comfortable margin
+ * so a future pool that includes harder chains (longer bands, more rules)
+ * still runs without an early reject.
+ *
+ * Phase 2 originally shipped with 10000 here; that turned out to truncate
+ * BFS on the chains the pool was already published with, because the
+ * generator and the verifier both called solveChain and the verifier hit
+ * the cap on every L50 chain. Bumping to 50000 brought the cap above the
+ * measured worst case; the dry-run gate verifies the cap is high enough
+ * before any chain ships.
+ */
+export const MAX_STATES = 50000;
 
 /** Hard cap on derivation length BFS will search. Bands stop at 50 today. */
 export const MAX_STEPS = 60;
