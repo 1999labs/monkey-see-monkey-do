@@ -78,5 +78,15 @@ export const SEE_LEVEL_DIGESTS = {
  *                   any report under 0.x.x is not comparable to anything
  *                   recorded at 1.0.0. Old SEE scores under level 8 remain
  *                   comparable because the level-8 prompt is byte-identical.
+ *   1.1.0           Derived-figure recalculation: the adjusted total's GZ
+ *                   penalty is now scaled by the model's earned fraction
+ *                   (SEE+DO)/100, so the surface-fit correction can never
+ *                   subtract more than was earned. Engagement clawback stays
+ *                   fixed (10 × (1 − engagement), unscaled) by design — see
+ *                   src/adjusted.mjs. Prompt digests are UNCHANGED from
+ *                   1.0.0; combined reports carry BOTH adjusted readings
+ *                   side by side, stamped with their formula version, so
+ *                   the 1.0.0 reading is preserved as evidence. Recalculated
+ *                   offline, never by re-running models.
  */
-export const SUITE_VERSION = "1.0.0";
+export const SUITE_VERSION = "1.1.0";

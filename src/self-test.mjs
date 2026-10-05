@@ -20,7 +20,7 @@ import { buildPrompt, promptDigest, allPromptDigests, PREAMBLE } from "./see/pro
 import { scoreTask, scoreSeen, generalizationIndex, heldOutCases, robustnessBonus, ROBUSTNESS_POINTS, unusableResult } from "./see/score.mjs";
 import { compileCandidate, runCandidate } from "./sandbox.mjs";
 import { RECORDED_DIGESTS } from "./prompt-digests.mjs";
-import { adjustedTotal } from "./adjusted.mjs";
+import { adjustedTotal, adjustedTotal_1_0_0 } from "./adjusted.mjs";
 
 const BAND_MIN = 20;
 const BAND_MAX = 45;
@@ -425,61 +425,94 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     const adj = (seeTotal, doTotal, gzMean, chainEngagementRate) =>
       adjustedTotal({ seeTotal, doTotal, gzMean, chainEngagementRate });
 
-    // The load-bearing invariant: a perfect run must still be 100. This is what
-    // lets the adjusted figure exist at all — it is reported beside SEE + DO
-    // rather than replacing them, and the oracle is not penalised for any
-    // progress metric it has no use for.
-    check("a perfect run still scores 100/100 adjusted", adj(50, 50, 0, 1).total === 100, `${adj(50, 50, 0, 1).total}/100`);
-    check("the reference solver is not penalised by the chain-engagement clawback",
-      adj(50, 50, 0, 1).unearnedPenalty === 0);
-    check("a perfect run with no engagement supplied is not penalised either",
-      adjustedTotal({ seeTotal: 50, doTotal: 50, gzMean: 0 }).total === 100);
+    // The load-bearing invariant: a perfect run must still be 100 under
+        // both 1.0.0 and 1.1.0 formulas. This is what lets the adjusted
+        // figure exist at all — it is reported beside SEE + DO rather than
+        // replacing them, and the oracle is not penalised for any progress
+        // metric it has no use for. The 1.1.0 formula scales the GZ
+        // penalty by the earned fraction; with base=100 the factor is 1.0
+        // and the two formulas agree.
+        check("1.1.0: a perfect run still scores 100/100 adjusted",
+          adj(50, 50, 0, 1).total === 100, `${adj(50, 50, 0, 1).total}/100`);
+        check("1.1.0: the reference solver is not penalised by the chain-engagement clawback",
+          adj(50, 50, 0, 1).unearnedPenalty === 0);
+        check("1.1.0: a perfect run with no engagement supplied is not penalised either",
+          adjustedTotal({ seeTotal: 50, doTotal: 50, gzMean: 0 }).total === 100);
 
-    // Bounded on both sides.
-    check("a surface-fitter floors at 0 rather than going negative", adj(0, 0, 100, 0).total === 0);
-    check("the total is clamped at 100 even if a base ever exceeded it",
-      adjustedTotal({ seeTotal: 80, doTotal: 80, gzMean: 0, chainEngagementRate: 1 }).total === 100);
+        // Bounded on both sides.
+        check("1.1.0: a surface-fitter floors at 0 rather than going negative", adj(0, 0, 100, 0).total === 0);
+        check("1.1.0: the total is clamped at 100 even if a base ever exceeded it",
+          adjustedTotal({ seeTotal: 80, doTotal: 80, gzMean: 0, chainEngagementRate: 1 }).total === 100);
 
-    // Both adjustments actually bite, and in the right direction.
-    check("the Generalization Index is subtracted, so the same scores score lower at a higher index",
-      adj(24, 10, 25, 1).total < adj(24, 10, 9, 1).total);
-    check("a solver that never engaged has the unearned points clawed back",
-      adj(24, 10, 9, 0).unearnedPenalty === 10, `${adj(24, 10, 9, 0).unearnedPenalty}`);
-    check("a solver that engaged on every chain keeps the no-confident-error points",
-      adj(24, 10, 9, 1).unearnedPenalty === 0);
-    check("engagement claws back proportionally, not all-or-nothing",
-      adj(24, 10, 9, 0.5).unearnedPenalty === 5, `${adj(24, 10, 9, 0.5).unearnedPenalty}`);
+        // Both adjustments actually bite, and in the right direction.
+        check("1.1.0: the Generalization Index is subtracted, so the same scores score lower at a higher index",
+          adj(24, 10, 25, 1).total < adj(24, 10, 9, 1).total);
+        check("1.1.0: a solver that never engaged has the unearned points clawed back",
+          adj(24, 10, 9, 0).unearnedPenalty === 10, `${adj(24, 10, 9, 0).unearnedPenalty}`);
+        check("1.1.0: a solver that engaged on every chain keeps the no-confident-error points",
+          adj(24, 10, 9, 1).unearnedPenalty === 0);
+        check("1.1.0: engagement claws back proportionally, not all-or-nothing",
+          adj(24, 10, 9, 0.5).unearnedPenalty === 5, `${adj(24, 10, 9, 0.5).unearnedPenalty}`);
 
-    // The clawback can never exceed the component it corrects.
-    check("the clawback never exceeds the 10 points it is correcting",
-      adjustedTotal({ seeTotal: 0, doTotal: 0, gzMean: 0, chainEngagementRate: -5 }).unearnedPenalty <= 10);
-    check("a negative Generalization Index is treated as zero rather than a bonus",
-      adj(24, 10, -30, 1).total === 34, `${adj(24, 10, -30, 1).total}`);
+        // The clawback can never exceed the component it corrects.
+        check("1.1.0: the clawback never exceeds the 10 points it is correcting",
+          adjustedTotal({ seeTotal: 0, doTotal: 0, gzMean: 0, chainEngagementRate: -5 }).unearnedPenalty <= 10);
+        check("1.1.0: a negative Generalization Index is treated as zero rather than a bonus",
+          adj(24, 10, -30, 1).total === 34, `${adj(24, 10, -30, 1).total}`);
 
-    // Three edge-case pins the user named: all-engaged, never-engaged,
-    // partially-engaged.
-    check("all-engaged: chainEngagementRate=1 → no clawback, unearnedPenalty=0",
-      adj(45, 50, 0, 1).unearnedPenalty === 0,
-      `unearnedPenalty=${adj(45, 50, 0, 1).unearnedPenalty}`);
-    check("never-engaged: chainEngagementRate=0 → full claw, unearnedPenalty=10",
-      adj(45, 50, 0, 0).unearnedPenalty === 10,
-      `unearnedPenalty=${adj(45, 50, 0, 0).unearnedPenalty}`);
-    check("partially-engaged: chainEngagementRate=0.5 → linear half-claw",
-      adj(45, 50, 0, 0.5).unearnedPenalty === 5,
-      `unearnedPenalty=${adj(45, 50, 0, 0.5).unearnedPenalty}`);
+        // Three edge-case pins the user named in the Phase 5 spec, now
+        // asserted under BOTH suite versions. The 1.1.0 formula scales the
+        // GZ penalty by the earned fraction; with GZ=0 the two formulas
+        // agree exactly on the unearnedPenalty field (the engagement
+        // clawback is FIXED and unscaled by design — see the asymmetry
+        // note in src/adjusted.mjs). The 1.1.0 column also pins the
+        // total figure (unearnedPenalty alone is invariant; the total
+        // differs because the GZ penalty is scaled).
+        check("1.1.0 all-engaged (chainEngagementRate=1) → no clawback, unearnedPenalty=0",
+          adj(45, 50, 0, 1).unearnedPenalty === 0,
+          `unearnedPenalty=${adj(45, 50, 0, 1).unearnedPenalty}, total=${adj(45, 50, 0, 1).total}`);
+        check("1.0.0 all-engaged (chainEngagementRate=1) → no clawback, unearnedPenalty=0",
+          adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 1 }).unearnedPenalty === 0,
+          `unearnedPenalty=${adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 1 }).unearnedPenalty}, total=${adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 1 }).total}`);
+        check("1.1.0 never-engaged (chainEngagementRate=0) → full claw, unearnedPenalty=10",
+          adj(45, 50, 0, 0).unearnedPenalty === 10,
+          `unearnedPenalty=${adj(45, 50, 0, 0).unearnedPenalty}, total=${adj(45, 50, 0, 0).total}`);
+        check("1.0.0 never-engaged (chainEngagementRate=0) → full claw, unearnedPenalty=10",
+          adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 0 }).unearnedPenalty === 10,
+          `unearnedPenalty=${adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 0 }).unearnedPenalty}, total=${adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 0 }).total}`);
+        check("1.1.0 partially-engaged (chainEngagementRate=0.5) → linear half-claw, unearnedPenalty=5",
+          adj(45, 50, 0, 0.5).unearnedPenalty === 5,
+          `unearnedPenalty=${adj(45, 50, 0, 0.5).unearnedPenalty}, total=${adj(45, 50, 0, 0.5).total}`);
+        check("1.0.0 partially-engaged (chainEngagementRate=0.5) → linear half-claw, unearnedPenalty=5",
+          adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 0.5 }).unearnedPenalty === 5,
+          `unearnedPenalty=${adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 0.5 }).unearnedPenalty}, total=${adjustedTotal_1_0_0({ seeTotal: 45, doTotal: 50, gzMean: 0, chainEngagementRate: 0.5 }).total}`);
 
-    // Synthetic combined-report round-trip: SEE 50 + DO 50 + gzMean 0 +
-    // engagement 1 → adjusted 100/100. The gate the user named in the
-    // Phase 5 spec.
-    const synthetic = adjustedTotal({ seeTotal: 50, doTotal: 50, gzMean: 0, chainEngagementRate: 1 });
-    check("synthetic round-trip (SEE 50, DO 50, gzMean 0, engagement 1) → 100/100 adjusted",
-      synthetic.total === 100 && synthetic.max === 100,
-      `total=${synthetic.total}, max=${synthetic.max}`);
+        // 1.1.0 floor-saturation tripwire. The qwen shape (SEE 19, DO 1,
+        // GZ 26.7, eng 0.04) resolves to 8 under 1.1.0 and 0 under 1.0.0.
+        // The tripwire breaks if either formula is silently re-shaped.
+        check("1.1.0: the qwen shape (SEE 19, DO 1, GZ 26.7, eng 0.04) resolves to 8 (the floor-saturation fix)",
+          adj(19, 1, 26.7, 0.04).total === 8,
+          `total=${adj(19, 1, 26.7, 0.04).total}, base=${adj(19, 1, 26.7, 0.04).base}, gzPenalty=${adj(19, 1, 26.7, 0.04).gzMeanPenalty}`);
+        check("1.0.0: the qwen shape (SEE 19, DO 1, GZ 26.7, eng 0.04) floors at 0",
+          adjustedTotal_1_0_0({ seeTotal: 19, doTotal: 1, gzMean: 26.7, chainEngagementRate: 0.04 }).total === 0,
+          `total=${adjustedTotal_1_0_0({ seeTotal: 19, doTotal: 1, gzMean: 26.7, chainEngagementRate: 0.04 }).total}`);
 
-    // It must stay a reporting layer: SEE + DO are untouched.
-    check("the adjusted figure does not change the SEE + DO base",
-      adj(45, 50, 100, 0).base === 95, `base=${adj(45, 50, 100, 0).base}`);
-  }
+        // Synthetic combined-report round-trip: SEE 50 + DO 50 + gzMean 0 +
+        // engagement 1 → adjusted 100/100. The gate the user named in the
+        // Phase 5 spec. Must hold under both formulas.
+        const synthetic = adjustedTotal({ seeTotal: 50, doTotal: 50, gzMean: 0, chainEngagementRate: 1 });
+        const synthetic10 = adjustedTotal_1_0_0({ seeTotal: 50, doTotal: 50, gzMean: 0, chainEngagementRate: 1 });
+        check("1.1.0 synthetic round-trip (SEE 50, DO 50, gzMean 0, engagement 1) → 100/100 adjusted",
+          synthetic.total === 100 && synthetic.max === 100,
+          `total=${synthetic.total}, max=${synthetic.max}`);
+        check("1.0.0 synthetic round-trip (SEE 50, DO 50, gzMean 0, engagement 1) → 100/100 adjusted",
+          synthetic10.total === 100 && synthetic10.max === 100,
+          `total=${synthetic10.total}, max=${synthetic10.max}`);
+
+        // It must stay a reporting layer: SEE + DO are untouched.
+        check("1.1.0: the adjusted figure does not change the SEE + DO base",
+          adj(45, 50, 100, 0).base === 95, `base=${adj(45, 50, 100, 0).base}`);
+      }
 
 
   // ===================================================================

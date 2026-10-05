@@ -113,15 +113,47 @@ def main():
     # model first within a tie).
     points.sort(key=lambda p: (-p["adjusted"], -p["paramsB"]))
 
+    # Suite 1.1.0 recalculation: stamp every post-pivot combined report
+    # with the new formula reading before assembling the cohort, so the
+    # cohort carries both readings side by side. The recalc is a pure
+    # function of the four components on the report (see total, do
+    # total, gzMean, chainEngagementRate) — no model re-runs, no
+    # scoring code path touched.
+    import subprocess
+    subprocess.run(["python3", "scripts/recalc-adjusted.py"], cwd=REPO, check=True)
+    # Re-read each model's latest post-pivot report so the cohort
+    # carries both readings.
+    for p in points:
+        model = p["model"]
+        model_slug = model.replace(":", "-")
+        pattern = f"combined-ollama-{model_slug}-*.json"
+        matches = sorted(RESULTS.glob(pattern))
+        from collections import OrderedDict
+        seen = OrderedDict()
+        for m in matches:
+            rj = json.loads(m.read_text())
+            if rj.get("schema", "").startswith("monkey-see-monkey-do/combined@5"):
+                seen[m] = rj
+        if seen:
+            latest = list(seen.keys())[-1]
+            rj = seen[latest]
+            p["adjusted_1_0_0"] = rj["adjusted"]["total"]
+            p["adjusted_1_1_0"] = rj["adjusted"].get("total_1_1_0")
+            p["adjusted"] = p["adjusted_1_1_0"]  # the new default
+            # Refresh the source path (in case mtime shifted) and add
+            # the per-formula components.
+            p["source"] = f"results/{latest.name}"
+            p["adjusted_1_1_0_components"] = rj["adjusted"].get("total_1_1_0_components")
+
     out = {
         "cohort": "Cohort 1 (post-pivot) — small local models (<8B, Ollama on Apple M2)",
-        "suiteVersion": "1.0.0",
+        "suiteVersion": "1.1.0",
         "date": "2026-10-05",
         "xAxis": "paramsB",
         "yAxis": "adjusted",
         "runs": 3,
         "temperature": 0,
-        "methodology": "Each model scored -r 3 at temperature 0 with the corrected CALL_TIMEOUT_MS=10000 (Phase 8 Stage 1.5). Medians of the 3 headline totals are the published values.",
+        "methodology": "Each model scored -r 3 at temperature 0 with the corrected CALL_TIMEOUT_MS=10000 (Phase 8 Stage 1.5). Medians of the 3 headline totals are the published values. The adjusted figure is reported under BOTH suite versions: adjusted_1_0_0 is the original floor-saturating reading, adjusted_1_1_0 is the earned-fraction-scaled reading (src/adjusted.mjs v1.1.0). Both are derived offline from the four components on the report — never by re-running models.",
         "points": points,
         "evidence": "Every point traces to its three-run combined report (median headline, per-run totals in stability).",
     }

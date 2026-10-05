@@ -7,6 +7,7 @@
 // enforces the same comparison before any model runs.
 import { allPromptDigests } from "../src/see/prompt.mjs";
 import { allPromptDigests as doPromptDigests, POOL_SEED_HEX } from "../src/do/chain/prompt.mjs";
+import { SUITE_VERSION as DIGESTS_SUITE_VERSION } from "../src/prompt-digests.mjs";
 import { RECORDED_DIGESTS } from "../src/prompt-digests.mjs";
 
 let mismatches = 0;
@@ -22,5 +23,5 @@ for (const { taskId, prompt, digest } of all) {
 console.log(`${all.length - mismatches}/${all.length} digests match src/prompt-digests.mjs`);
 // POOL_SEED_HEX is the hex with a "0x" prefix (e.g. "0xC0FFEE"). Strip it
 // here so we don't double-prefix and print "0x0XC0FFEE".
-console.log(`(suite seed 0x${POOL_SEED_HEX.toUpperCase().replace(/^0X/, "")}; suite version 1.0.0)`);
+console.log(`(suite seed 0x${POOL_SEED_HEX.toUpperCase().replace(/^0X/, "")}; suite version ${DIGESTS_SUITE_VERSION})`);
 if (mismatches > 0) process.exit(1);

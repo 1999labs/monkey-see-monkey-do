@@ -396,20 +396,68 @@ that emit a solver but don't reason about termination.
 
 ## 9. The adjusted total's weights
 
-`adjusted = clamp(SEE + DO − 0.5 × GZ_mean − 10 × (1 − chainEngagementRate), 0, 100)`
+Suite 1.1.0:
+
+```
+adjusted = clamp(SEE + DO − 0.5 × GZ_mean × ((SEE + DO) / 100) − 10 × (1 − chainEngagementRate), 0, 100)
+```
+
+Suite 1.0.0 (preserved as evidence — see the
+`Working X.Y.0` recalculation rules in `references/reporting-and-cost.md`):
+
+```
+adjusted = clamp(SEE + DO − 0.5 × GZ_mean − 10 × (1 − chainEngagementRate), 0, 100)
+```
 
 Two hand-chosen weights, both judgement calls, both recorded here rather than
 buried in the formula:
 
 | Weight | Value | Why | Where it comes from |
 |---|---|---|---|
-| `GENERALIZATION_WEIGHT` | 0.5 | A high `gzMean` means held-out points were collected without generalization. Removing them outright would erase a model's real ability; removing half treats surface fit as roughly half a real point. | Judgement. No derivation. |
+| `GENERALIZATION_WEIGHT` | 0.5 | A high `gzMean` means held-out points were collected without generalization. Removing them outright would erase a model's real ability; removing half treats surface fit as roughly half a real point. | Judgement. No derivation. The 1.1.0 earned-fraction multiplier keeps it bounded by what the model earned (see the asymmetry note below). |
 | `NO_CONFIDENT_ERROR_POINTS` | 10 | The exact size of the chain-engagement clawback the adjusted formula applies. | Not a choice — it is the magnitude of the do-nothing-submission penalty. The self-test pins a chain-naive (empty) submission at `0/50` DO with `chainEngagementRate = 0`, which means the clawback fires and the adjusted total floors at 0. |
 
-The clamp is load-bearing. A perfect run must read exactly 100, or the
-adjusted figure cannot coexist with the oracle's calibration. `npm run
-self-test` asserts this directly (`synthetic round-trip (SEE 50, DO 50,
-gzMean 0, engagement 1) → 100/100 adjusted`), plus:
+The asymmetry between the two penalties is **deliberate**. The
+engagement clawback is structurally about what the model **DID NOT DO**:
+a non-engaged submission earned its free "no confident error" points by
+doing nothing, and scaling the clawback by the earned fraction would
+pity the weak exactly where the clawback exists to penalise — free
+points on every chain the model never touched. The GZ penalty, by
+contrast, is about what the model **CLAIMED TO HAVE DONE** (held-out
+points that only landed because shown examples were memorised); scaling
+it by the earned fraction ensures the shield can never subtract more
+than was earned in the first place. Surface-fit (a shield) must; free
+points (a sword) must not.
+
+The 1.1.0 floor-saturation fix is exactly the qwen example. Under
+1.0.0:
+
+```
+qwen shape: SEE=19, DO=1, gzMean=26.7, engagement=0.04
+raw = 20 − 0.5 × 26.7 − 10 × (1 − 0.04)
+    = 20 − 13.35 − 9.60
+    = −2.95 → clamped to 0
+```
+
+Under 1.1.0:
+
+```
+earned fraction = 20 / 100 = 0.2
+raw = 20 − 0.5 × 26.7 × 0.2 − 10 × (1 − 0.04)
+    = 20 − 2.67 − 9.60
+    = 7.73 → rounded to 8
+```
+
+A model with a tiny DO score and a high GZ penalty resolves to **8** under
+1.1.0 where it floored at 0 — the weak band has resolving power again.
+For scores near 100, the factor is ≈1 and the two formulas agree (top-end
+discrimination is not diluted).
+
+The clamp is load-bearing. A perfect run must read exactly 100 under
+both formulas, or the adjusted figure cannot coexist with the oracle's
+calibration. `npm run self-test` asserts this directly (`synthetic
+round-trip (SEE 50, DO 50, gzMean 0, engagement 1) → 100/100 adjusted`
+under both formulas), plus:
 
 ```
 (a perfect run still scores 100/100 adjusted)
