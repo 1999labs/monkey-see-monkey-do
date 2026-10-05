@@ -1,12 +1,12 @@
 {
   "cohort": "Cohort 1 (post-pivot) \u2014 small local models (<8B, Ollama on Apple M2)",
-  "suiteVersion": "1.0.0",
+  "suiteVersion": "1.1.0",
   "date": "2026-10-05",
   "xAxis": "paramsB",
   "yAxis": "adjusted",
   "runs": 3,
   "temperature": 0,
-  "methodology": "Each model scored -r 3 at temperature 0 with the corrected CALL_TIMEOUT_MS=10000 (Phase 8 Stage 1.5). Medians of the 3 headline totals are the published values.",
+  "methodology": "Each model scored -r 3 at temperature 0 with the corrected CALL_TIMEOUT_MS=10000 (Phase 8 Stage 1.5). Medians of the 3 headline totals are the published values. The adjusted figure is reported under BOTH suite versions: adjusted_1_0_0 is the original floor-saturating reading, adjusted_1_1_0 is the earned-fraction-scaled reading (src/adjusted.mjs v1.1.0). Both are derived offline from the four components on the report \u2014 never by re-running models.",
   "points": [
     {
       "model": "deepseek-coder:6.7b",
@@ -21,7 +21,7 @@
       "base": 20,
       "gzMeanPenalty": 8.45,
       "unearnedPenalty": 10,
-      "adjusted": 2,
+      "adjusted": 8,
       "stability": {
         "runs": 3,
         "seeSpread": 0,
@@ -60,7 +60,19 @@
       "dy": 4,
       "anchor": "start",
       "source": "results/combined-ollama-deepseek-coder-6.7b-2026-10-05-054107.json",
-      "doFailureMode": "Emitted a solver with global string replace per step and a manual position counter that produces no legal derivations; every chain scores 0 submitted steps."
+      "doFailureMode": "Emitted a solver with global string replace per step and a manual position counter that produces no legal derivations; every chain scores 0 submitted steps.",
+      "adjusted_1_0_0": 2,
+      "adjusted_1_1_0": 8,
+      "adjusted_1_1_0_components": {
+        "total": 8,
+        "max": 100,
+        "base": 20,
+        "gzMeanPenalty": 1.69,
+        "unearnedPenalty": 10,
+        "earnedFraction": 0.2,
+        "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+        "formulaVersion": "1.1.0"
+      }
     },
     {
       "model": "qwen2.5-coder:7b",
@@ -75,7 +87,7 @@
       "base": 19.54,
       "gzMeanPenalty": 10.82,
       "unearnedPenalty": 9.6,
-      "adjusted": 0,
+      "adjusted": 8,
       "stability": {
         "runs": 3,
         "seeSpread": 0,
@@ -114,7 +126,19 @@
       "dy": -8,
       "anchor": "start",
       "source": "results/combined-ollama-qwen2.5-coder-7b-2026-10-05-072214.json",
-      "doFailureMode": "Emitted a solver with global string replace per step and no upper bound on the while loop; every chain hits the 10000ms sandbox cap before the solver can finish, partial-credit hits are steps the sandbox emitted before the kill."
+      "doFailureMode": "Emitted a solver with global string replace per step and no upper bound on the while loop; every chain hits the 10000ms sandbox cap before the solver can finish, partial-credit hits are steps the sandbox emitted before the kill.",
+      "adjusted_1_0_0": 0,
+      "adjusted_1_1_0": 8,
+      "adjusted_1_1_0_components": {
+        "total": 8,
+        "max": 100,
+        "base": 20,
+        "gzMeanPenalty": 2.16,
+        "unearnedPenalty": 9.6,
+        "earnedFraction": 0.2,
+        "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+        "formulaVersion": "1.1.0"
+      }
     },
     {
       "model": "mistral:7b-instruct",
@@ -129,7 +153,7 @@
       "base": 13,
       "gzMeanPenalty": 3.53,
       "unearnedPenalty": 10,
-      "adjusted": 0,
+      "adjusted": 3,
       "stability": {
         "runs": 3,
         "seeSpread": 0,
@@ -168,7 +192,19 @@
       "dy": 4,
       "anchor": "end",
       "source": "results/combined-ollama-mistral-7b-instruct-2026-10-05-060657.json",
-      "doFailureMode": "Emitted a solver that pretends to apply them \u2014 uses each character of the input as a rule name (current[i]) and returns garbage 3-tuples; every chain scores 0 submitted steps."
+      "doFailureMode": "Emitted a solver that pretends to apply them \u2014 uses each character of the input as a rule name (current[i]) and returns garbage 3-tuples; every chain scores 0 submitted steps.",
+      "adjusted_1_0_0": 0,
+      "adjusted_1_1_0": 3,
+      "adjusted_1_1_0_components": {
+        "total": 3,
+        "max": 100,
+        "base": 13,
+        "gzMeanPenalty": 0.46,
+        "unearnedPenalty": 10,
+        "earnedFraction": 0.13,
+        "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+        "formulaVersion": "1.1.0"
+      }
     },
     {
       "model": "llama3.2:3b",
@@ -183,7 +219,7 @@
       "base": 18,
       "gzMeanPenalty": 12.45,
       "unearnedPenalty": 10,
-      "adjusted": 0,
+      "adjusted": 6,
       "stability": {
         "runs": 3,
         "seeSpread": 0,
@@ -222,7 +258,19 @@
       "dy": -8,
       "anchor": "start",
       "source": "results/combined-ollama-llama3.2-3b-2026-10-05-061430.json",
-      "doFailureMode": "Emitted a solver with INVERTED rule definitions \u2014 R1/R2/R3 patterns are the swap outputs (BA, DC, ZY) instead of the inputs (AB, CD, YZ); compiles, runs, but no submitted step matches the protocol."
+      "doFailureMode": "Emitted a solver with INVERTED rule definitions \u2014 R1/R2/R3 patterns are the swap outputs (BA, DC, ZY) instead of the inputs (AB, CD, YZ); compiles, runs, but no submitted step matches the protocol.",
+      "adjusted_1_0_0": 0,
+      "adjusted_1_1_0": 6,
+      "adjusted_1_1_0_components": {
+        "total": 6,
+        "max": 100,
+        "base": 18,
+        "gzMeanPenalty": 2.24,
+        "unearnedPenalty": 10,
+        "earnedFraction": 0.18,
+        "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+        "formulaVersion": "1.1.0"
+      }
     },
     {
       "model": "gemma2:2b",
@@ -237,7 +285,7 @@
       "base": 14,
       "gzMeanPenalty": 10.06,
       "unearnedPenalty": 10,
-      "adjusted": 0,
+      "adjusted": 3,
       "stability": {
         "runs": 3,
         "seeSpread": 0,
@@ -276,7 +324,19 @@
       "dy": -8,
       "anchor": "end",
       "source": "results/combined-ollama-gemma2-2b-2026-10-05-064403.json",
-      "doFailureMode": "Emitted a solver that compares current === rule.start (number vs string, always false) and never advances state; compileError: none but no submitted step replays legally."
+      "doFailureMode": "Emitted a solver that compares current === rule.start (number vs string, always false) and never advances state; compileError: none but no submitted step replays legally.",
+      "adjusted_1_0_0": 0,
+      "adjusted_1_1_0": 3,
+      "adjusted_1_1_0_components": {
+        "total": 3,
+        "max": 100,
+        "base": 14,
+        "gzMeanPenalty": 1.41,
+        "unearnedPenalty": 10,
+        "earnedFraction": 0.14,
+        "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+        "formulaVersion": "1.1.0"
+      }
     }
   ],
   "evidence": "Every point traces to its three-run combined report (median headline, per-run totals in stability)."

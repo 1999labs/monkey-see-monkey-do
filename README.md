@@ -409,18 +409,29 @@ components it came from.
 
 ## Results
 
-This repo currently has **no committed cohort**. The Cohort 1 local-small
-numbers recorded under the Minesweeper DO (`results/combined-ollama-*-2026-10-02-*.json`)
-describe the suite **before** suite 1.0.0; the Minesweeper pool, the
-Progress Index, and the cohort numbers all retired with Phase 6. They are
-non-comparable to anything at suite 1.0.0 — see "Non-comparability"
-below.
+A committed post-pivot cohort lives at
+`docs/cohort-1-local-small-postpivot.json` (chart:
+`docs/cohort-1-local-small-postpivot.svg`); five small local Ollama
+models, each scored -r 3 at temperature 0 with the corrected
+`CALL_TIMEOUT_MS = 10000` (Phase 8 Stage 1.5). The cohort reports
+**both adjusted readings side by side** — `adjusted_1_0_0` is the
+original floor-saturating reading, `adjusted_1_1_0` is the
+earned-fraction-scaled reading (suite 1.1.0, see src/adjusted.mjs)
+where the GZ penalty is scaled by `(SEE + DO)/100` so the weak band
+recovers resolving power. Each model's combined report carries the
+same two readings stamped with their formula version, so the audit
+trail is intact.
 
-A coherent post-pivot cohort is the next commit's work. The chart path
-still works:
+The Cohort 1 local-small numbers recorded under the Minesweeper DO
+(`results/combined-ollama-*-2026-10-02-*.json`) describe the suite
+**before** suite 1.0.0; the Minesweeper pool, the Progress Index, and
+the cohort numbers all retired with Phase 6. They are non-comparable
+to anything at suite 1.0.0 — see "Non-comparability" below.
+
+The chart path:
 
 ```bash
-node bin/chart.mjs docs/<cohort>.json docs/<cohort>.svg
+node bin/chart.mjs docs/cohort-1-local-small-postpivot.json docs/cohort-1-local-small-postpivot.svg
 ```
 
 To run the publication gate before committing any cohort evidence:
@@ -606,7 +617,6 @@ monkey-see-monkey-do/
 ├── bin/                         command-line entry points, one per npm script:
 │                                gen-chain-pool, acceptance, diagnose, providers,
 │                                show-prompts, chart (cohort JSON → SVG)
-├── compare.sh                   run several pinned models 3× each, side by side
 └── tests/                       node:test suites
 ```
 

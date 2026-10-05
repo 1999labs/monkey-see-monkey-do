@@ -618,3 +618,91 @@ Phase 7 is documentation-only. No scoring code changes.
 - The self-test's 108 checks all pass with `npm run self-test`.
 - `npm test` (224 checks) all pass with no failures.
 - `npm run dry-run` PASS 50/50 (chain dry-run via the canonical command).
+
+---
+
+## Phase 9 plan (decision recorded; do NOT launch)
+
+Frontier runs will use pay-per-token, provider-pinned runs
+(OpenRouter / OpenAI / Zen), with per-run `costUsd` captured from
+the Phase 5 cost plumbing (`pricing: "pay-per-token"`) and
+dollars-per-run as the frontier chart's x-axis (see
+`docs/calibration.md` §9 and the Phase 8 Stage 2a plan in the user's
+directive).
+
+**Decision recorded. Launch held.** Phase 9 needs the user's explicit
+model choice and budget approval, and the per-model monthly caps on
+subscription routes make launch order a budget decision — this commit
+only records the plan.
+
+### Candidates (one per provider class)
+
+Three models, one Claude-class, one GPT-class, one Gemini-class.
+Each pinned to a single provider with `--only-provider --no-fallback`
+so the OpenRouter load-balancing confound is removed. OpenRouter
+provider ids (OpenRouter is the cheapest pay-per-token gateway for
+all three classes):
+
+- **Claude-class** — `anthropic/claude-sonnet-4.5` (current top Claude;
+  the user can swap to `claude-3.7-sonnet` or `claude-3.5-sonnet`
+  based on the latest pricing snapshot at launch time).
+- **GPT-class** — `openai/gpt-4.1` (or `gpt-4o` if pricing is
+  preferred; the user picks at launch).
+- **Gemini-class** — `google/gemini-2.5-pro` (or `gemini-2.5-flash`
+  for a cheaper second sweep; user picks at launch).
+
+### Methodology (frozen, mirrors the local cohort's)
+
+- `-r 3` per model (matches the Stage 2a local sweep; one-shot is a
+  sample, not a measurement).
+- `--only-provider <provider> --no-fallback` to defeat the
+  load-balancing confound observed in the pre-pivot cohorts (see the
+  monkey-suite-scoring skill's "Pitfalls" entry on provider routing).
+- `--seed 0xC0FFEE` so reproducibility checks are deterministic.
+- `costUsd` computed by `computeCost` from `config/models.json`'s
+  `model.price.{inputPer1k, outputPer1k}` (USD per 1000 tokens);
+  stamp per-run cost under the `cost` block in each combined report.
+- The frontier chart's x-axis is **dollars per full suite run**, not
+  price per token (the workload is fixed at 1 DO call + 12 SEE calls;
+  dollars-per-run is "cost to get the job done", which captures
+  verbosity / reasoning appetite that price-per-token masks). See
+  `references/reporting-and-cost.md`.
+- Headline totals are the median of the 3 runs; per-run quotes are
+  retained in the `stability` block. Reproducibility verdicts
+  exclude failed runs (NO_VERDICT is honest, not stable).
+- The chart is generated from a `docs/cohort-2-frontier.json`
+  dataset assembled from the three combined reports; never hand-edit
+  the SVG.
+
+### Re-derivation (committed scripts, not scratch)
+
+Once the user picks the three models and the budget:
+
+```bash
+# Per-model run (one at a time, sequential, ~minutes wall each):
+npm run all -- -m openrouter/<claude-class> --only-provider <p> --no-fallback -r 3 -s 0xC0FFEE
+npm run all -- -m openrouter/<gpt-class>   --only-provider <p> --no-fallback -r 3 -s 0xC0FFEE
+npm run all -- -m openrouter/<gemini-class> --only-provider <p> --no-fallback -r 3 -s 0xC0FFEE
+
+# Cohort assembly (re-derives 1.1.0 stamped readings automatically):
+python3 scripts/build-cohort.py
+# Edit MODEL_ORDER in scripts/build-cohort.py to add the three models,
+# or pass a different cohort config via the script's argv.
+
+# Chart from the cohort:
+node bin/chart.mjs docs/cohort-2-frontier.json docs/cohort-2-frontier.svg
+```
+
+### What Phase 9 does NOT do
+
+- No OpenCode Go / Zen / subscription routes — they are HOLLOW markers
+  on the chart (subscription-estimate), not exact pay-per-token. The
+  frontier axis is solid markers for exact pricing; subscription
+  estimates are a separate signal that gets a different visual treatment.
+- No OpenRouter default-fallback runs — the OpenRouter pinning is a
+  pre-condition for the score being comparable across runs; a mix of
+  fp4/fp8/fp32 endpoints is what made the pre-pivot cohort's run-to-run
+  spread unresolvable below 2 points.
+- No `--runs > 3` by default — the publication gate at suite 1.0.0 is
+  `-r 3` (the gate in `bin/acceptance.mjs` requires 3). Tight
+  comparisons (~9 runs) are a future decision, not the default.

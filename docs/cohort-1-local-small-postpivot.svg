@@ -39,22 +39,22 @@
 <text x="1094.1818181818182" y="428" text-anchor="middle" font-size="12" fill="#000000">8</text>
 <line x1="76" y1="26" x2="1140" y2="26" stroke="#000000" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="6 5"/>
 <text x="1140" y="18" text-anchor="end" font-size="11" fill="#000000" fill-opacity="0.6">reference solver: 100</text>
-<path d="M 330.54545454545456 406 L 928.7272727272729 406 L 928.7272727272729 398.4" fill="none" stroke="#171717" stroke-width="1.75" stroke-dasharray="7 5" opacity="0.8"/>
-<circle cx="330.54545454545456" cy="406" r="6" fill="#1f2937" stroke="#ffffff" stroke-width="1.5"/>
-<text x="330.54545454545456" y="393" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">0</text>
-<text x="314.54545454545456" y="398" text-anchor="end" font-size="11.5" font-weight="600" fill="#1f2937">gemma2:2b</text>
-<circle cx="483.2727272727273" cy="406" r="6" fill="#b91c1c" stroke="#ffffff" stroke-width="1.5"/>
-<text x="483.2727272727273" y="393" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">0</text>
-<text x="499.2727272727273" y="398" text-anchor="start" font-size="11.5" font-weight="600" fill="#b91c1c">llama3.2:3b</text>
-<circle cx="928.7272727272729" cy="398.4" r="6" fill="#15803d" stroke="#ffffff" stroke-width="1.5"/>
-<text x="928.7272727272729" y="385.4" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">2</text>
-<text x="944.7272727272729" y="402.4" text-anchor="start" font-size="11.5" font-weight="600" fill="#15803d">deepseek-coder:6.7b</text>
-<circle cx="966.909090909091" cy="406" r="6" fill="#ca8a04" stroke="#ffffff" stroke-width="1.5"/>
-<text x="966.909090909091" y="393" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">0</text>
-<text x="950.909090909091" y="410" text-anchor="end" font-size="11.5" font-weight="600" fill="#ca8a04">mistral:7b-instruct</text>
-<circle cx="1043.2727272727273" cy="406" r="6" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
-<text x="1043.2727272727273" y="393" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">0</text>
-<text x="1059.2727272727273" y="398" text-anchor="start" font-size="11.5" font-weight="600" fill="#ea580c">qwen2.5-coder:7b</text>
+<path d="M 330.54545454545456 394.6 L 483.2727272727273 394.6 L 483.2727272727273 383.2 L 928.7272727272729 383.2 L 928.7272727272729 375.6" fill="none" stroke="#171717" stroke-width="1.75" stroke-dasharray="7 5" opacity="0.8"/>
+<circle cx="330.54545454545456" cy="394.6" r="6" fill="#1f2937" stroke="#ffffff" stroke-width="1.5"/>
+<text x="330.54545454545456" y="381.6" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">3</text>
+<text x="314.54545454545456" y="386.6" text-anchor="end" font-size="11.5" font-weight="600" fill="#1f2937">gemma2:2b</text>
+<circle cx="483.2727272727273" cy="383.2" r="6" fill="#b91c1c" stroke="#ffffff" stroke-width="1.5"/>
+<text x="483.2727272727273" y="370.2" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">6</text>
+<text x="499.2727272727273" y="375.2" text-anchor="start" font-size="11.5" font-weight="600" fill="#b91c1c">llama3.2:3b</text>
+<circle cx="928.7272727272729" cy="375.6" r="6" fill="#15803d" stroke="#ffffff" stroke-width="1.5"/>
+<text x="928.7272727272729" y="362.6" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">8</text>
+<text x="944.7272727272729" y="379.6" text-anchor="start" font-size="11.5" font-weight="600" fill="#15803d">deepseek-coder:6.7b</text>
+<circle cx="966.909090909091" cy="394.6" r="6" fill="#ca8a04" stroke="#ffffff" stroke-width="1.5"/>
+<text x="966.909090909091" y="381.6" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">3</text>
+<text x="950.909090909091" y="398.6" text-anchor="end" font-size="11.5" font-weight="600" fill="#ca8a04">mistral:7b-instruct</text>
+<circle cx="1043.2727272727273" cy="375.6" r="6" fill="#ea580c" stroke="#ffffff" stroke-width="1.5"/>
+<text x="1043.2727272727273" y="362.6" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">8</text>
+<text x="1059.2727272727273" y="367.6" text-anchor="start" font-size="11.5" font-weight="600" fill="#ea580c">qwen2.5-coder:7b</text>
 <text x="608" y="454" text-anchor="middle" font-size="12" fill="#000000">parameters (billions)</text>
 <text x="22" y="216" text-anchor="middle" font-size="12" fill="#000000" transform="rotate(-90 22 216)">adjusted score (0-100)</text>
 </svg>
