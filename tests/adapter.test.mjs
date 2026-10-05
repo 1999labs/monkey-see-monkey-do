@@ -1374,3 +1374,24 @@ test("pre-flight accepts every pinned rung in the Phase 9 cohort and refuses an 
   // An unset effort is always allowed, even for a model the table does not know.
   assertEffortSupported({ model: "unknown/model" });
 });
+
+
+test("chat-completions sends max_tokens only when config.maxTokens is set", async () => {
+  // The chat dialect has no default output cap: without one, a request is
+  // bounded only by the wall clock, and a timeout keeps no partial text. This
+  // pin records that the cap is OPT-IN (absent by default, exactly as before)
+  // and is forwarded verbatim when set.
+  const capture = async (extra) => {
+    let body;
+    const fetchImpl = async (url, init) => {
+      body = JSON.parse(init.body);
+      return jsonResponse(okBody("x"));
+    };
+    await complete(config(fetchImpl, extra), "PROMPT");
+    return body;
+  };
+  const capped = await capture({ maxTokens: 16000 });
+  assert.equal(capped.max_tokens, 16000, "a set cap must be forwarded as max_tokens");
+  const uncapped = await capture({});
+  assert.equal("max_tokens" in uncapped, false, "no cap configured means no field sent, as before");
+});

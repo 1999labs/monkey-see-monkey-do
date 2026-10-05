@@ -105,6 +105,15 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
   // reaches this line is one the operator declared.
   if (config.reasoningEffort) body.reasoning = { effort: config.reasoningEffort };
 
+  // Output cap. The chat dialect has NO default (unlike the Messages adapter,
+  // where max_tokens is required): a request without it is bounded only by the
+  // wall clock. For a reasoning model that spends its whole budget on hidden
+  // reasoning, that is the difference between "returned a truncated solver" and
+  // "returned nothing after 7 minutes with the answer still in flight" — a
+  // timeout keeps no partial text, so an unbounded call that hits the clock
+  // yields zero evidence. Set it explicitly for any run where that matters.
+  if (config.maxTokens != null) body.max_tokens = config.maxTokens;
+
   // Reproducibility controls. Both are opt-in via config so the same adapter
   // serves every provider.
   //
