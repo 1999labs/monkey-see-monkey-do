@@ -27,14 +27,14 @@ validate the harness first:     npm run self-test && npm run dry-run
 
 ## Quickstart
 
-You need Node.js 20 or newer, and nothing else: there is nothing to `npm install`.
+Node.js 20+ required. Nothing to `npm install`.
 
 ```bash
 git clone https://github.com/1999labs/monkey-see-monkey-do.git
 cd monkey-see-monkey-do
 ```
 
-Check the harness works before scoring anything. Every runner runs the self-test
+Check the harness works before scoring anything. Every runner executes the self-test
 first and refuses to score if it fails:
 
 ```bash
