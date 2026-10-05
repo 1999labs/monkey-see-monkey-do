@@ -34,7 +34,7 @@ git clone https://github.com/1999labs/monkey-see-monkey-do.git
 cd monkey-see-monkey-do
 ```
 
-Check the harness works before scoring anything — every runner runs the self-test
+Check the harness works before scoring anything. Every runner runs the self-test
 first and refuses to score if it fails:
 
 ```bash
@@ -42,7 +42,7 @@ npm run self-test        # validates the eval itself (a few seconds)
 npm run dry-run          # plays the reference solver on all 50 chains; must say 50/50
 ```
 
-The cheapest way to score a model is local through Ollama — no key, no cost:
+The cheapest way to score a model is local through Ollama. No API key required, no cost:
 
 ```bash
 ollama pull qwen2.5-coder:7b
@@ -69,7 +69,7 @@ Add `-r 3` to run everything three times. The totals should agree within 2 point
 if the model returned different code each time, the output says so, and the score is
 a sample, not a measurement.
 
-`npm run all` writes three reports to `results/` — SEE, DO and a **combined** report.
+`npm run all` writes three reports to `results/` - SEE, DO and a **combined** report.
 Only the combined report is committed: it is the evidence for every published number.
 See [`docs/scoring-models.md`](docs/scoring-models.md) for the report formats.
 
@@ -93,9 +93,9 @@ adjusted = clamp( SEE + DO  −  0.5 × GZ_mean × ((SEE + DO) / 100)
 - The engagement term claws back the points a do-nothing submission would
   otherwise collect for free; it is deliberately unscaled.
 
-The full machinery — SEE's sample-efficiency weights, DO's chain pool and scoring
+The full machinery - SEE's sample-efficiency weights, DO's chain pool and scoring
 contract, the random-walk baseline, the reference solver's two modes, worked
-examples for the adjusted formula — is in
+examples for the adjusted formula - is in
 [`docs/scoring-detail.md`](docs/scoring-detail.md), and every asserted number is
 recorded with its re-derivation command in
 [`docs/calibration.md`](docs/calibration.md).
@@ -124,8 +124,8 @@ at 100, far above every model.*
 
 Every model's DO score is near zero, and that is the finding, not a defect: none of
 them writes a working chain solver, and the per-model **failure modes differ**
-(inverted rules, type confusion, unbounded loops). The DO gradient — where frontier
-models start to separate — is what the frontier cohorts will test next.
+(inverted rules, type confusion, unbounded loops). The DO gradient - where frontier
+models start to separate - is what the frontier cohorts will test next.
 
 Re-derive from a fresh clone (no model calls; reads the committed reports):
 
@@ -165,7 +165,7 @@ without them is misleading.
   clawback catches do-nothing submissions but not legal-step random walks (the
   random-walk baseline scores 50/50).
 - **Two narrow tasks.** Not a general intelligence measure, and the adjusted total
-  is a derived, hand-weighted reporting layer — quote it with its components.
+  is a derived, hand-weighted reporting layer - quote it with its components.
 
 ## Maintaining the suite
 
@@ -186,7 +186,7 @@ CI runs `npm test` and `npm run self-test` on Node 20 for every push and PR
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Prompt changes bump the
 suite version deliberately; pool changes bump `GENERATOR_VERSION` and regenerate via
 `npm run gen-pool`. Every asserted number lives in
-[`docs/calibration.md`](docs/calibration.md) — read it before changing a held-out
+[`docs/calibration.md`](docs/calibration.md) - read it before changing a held-out
 set, the pool, the BFS caps, or the adjusted weights.
 
 ## Repository layout
