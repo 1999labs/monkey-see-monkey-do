@@ -178,6 +178,14 @@ export const runLevel = async (config, { task, level, dryRun = false, modelText 
     seen: seenAtLevel,
     heldOut: { correct: heldOut.correct, total: heldOut.total, threw: heldOut.threw },
     responseFingerprint: fingerprint(completion.text),
+    // The raw text MUST be carried on the usable path. The failure paths below
+    // always set it; this path did not, so run-all.mjs (which builds the SEE
+    // reproducibility prints from `run.out.response`) hashed the string
+    // "undefined" for every successful call. That made every print identical
+    // and REPRODUCIBLE the only verdict the code could emit. See the note in
+    // docs/calibration.md — the field is load-bearing evidence, not a debug
+    // convenience.
+    response: completion.text ?? "",
     callElapsedMs: Date.now() - startedAt,
     // Token usage from the adapter, surfaced per-call so the combined
     // report's per-level totals roll up cleanly. Null when the adapter

@@ -78,4 +78,4 @@ export const SEE_LEVEL_DIGESTS = {
  *                   the 1.0.0 reading is preserved as evidence. Recalculated
  *                   offline, never by re-running models.
  */
-export const SUITE_VERSION = "1.1.0";
+export const SUITE_VERSION = "1.2.0";

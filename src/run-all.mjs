@@ -159,10 +159,20 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
     const doTotals = out.map((r) => r.doTotal);
     const combinedTotals = out.map((r) => r.seeTotal + r.doTotal);
     // Per-run route failures, so a spread can be explained from this file alone.
+    //
+    // The key is (task, level), NOT task alone. The levels runner asks each task
+    // FOUR different questions (one per sample level), so pooling by taskId
+    // would compare level 2's answer against level 16's and report every
+    // deterministic model as NOT_REPRODUCIBLE. The unit that must be stable
+    // across runs is one (task, level) prompt.
     const seePrints = out.flatMap((r) =>
       (r.seeOut.runs ?? [])
         .filter((run) => run.out?.usable)
-        .map((run) => ({ taskId: run.out.taskId, response: run.out.response, failed: Boolean(run.out.callFailure) }))
+        .map((run) => ({
+          taskId: `${run.out.taskId}@L${run.out.level}`,
+          response: run.out.response,
+          failed: Boolean(run.out.callFailure),
+        }))
     );
     const doPrints = out.filter((r) => r.doOut.usable).map((r) => r.doOut.responseFingerprint);
     const seeRep = reproducibility(seePrints);

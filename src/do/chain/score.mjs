@@ -84,12 +84,30 @@ export const scoreChain = (chain, submitted) => {
  * Score a whole run. `submittedPerChain` maps chainId -> [{rule,start,next}]
  * (chainId is the band+attempt tuple, formatted by `chainIdOf` below).
  *
+ * TWO READINGS, and they answer different questions:
+ *
+ *   total          (suite 1.2.0) sum over bands of (fullCreditChains /
+ *                  chainCount) * 10, out of 50. The headline: how many chains
+ *                  did the model actually SOLVE. A model that emits one legal
+ *                  step on a chain and stops earns nothing for it, which is
+ *                  what "sustained deduction" is supposed to measure.
+ *   total_1_1_0    (suite 1.1.0) the step-legality ratio: mean(chainScore),
+ *                  where a chain scores correctSteps/submittedSteps when it
+ *                  fails. Kept as a SECONDARY metric because it distinguishes
+ *                  "emitted a legal prefix" from "emitted nothing", which the
+ *                  headline collapses. A one-legal-step submission scores
+ *                  50/50 on this reading, which is why it is no longer the
+ *                  headline.
+ *
  * @param {object} opts
  * @param {Array}  opts.chains       the pool's chain list (from loadPublishedPool)
  * @param {object} opts.submittedPerChain  chainId -> derivation
  *
  * @returns {{
  *   total: number, max: 50,
+ *   total_1_1_0: number,
+ *   stepLegalityRatio: number,
+ *   fullCreditChains: number,
  *   perBand: Record<string, { score, points, max, chains }>,
  *   perChain: Array<{ id, band, fullCredit, partial, correctSteps, submittedSteps, reachedTarget, chainScore }>
  * }}
@@ -112,10 +130,23 @@ export const scoreRun = ({ chains, submittedPerChain = {} }) => {
     const mean = n ? b.chains.reduce((s, x) => s + x.chainScore, 0) / n : 0;
     b.score = Number(mean.toFixed(4));
     b.points = Number((mean * band.count).toFixed(2)); // max equals the band's 10-point weight
+    // The 1.2.0 headline counts SOLVED chains, not legal steps.
+    b.fullCreditChains = b.chains.filter((x) => x.fullCredit).length;
+    b.chainCount = n;
   }
 
-  const total = Number(Object.values(perBand).reduce((s, b) => s + b.points, 0).toFixed(2));
-  return { total, max: 50, perBand, perChain };
+  // Suite 1.2.0 headline: solved chains only.
+  const total = Number(
+    POOL_BANDS.reduce((s, band) => {
+      const b = perBand[band.name];
+      return s + (b.chainCount ? (b.fullCreditChains / b.chainCount) * band.count : 0);
+    }, 0).toFixed(2)
+  );
+  // Suite 1.1.0 reading, kept for comparability with everything published before.
+  const total_1_1_0 = Number(Object.values(perBand).reduce((s, b) => s + b.points, 0).toFixed(2));
+  const fullCreditChains = perChain.filter((c) => c.fullCredit).length;
+  const stepLegalityRatio = chains.length ? Number((perChain.reduce((s, c) => s + c.chainScore, 0) / chains.length).toFixed(4)) : 0;
+  return { total, max: 50, total_1_1_0, stepLegalityRatio, fullCreditChains, perBand, perChain };
 };
 
 /** Stable id for a chain: `<band>#<attempt>`. */
@@ -129,17 +160,24 @@ export const chainIdOf = (chain) => `${chain.band}#${chain.attempt}`;
 export const isEmpty = (submitted) => !Array.isArray(submitted) || submitted.length === 0;
 
 /**
- * Phase 5: the chain engagement rate. The fraction of the 50 chains on
- * which the model's submission made at least ONE legal step (full credit
- * or partial credit). An empty submission (`[]` on every chain) scores
- * engagement 0, which the adjusted formula then claws back as 10 free
- * points the model would otherwise collect.
+ * Chain engagement rate.
+ *
+ * SUITE 1.2.0: the fullCredit FRACTION — the share of the 50 chains the model
+ * actually solved (do_total / 50). It replaced the "made at least one legal
+ * step" definition, which any submission containing one legal step satisfied:
+ * a model that emitted one step per chain and stopped scored engagement 1.0
+ * and dodged the whole clawback. Solving a chain is the only thing that should
+ * count as engaging with it.
+ *
+ * The clawback itself is unchanged: adjusted subtracts
+ * 10 * (1 - chainEngagementRate), flat, exactly as in 1.1.0. Only the input
+ * definition moved.
  *
  * @param {Array} perChain   the scoreRun() per-chain array
  * @returns {number}  fraction 0-1
  */
 export const chainEngagementRate = (perChain) => {
   if (!Array.isArray(perChain) || perChain.length === 0) return 0;
-  const engaged = perChain.filter((c) => c.fullCredit || c.partial).length;
-  return engaged / perChain.length;
+  const solved = perChain.filter((c) => c.fullCredit).length;
+  return solved / perChain.length;
 };

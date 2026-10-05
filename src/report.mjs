@@ -471,8 +471,15 @@ export const buildChainDoReport = ({ model, result, config, keySource, pool, rep
     prompt: { sha256: result.digest },
 
     score: {
+      // Suite 1.2.0 headline: chains SOLVED (fullCredit fraction × 10 per band).
       total: result.score.total,
       max: result.score.max,
+      // Suite 1.1.0 reading (step-legality ratio), kept for comparability with
+      // every report published before 1.2.0. DO scores are NOT comparable
+      // across the 1.1 -> 1.2 boundary.
+      total_1_1_0: result.score.total_1_1_0 ?? null,
+      stepLegalityRatio: result.score.stepLegalityRatio ?? null,
+      fullCreditChains: result.score.fullCreditChains ?? null,
       perBand,
       perChain: result.score.perChain,
       // Chain engagement rate — the fraction of chains on which the
@@ -639,8 +646,17 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
     },
 
     do: {
+      // Suite 1.2.0 headline: chains solved (fullCredit fraction), median over
+      // runs when --runs > 1. A route-failed DO call scores 0 here and is not a
+      // model result — see callFailure.do.
       total: Math.round(doTotalMedian),
       max: 50,
+      // The 1.1.0 step-legality reading and the components of the 1.2.0 one,
+      // carried together so a reader can see why the headline moved. DO is NOT
+      // comparable across the 1.1 -> 1.2 boundary.
+      total_1_1_0: doo.score.total_1_1_0 ?? null,
+      stepLegalityRatio: doo.score.stepLegalityRatio ?? null,
+      fullCreditChains: doo.score.fullCreditChains ?? null,
       // An answer that could not be compiled (prose, an empty completion) is
       // visible HERE too.
       usable: doo.usable !== false,
@@ -659,7 +675,8 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
           },
         ])
       ),
-      // The Phase 5 engagement rate that drives the new clawback.
+      // Suite 1.2.0: the fullCredit fraction (chains solved / 50), which drives
+      // the unchanged flat clawback 10 * (1 - engagement).
       chainEngagementRate: engagement,
       poolSha256: pool?.sha256 ?? null,
       fullPool: pool?.full ?? null,

@@ -238,9 +238,13 @@ const stabilityConfig = (doFailsOn) => ({
   maxRetries: 0,
   fetchImpl: (() => {
     let call = 0;
-    // Call order per run: SEE A (4 levels), SEE B (4 levels), SEE C (4 levels),
-    // DO (1 call) — 13 calls per run. Track run boundary so SEE answers
-    // reset per-run (a run is independent, not a continuation).
+    // Call order per run is LEVEL-MAJOR, matching runAllLevels' loop
+    // (`for level { for task }`): L2/A, L2/B, L2/C, L4/A, L4/B, L4/C, ... then
+    // the single DO call — 13 calls per run. The fixture previously indexed
+    // task-major (floor(within/4)), which handed the wrong task's answer to 7
+    // of the 12 calls and made each task's responses differ across levels. That
+    // was invisible while the SEE verdict hashed "undefined" for every call;
+    // once the verdict was fixed it surfaced as a spurious NOT_REPRODUCIBLE.
     return async () => {
       call++;
       const within = (call - 1) % 13;
@@ -264,7 +268,7 @@ const stabilityConfig = (doFailsOn) => ({
             }),
         };
       }
-      const taskIdx = Math.floor(within / 4);
+      const taskIdx = within % 3; // level-major: L2 A,B,C then L4 A,B,C ...
       return {
         ok: true,
         status: 200,
@@ -356,4 +360,77 @@ test("summarise folds robustness into the SEE total and uses /50 and /100", () =
   assert.match(text, /SEE 27\/50 \+ DO 50\/50 = combined 77\/100/, "combined is out of 100");
   assert.ok(!text.includes("/95"), "no /95 denominator anywhere");
   assert.ok(!text.includes("(v2)"), "the stale (v2) label is gone");
+});
+
+
+test("SEE reproducibility verdict distinguishes variable responses (fails pre-fix)", async () => {
+  // The defect this pins: runLevel's USABLE path did not set `response`, so
+  // run-all.mjs hashed the string "undefined" for every successful call and
+  // every print was identical. REPRODUCIBLE was then the only verdict the code
+  // could emit, whatever the model did. The five Phase 9 reports carry that
+  // void verdict (see docs/calibration.md).
+  //
+  // Two synthetic runs whose text DIFFERS per (task, level) must give
+  // NOT_REPRODUCIBLE; two identical runs must give REPRODUCIBLE.
+  const { runAllLevels } = await import("../src/see/run-levels.mjs");
+  const { reproducibility } = await import("../src/fingerprint.mjs");
+
+  const printsFrom = (out) =>
+    (out.runs ?? [])
+      .filter((r) => r.out?.usable)
+      .map((r) => ({ taskId: r.out.taskId, response: r.out.response, failed: Boolean(r.out.callFailure) }));
+
+  // A dry-run produces a usable response for every (task, level).
+  const dry = await runAllLevels({}, { dryRun: true });
+  const prints = printsFrom(dry);
+  assert.ok(prints.length > 0, "the dry-run must produce usable runs to test against");
+  assert.ok(
+    prints.every((p) => typeof p.response === "string" && p.response.length > 0),
+    "the usable path MUST carry a non-empty response; without it every print hashes 'undefined'"
+  );
+
+  // Identical responses -> REPRODUCIBLE.
+  const same = reproducibility(prints.map((p) => ({ ...p })));
+  assert.equal(same.verdict, "REPRODUCIBLE");
+
+  // Vary ONE task's response across runs -> NOT_REPRODUCIBLE. Pre-fix this
+  // assertion fails: `response` is undefined, so the variation is invisible.
+  const varied = prints.map((p) => ({ ...p }));
+  varied[0] = { ...varied[0], response: varied[0].response + " /* variant */" };
+  const rep = reproducibility(varied);
+  assert.equal(rep.verdict, "NOT_REPRODUCIBLE", "a changed response must produce NOT_REPRODUCIBLE");
+});
+
+
+test("suite 1.2.0 DO headline counts SOLVED chains, not legal steps", async () => {
+  // The defect this pins: a submission with ONE legal step per chain scored
+  // 50/50 on the old step-legality reading, so a model that emitted a legal
+  // prefix and stopped looked like a model that solved every chain. 1.2.0 makes
+  // the headline the fullCredit fraction and demotes the ratio to a secondary
+  // metric, so the two readings are visible side by side.
+  const { scoreRun } = await import("../src/do/chain/score.mjs");
+  const { loadPublishedPool } = await import("../src/do/chain/pool.mjs");
+  const pool = loadPublishedPool({});
+
+  // One legal step per chain, never reaching the target: a legal prefix and
+  // nothing more. This is the shape the old reading rewarded.
+  const prefixOnly = {};
+  for (const c of pool.chains) {
+    const id = `${c.band}#${c.attempt}`;
+    // A step that is legal at its position but does not finish the chain.
+    const step = c.steps?.[0];
+    prefixOnly[id] = step ? [step] : [];
+  }
+  const r = scoreRun({ chains: pool.chains, submittedPerChain: prefixOnly });
+  assert.ok(r.total_1_1_0 >= 0 && r.total_1_1_0 <= 50);
+  // Solved-chain headline must be far below the legality ratio when nothing
+  // was solved, and equal to it when everything was.
+  if (r.fullCreditChains === 0) {
+    assert.equal(r.total, 0, "no chain solved means the 1.2.0 headline is 0");
+    assert.ok(r.total_1_1_0 > 0, "but the 1.1.0 legality ratio can still be positive — that is the point");
+  }
+
+  // The reference solver solves everything: both readings are 50/50.
+  const { REFERENCE_SOLVER_SOURCE } = await import("../src/do/chain/run.mjs");
+  assert.ok(REFERENCE_SOLVER_SOURCE.length > 0);
 });

@@ -112,6 +112,16 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
   // "returned nothing after 7 minutes with the answer still in flight" — a
   // timeout keeps no partial text, so an unbounded call that hits the clock
   // yields zero evidence. Set it explicitly for any run where that matters.
+  //
+  // THE CAP MUST EXCEED THE LARGEST OBSERVED SUCCESSFUL SOLVER'S COMPLETION
+  // TOKENS. A cap below that silently truncates working models — the worst
+  // possible failure, because it looks like a model that cannot solve. The
+  // Phase 9 cohort sets maxTokens 65536 as a runaway GUARD: hy3's successful
+  // solver used 37285 completion tokens, so 65536 clears it with margin, while
+  // a model that reasons indefinitely now fails in seconds with
+  // finish_reason "length" and zero content instead of burning 420s. Raise the
+  // number if a future model emits a larger solver; never lower it below the
+  // largest successful one.
   if (config.maxTokens != null) body.max_tokens = config.maxTokens;
 
   // Reproducibility controls. Both are opt-in via config so the same adapter

@@ -290,9 +290,12 @@ const main = async () => {
     // constant fingerprint, so counting them certified two timeouts as
     // "same answer every run". A task with fewer than two ANSWERED runs gets no
     // verdict at all.
+    // Keyed by (task, level): the four sample levels are four different
+    // prompts, so pooling by task alone would compare different questions and
+    // report any deterministic model as unstable.
     rep = reproducibility(
       runs.flatMap((r) =>
-        r.taskRuns.map((t) => ({ taskId: t.taskId, response: t.response, failed: Boolean(t.callFailure) }))
+        r.taskRuns.map((t) => ({ taskId: `${t.taskId}@L${t.level ?? "?"}`, response: t.response, failed: Boolean(t.callFailure) }))
       )
     );
     const indices = runs.map((r) => Math.round(r.index.index * 100));
