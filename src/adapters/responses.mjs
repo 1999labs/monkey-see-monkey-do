@@ -98,7 +98,14 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
     input: [{ role: "user", content: [{ type: "input_text", text: promptText }] }],
     stream: false,
   };
-  if (config.supportsTemperatureZero !== false) body.temperature = 0;
+  // Temperature is opt-in, never opt-out to a non-zero value. The
+  // override flag ("i-cannot-control-temperature") means the endpoint
+  // rejects `temperature=0` outright — the harness path is to omit the
+  // field entirely, NEVER to substitute a different value. A model
+  // sampled above 0 is a different experiment and the CLI pre-flight
+  // stamps the run as `not comparable`; the override here must do the
+  // same. See src/cli.mjs for the user-facing wording.
+  if (config.supportsTemperatureZero !== false && !config.temperatureOverride) body.temperature = 0;
   // Omitted rather than defaulted: a cap this harness chose could truncate a
   // solver the model had room to finish, and a self-inflicted truncation is
   // indistinguishable from a weak model once it is scored.

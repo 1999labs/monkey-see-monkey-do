@@ -1166,3 +1166,125 @@ test("every adapter honours a configured timeoutMs", async () => {
     assert.equal(err.timeoutMs, 25, `${name} must honour the configured budget`);
   }
 });
+
+// -------------------------------------------------------------
+// Phase 8 runner-bug fix tripwires (commit fixing the
+// --i-cannot-control-temperature override).
+//
+// Pre-fix: the responses / chat-completions adapters always sent
+// body.temperature = 0 unless supportsTemperatureZero === false. The
+// CLI's --i-cannot-control-temperature flag was honored at the
+// pre-flight refusal but never reached the body-builder, so a model
+// that rejected temperature=0 (e.g. gpt-6-luna on /v1/responses)
+// returned HTTP 400 even when the user had explicitly opted in.
+//
+// Post-fix: the body omits the temperature field entirely when the
+// override is set. NEVER substituted with a non-zero value — a
+// model sampled above 0 is a different experiment.
+//
+// One pin per dialect. The fetchImpl captures the request body so
+// the assertion runs on the JSON the runner actually emitted.
+// -------------------------------------------------------------
+
+// captureBody helper is defined below the import block; kept local to the
+// tripwire section to avoid colliding with the broader test file's helpers.
+
+test("responses adapter omits temperature when --i-cannot-control-temperature is set", async () => {
+  const { fetchImpl, getBody } = captureBody();
+  const cfg = {
+    adapter: "responses",
+    endpoint: "https://example.test/v1/responses",
+    model: "test/model",
+    apiKeyEnv: "TEST_KEY",
+    fetchImpl,
+    maxRetries: 0,
+    temperatureOverride: true,
+  };
+  await responsesComplete(cfg, "PROMPT");
+  const body = getBody();
+  assert.equal("temperature" in body, false, "body must not carry a temperature field under the override — got: " + JSON.stringify(body));
+});
+
+test("responses adapter sends temperature: 0 when override is NOT set", async () => {
+  const { fetchImpl, getBody } = captureBody();
+  const cfg = {
+    adapter: "responses",
+    endpoint: "https://example.test/v1/responses",
+    model: "test/model",
+    apiKeyEnv: "TEST_KEY",
+    fetchImpl,
+    maxRetries: 0,
+  };
+  await responsesComplete(cfg, "PROMPT");
+  const body = getBody();
+  assert.equal(body.temperature, 0, "body must carry temperature: 0 by default");
+});
+
+test("chat-completions adapter omits temperature when override is set", async () => {
+  const { fetchImpl, getBody } = captureBody(openaiBody());
+  const cfg = {
+    endpoint: "https://example.test/v1/chat/completions",
+    model: "test/model",
+    apiKeyEnv: "TEST_KEY",
+    fetchImpl,
+    maxRetries: 0,
+    temperatureOverride: true,
+  };
+  await openaiComplete(cfg, "PROMPT");
+  const body = getBody();
+  assert.equal("temperature" in body, false, "body must not carry a temperature field under the override");
+});
+
+import { complete as openaiComplete } from "../src/adapters/openai.mjs";
+
+// (existing top-of-file import of `complete` from "../src/adapters/openai.mjs"
+// at line 6 remains — it serves the existing tests; this new alias is a
+// readability aid for the tripwire block below.)
+
+// Per-dialect mock body. Anthropic expects { type: "message", content:
+// [{type: "text", ...}] }; the Responses dialect expects the Responses
+// shape; OpenAI chat-completions expects { choices: [...] }.
+// captureBody takes a body that matches the dialect under test.
+const anthropicBody = () => ({
+  id: "msg_test",
+  type: "message",
+  role: "assistant",
+  model: "test/model",
+  content: [{ type: "text", text: "OK" }],
+  usage: { input_tokens: 1, output_tokens: 1 },
+});
+const openaiBody = () => ({
+  id: "chatcmpl-test",
+  object: "chat.completion",
+  model: "test/model",
+  choices: [{ index: 0, message: { role: "assistant", content: "OK" }, finish_reason: "stop" }],
+  usage: { prompt_tokens: 1, completion_tokens: 1 },
+});
+const captureBody = (responseBody = null) => {
+  let captured = null;
+  const fetchImpl = async (url, init) => {
+    captured = JSON.parse(init.body);
+    return jsonResponse(responseBody ?? {
+      id: "resp_test", object: "response", status: "completed", model: "test/model",
+      output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "OK" }] }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  return { fetchImpl, getBody: () => captured };
+};
+
+test("anthropic adapter omits temperature when override is set", async () => {
+  const { fetchImpl, getBody } = captureBody(anthropicBody());
+  const cfg = {
+    endpoint: "https://example.test/v1/messages",
+    model: "test/model",
+    apiKeyEnv: "TEST_KEY",
+    fetchImpl,
+    maxRetries: 0,
+    temperatureOverride: true,
+    anthropicVersion: "2023-06-01",
+  };
+  await anthropicComplete(cfg, "PROMPT");
+  const body = getBody();
+  assert.equal("temperature" in body, false, "body must not carry a temperature field under the override");
+});

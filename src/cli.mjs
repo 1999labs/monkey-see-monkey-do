@@ -176,18 +176,36 @@ export const prepareModel = async (args, { log = console.log } = {}) => {
   // A provider that cannot run at temperature 0 is a different
   // experiment. Refuse to record a score unless the user says, awkwardly, that
   // they know.
-  if (config.supportsTemperatureZero === false) {
-    if (!args.temperatureOverride) {
-      throw new Error(
-        `${args.model} is configured with supportsTemperatureZero: false.\n` +
-          `  A model sampled above temperature 0 is a different experiment, and its score\n` +
-          `  is not comparable with any score sampled at 0. Refusing to record one.\n` +
-          `  If you understand that and want the number anyway, add:\n    ${TEMPERATURE_OVERRIDE_FLAG}\n` +
-          `  The result will be stamped as not comparable.`
-      );
-    }
+  //
+  // Three cases:
+  //   1. supportsTemperatureZero === false (registry-declared, e.g. via
+  //      config/models.json): refuse unless --i-cannot-control-temperature;
+  //      set config.temperatureOverride so the adapter omits the field.
+  //   2. supportsTemperatureZero === null (registry unknown, common for
+  //      reasoning models on the Responses / chat-completions dialects):
+  //      the override flag is still honoured — the user has explicitly said
+  //      they know. config.temperatureOverride is set the same way.
+  //   3. supportsTemperatureZero === true (the default preset): the
+  //      override flag is irrelevant (we'll send temperature: 0 anyway).
+  //
+  // Pre-Phase-8 the override flag only propagated in case 1; reasoning
+  // models on Responses / chat-completions silently ignored the flag,
+  // which broke the Phase 8 gpt-6-luna smoke (HTTP 400 every call).
+  if (config.supportsTemperatureZero !== true && args.temperatureOverride) {
     config = { ...config, temperatureOverride: true };
     temperatureNotice(config, log);
+  } else if (config.supportsTemperatureZero === false) {
+    // Registry-declared unsupported AND the user did NOT pass the
+    // override flag — refuse. This preserves the existing pre-flight
+    // behaviour: a model the operator flagged as "no temperature=0"
+    // without the override is a different experiment.
+    throw new Error(
+      `${args.model} is configured with supportsTemperatureZero: false.\n` +
+        `  A model sampled above temperature 0 is a different experiment, and its score\n` +
+        `  is not comparable with any score sampled at 0. Refusing to record one.\n` +
+        `  If you understand that and want the number anyway, add:\n    ${TEMPERATURE_OVERRIDE_FLAG}\n` +
+        `  The result will be stamped as not comparable.`
+    );
   }
 
   let keySource = "not required";

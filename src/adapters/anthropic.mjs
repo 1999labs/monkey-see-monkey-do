@@ -99,7 +99,11 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
     stream: false,
   };
   // Several models on this dialect reject a temperature parameter outright.
-  if (config.supportsTemperatureZero !== false) body.temperature = 0;
+  // The override flag ("i-cannot-control-temperature") is honored at the
+  // body-builder the same way as in src/adapters/responses.mjs and
+  // src/adapters/openai.mjs: omit the field entirely. We never substitute
+  // a non-zero value — see the contract comment in src/adapters/responses.mjs.
+  if (config.supportsTemperatureZero !== false && !config.temperatureOverride) body.temperature = 0;
 
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {

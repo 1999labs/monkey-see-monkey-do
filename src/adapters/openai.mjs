@@ -84,7 +84,11 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
   // Omitted, not sent, when the config declares temperature 0 unsupported:
   // several reasoning endpoints reject the parameter with HTTP 400. Such a run
   // can only be recorded under --i-cannot-control-temperature, and is stamped.
-  if (config.supportsTemperatureZero !== false) body.temperature = 0;
+  // The override flag is honored here at the body-builder so the
+  // CLI's pre-flight refusal and the adapter's emit step agree: the field
+  // is omitted entirely, NEVER substituted with a non-zero value. See the
+  // contract note in src/adapters/responses.mjs for the symmetry.
+  if (config.supportsTemperatureZero !== false && !config.temperatureOverride) body.temperature = 0;
 
   // Reproducibility controls. Both are opt-in via config so the same adapter
   // serves every provider.
