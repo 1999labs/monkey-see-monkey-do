@@ -189,8 +189,21 @@
       "chainEngagementRate": 0.04,
       "generalizationWeight": 0.5,
       "noConfidentErrorPoints": 10,
-      "formula": "clamp(see + do - GENERALIZATION_WEIGHT*GZ_mean - 10*(1 - chainEngagementRate), 0, 100)"
-    }
+      "formula": "clamp(see + do - GENERALIZATION_WEIGHT*GZ_mean - 10*(1 - chainEngagementRate), 0, 100)",
+      "formulaVersion": "1.0.0"
+    },
+    "total_1_1_0": 8,
+    "total_1_1_0_components": {
+      "total": 8,
+      "max": 100,
+      "base": 20,
+      "gzMeanPenalty": 2.16,
+      "unearnedPenalty": 9.6,
+      "earnedFraction": 0.2,
+      "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+      "formulaVersion": "1.1.0"
+    },
+    "formulaVersion_1_1_0": "1.1.0"
   },
   "stability": null,
   "reports": {
@@ -199,7 +212,7 @@
   },
   "limitations": [
     "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and chain-rewrite derivation (DO v2), not software engineering.",
-    "DO v2 scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO v2 score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
+    "DO v2 scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO v2 score describes the code it emitted \u2014 not deduction performed at inference time. A correct solver may be recalled rather than derived.",
     "A low Generalization Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
     "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
     "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
