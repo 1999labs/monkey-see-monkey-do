@@ -98,13 +98,55 @@ recorded with its re-derivation command in
 
 Open-weight frontier models on OpenRouter, one per family: Qwen/Qwen3.8-27B,
 deepseek-ai/DeepSeek-V4.1-Flash, zai-org/GLM-5.3, XiaomiMiMo/MiMo-V2.6-Pro,
-tencent/Hy3.
+tencent/Hy3. Each model is pinned to one provider, temperature 0, `-r 3`, with a
+per-model reasoning-effort rung recorded beside its score; cost is dollars per
+run under the pinned host. Methodology in
+[`docs/openweight-frontier-models.json`](docs/openweight-frontier-models.json).
 
-**Pending: sweep not yet run.** The cohort definition is committed
-([`config/phase9-cohort.json`](config/phase9-cohort.json)); the scores, table and
-chart land here once the runs finish. Each model is pinned to one provider,
-temperature 0, `-r 3`, with a per-model reasoning-effort rung recorded beside
-its score.
+> **The DO column is not a model measurement for most of this cohort.** Three of
+> the five models had their DO call time out at the 420-second HTTP budget on
+> every run, so their DO figure is a **route-failure zero** and their adjusted
+> figure is derived from it. Read those two columns against the DO row below,
+> never on their own. A failed-call zero is not a score.
+
+| model | host | effort | SEE | DO | fullCredit | adjusted | cost/run |
+|---|---|---|---|---|---|---|---|
+| `qwen/qwen3.8-27b` | Alibaba | medium | 39 | **50** | 50/50 | **81** | $0.060 |
+| `tencent/hy3` | Tencent | high | 38 | **50** | 50/50 | **79** | $0.076 |
+| `z-ai/glm-5.3` | Z.AI | high | 38 | 0 † | — | 24 † | $0.035 |
+| `xiaomi/mimo-v2.6-pro` | Xiaomi | unset | 36 | 0 † | — | 23 † | $0.018 |
+| `deepseek/deepseek-v4.1-flash` | DeepInfra | high | 39 | 0 † | — | 25 † | $0.015 |
+
+† **DO route failure, not a model score.** The DO call timed out at 420000 ms on
+all three runs (`callFailure.do.reason: "timeout"`), so the zero says nothing
+about the model and the adjusted figure inherits it. The cohort JSON marks each
+with `doRouteFailed: true` and `adjustedComparable: false`.
+
+![Cohort 1 chart](docs/openweight-frontier-models.svg)
+
+*Adjusted score against dollars per run for five open-weight models, pinned to
+one host each, temperature 0, -r 3 under suite 1.1.0. Three points sit at the
+floor only because their DO call never returned; the two that produced a DO
+score (Qwen 3.8 27B, Hy3) are the only comparable readings.*
+
+**Stability.** SEE was REPRODUCIBLE for four of five (spreads 0, 0, 2, 3, 7);
+GLM's SEE spread was 7. DO was NOT_REPRODUCIBLE where it was measurable at all:
+Qwen 3.8 27B answered all three runs with three *different* solvers scoring
+0, 50, 50; Hy3 answered twice with different code that both scored 50/50. The
+three timed-out models have no DO verdict (`NO_VERDICT`, 0 answered runs).
+
+**What this cohort actually measured.** SEE discriminated cleanly and
+reproducibly across the cohort (36-39 of 50, spread ≤ 7). DO did not: only two
+of five models returned a solver inside the call budget, and one of those two
+changed its solver between runs. The honest reading is that at these reasoning
+efforts, this harness's DO call is measuring the 420-second timeout more than it
+is measuring the models.
+
+Re-derive from a fresh clone (no model calls; reads the committed reports):
+
+```bash
+python3 scripts/build-cohort-openweight.py && node bin/chart.mjs docs/openweight-frontier-models.json
+```
 
 ### Cohort 2
 

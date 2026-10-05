@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 470" width="1180" height="470" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+<rect width="1180" height="470" fill="#ffffff"/>
+<rect x="76" y="330" width="1064" height="76" fill="#000000" fill-opacity="0.07"/>
+<rect x="76" y="254" width="1064" height="76" fill="#000000" fill-opacity="0.055"/>
+<rect x="76" y="178" width="1064" height="76" fill="#000000" fill-opacity="0.04"/>
+<rect x="76" y="102" width="1064" height="76" fill="#000000" fill-opacity="0.028"/>
+<rect x="76" y="26" width="1064" height="76" fill="#000000" fill-opacity="0.016"/>
+<line x1="76" y1="406" x2="1140" y2="406" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="76" y1="330" x2="1140" y2="330" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="76" y1="254" x2="1140" y2="254" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="76" y1="178" x2="1140" y2="178" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="76" y1="102" x2="1140" y2="102" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="76" y1="26" x2="1140" y2="26" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="76" y1="26" x2="76" y2="406" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="331.81781155555984" y1="26" x2="331.81781155555984" y2="406" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="587.6356231111197" y1="26" x2="587.6356231111197" y2="406" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="843.4534346666794" y1="26" x2="843.4534346666794" y2="406" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="1099.2712462222394" y1="26" x2="1099.2712462222394" y2="406" stroke="#000000" stroke-opacity="0.14" stroke-width="1"/>
+<line x1="76" y1="406" x2="1140" y2="406" stroke="#000000" stroke-width="2.5"/>
+<line x1="76" y1="26" x2="76" y2="406" stroke="#000000" stroke-width="2.5"/>
+<text x="64" y="410" text-anchor="end" font-size="12" fill="#000000">0</text>
+<text x="64" y="334" text-anchor="end" font-size="12" fill="#000000">20</text>
+<text x="64" y="258" text-anchor="end" font-size="12" fill="#000000">40</text>
+<text x="64" y="182" text-anchor="end" font-size="12" fill="#000000">60</text>
+<text x="64" y="106" text-anchor="end" font-size="12" fill="#000000">80</text>
+<text x="64" y="30" text-anchor="end" font-size="12" fill="#000000">100</text>
+<text x="76" y="428" text-anchor="middle" font-size="12" fill="#000000">$0.00</text>
+<text x="331.81781155555984" y="428" text-anchor="middle" font-size="12" fill="#000000">$0.02</text>
+<text x="587.6356231111197" y="428" text-anchor="middle" font-size="12" fill="#000000">$0.04</text>
+<text x="843.4534346666794" y="428" text-anchor="middle" font-size="12" fill="#000000">$0.06</text>
+<text x="1099.2712462222394" y="428" text-anchor="middle" font-size="12" fill="#000000">$0.08</text>
+<line x1="76" y1="26" x2="1140" y2="26" stroke="#000000" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="6 5"/>
+<text x="1140" y="18" text-anchor="end" font-size="11" fill="#000000" fill-opacity="0.6">reference solver: 100</text>
+<path d="M 272.2634250254255 311 L 843.4662255572572 311 L 843.4662255572572 98.19999999999999" fill="none" stroke="#171717" stroke-width="1.75" stroke-dasharray="7 5" opacity="0.8"/>
+<circle cx="272.2634250254255" cy="311" r="6" fill="#0e7490" stroke="#ffffff" stroke-width="1.5"/>
+<text x="272.2634250254255" y="298" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">25</text>
+<text x="286.2634250254255" y="303" text-anchor="start" font-size="11.5" font-weight="600" fill="#0e7490">DeepSeek V4.1 Flash</text>
+<circle cx="310.64888764933727" cy="318.6" r="6" fill="#15803d" stroke="#ffffff" stroke-width="1.5"/>
+<text x="310.64888764933727" y="305.6" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">23</text>
+<text x="324.64888764933727" y="322.6" text-anchor="start" font-size="11.5" font-weight="600" fill="#15803d">MiMo V2.6 Pro</text>
+<circle cx="522.5044082890741" cy="314.8" r="6" fill="#b45309" stroke="#ffffff" stroke-width="1.5"/>
+<text x="522.5044082890741" y="301.8" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">24</text>
+<text x="508.50440828907415" y="306.8" text-anchor="end" font-size="11.5" font-weight="600" fill="#b45309">GLM 5.3</text>
+<circle cx="843.4662255572572" cy="98.19999999999999" r="6" fill="#7c3aed" stroke="#ffffff" stroke-width="1.5"/>
+<text x="843.4662255572572" y="85.19999999999999" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">81</text>
+<text x="857.4662255572572" y="90.19999999999999" text-anchor="start" font-size="11.5" font-weight="600" fill="#7c3aed">Qwen 3.8 27B</text>
+<circle cx="1043.2727272727273" cy="105.80000000000001" r="6" fill="#be123c" stroke="#ffffff" stroke-width="1.5"/>
+<text x="1043.2727272727273" y="92.80000000000001" text-anchor="middle" font-size="11" font-weight="600" fill="#000000">79</text>
+<text x="1057.2727272727273" y="109.80000000000001" text-anchor="start" font-size="11.5" font-weight="600" fill="#be123c">Hy3</text>
+<text x="608" y="454" text-anchor="middle" font-size="12" fill="#000000">cost per run (USD)</text>
+<text x="22" y="216" text-anchor="middle" font-size="12" fill="#000000" transform="rotate(-90 22 216)">adjusted score (0-100)</text>
+</svg>

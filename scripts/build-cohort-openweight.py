@@ -114,18 +114,29 @@ def find_report(spec: dict) -> Path:
 
 
 def cost_usd(r: dict):
-    """Total run cost = SEE + DO, or None if either half is unpriced.
+    """Measured run cost = priced SEE + priced DO, or None when NEITHER half is
+    priced.
 
-    The report's cost block carries a costUsd per eval; a null in either half
-    means that half was not priced, so the total is unknown rather than
-    partial. Summing a known half with an unknown one would understate the
-    run and put a misleading point on the cost axis.
+    A timed-out call returns no usage, so its half is unpriced while the other
+    half is known. Returning None for the whole run would discard a real
+    number; summing a known half with a guessed one would invent one. So the
+    priced halves are summed and `costComplete` records whether both were
+    priced — a caller must not treat a partial total as the full run cost.
     """
     c = r.get("cost") or {}
     see, do = c.get("see") or {}, c.get("do") or {}
-    if see.get("costUsd") is None or do.get("costUsd") is None:
+    sv, dv = see.get("costUsd"), do.get("costUsd")
+    if sv is None and dv is None:
         return None
-    return round(see["costUsd"] + do["costUsd"], 6)
+    return round((sv or 0) + (dv or 0), 6)
+
+
+def cost_flags(r: dict):
+    """Which half of the run's cost is measured, and which is missing."""
+    c = r.get("cost") or {}
+    see, do = c.get("see") or {}, c.get("do") or {}
+    missing = [name for name, blk in (("see", see), ("do", do)) if blk.get("costUsd") is None]
+    return {"costComplete": not missing, "costMissing": missing}
 
 
 def summarize(spec: dict) -> dict:
@@ -140,23 +151,36 @@ def summarize(spec: dict) -> dict:
     usd = cost_usd(r)
     if usd is None:
         sys.exit(
-            f"{model}: its report carries no priced cost (cost.see.costUsd or "
-            f"cost.do.costUsd is null), so the costUsd axis has no value for it.\n"
+            f"{model}: its report carries no priced cost at all (both "
+            f"cost.see.costUsd and cost.do.costUsd are null), so the costUsd "
+            f"axis has no value for it.\n"
             f"  report: results/{path.name}\n"
-            f"  a Cohort 1 point needs dollars; check the OpenRouter rate row for "
-            f"this model in config/openrouter-rates.json."
+            f"  check the OpenRouter rate row for this model in "
+            f"config/openrouter-rates.json."
         )
+    # A route-failed DO call scores 0/50 but says nothing about the model. The
+    # published cohort must carry that distinction, or the zero reads as a
+    # result (AGENTS.md: never present a failed-call zero as a model score).
+    doFailed = (r.get("callFailure") or {}).get("do") is not None
     return {
         "model": model,
         "label": spec["label"],
         "provider": spec["provider"],
         "costUsd": usd,
+        **cost_flags(r),
         "reasoningEffort": spec["effort"],
         "reasoningEfforts": spec["efforts"],
         "see": see.get("total"),
         "seeMax": see.get("max"),
         "do": do.get("total"),
         "doMax": do.get("max"),
+        # True when the DO call never returned: `do` is a route-failure zero,
+        # not a model score, and `adjusted` is derived from that zero.
+        "doRouteFailed": doFailed,
+        "doFailureReason": ((r.get("callFailure") or {}).get("do") or {}).get("reason") if doFailed else None,
+        "doFullCreditChains": sum(
+            (b.get("fullCreditChains") or 0) for b in (do.get("perBand") or {}).values()
+        ) if not doFailed else None,
         "chainEngagementRate": do.get("chainEngagementRate"),
         "gzMean": round((adj.get("components") or {}).get("gzMean", 0), 2),
         "base": adj.get("base"),
@@ -165,14 +189,18 @@ def summarize(spec: dict) -> dict:
         "adjusted": adj.get("total_1_1_0", adj.get("total")),
         "adjusted_1_1_0": adj.get("total_1_1_0"),
         "adjusted_1_0_0": adj.get("total"),
+        # An adjusted figure built on a route-failed DO is not a model reading.
+        "adjustedComparable": not doFailed,
         "stability": {
             "runs": stability.get("runs"),
             "seeSpread": stability.get("seeSpread"),
             "doSpread": stability.get("doSpread"),
             "seeVerdict": stability.get("seeVerdict"),
             "doVerdict": stability.get("doVerdict"),
+            "answeredDoRuns": stability.get("answeredDoRuns"),
             "seeTotals": stability.get("seeTotals"),
             "doTotals": stability.get("doTotals"),
+            "doCallFailures": stability.get("doCallFailures"),
         },
         "cost": {
             "see": (r.get("cost") or {}).get("see"),
@@ -190,8 +218,11 @@ def summarize(spec: dict) -> dict:
 
 def main() -> None:
     points = [summarize(spec) for spec in COHORT]
-    # Cheapest run first: the cost axis reads left to right as spend.
+    # Cheapest measured run first: the cost axis reads left to right as spend.
     points.sort(key=lambda p: p["costUsd"])
+
+    doFailed = [p["label"] for p in points if p["doRouteFailed"]]
+    doMeasured = [p["label"] for p in points if not p["doRouteFailed"]]
 
     out = {
         "cohort": "Cohort 1 — open-weight frontier models (OpenRouter)",
@@ -207,24 +238,42 @@ def main() -> None:
             "multi-endpoint on OpenRouter, so an unpinned run would mix "
             "quantizations). Cost is dollars per run under the pinned host, at the "
             "pinned-endpoint rates in config/openrouter-rates.json (NOT the "
-            "model-level list rate). The x-axis is "
-            "dollars per run, summed from the report's cost block at the rates in "
-            "config/openrouter-rates.json (as of its _asOf date). A per-model "
+            "model-level list rate); where a DO call never returned, its half of "
+            "the cost is unmeasured and `costComplete` is false. A per-model "
             "reasoning-effort rung is recorded beside each score: effort is a "
-            "confound on the order of temperature, the ladders differ per model, and "
-            "an unset effort means the parameter was omitted and the provider "
+            "confound on the order of temperature, the ladders differ per model, "
+            "and an unset effort means the parameter was omitted and the provider "
             "default applied."
         ),
+        # The DO half of this cohort is largely a harness measurement, not a
+        # model measurement. Stated at the top level so no reader has to infer
+        # it from per-point flags.
+        "doMeasurementCaveat": (
+            f"{len(doFailed)} of {len(points)} models had their DO call time out at "
+            f"the 420000ms HTTP budget on every run ({', '.join(doFailed) or 'none'}), "
+            f"so their `do` value is a route-failure zero and their `adjusted` is "
+            f"derived from it. Only {', '.join(doMeasured) or 'none'} produced a DO "
+            f"score. A failed-call zero is not a model score (AGENTS.md); see "
+            f"`doRouteFailed` and `adjustedComparable` on each point."
+        ),
         "points": points,
-        "evidence": "Every point traces to its three-run combined report; the per-run totals live in stability.",
+        "evidence": "Every point traces to its three-run combined report; the per-run totals and route failures live in stability.",
     }
     OUT.write_text(json.dumps(out, indent=2) + "\n")
     print(f"wrote {OUT.relative_to(REPO)}")
     for p in points:
+        flags = ""
+        if p["doRouteFailed"]:
+            flags = f"  [DO ROUTE-FAILED: {p['doFailureReason']}; adjusted not comparable]"
+        elif not p["costComplete"]:
+            flags = f"  [cost partial: missing {','.join(p['costMissing'])}]"
         print(
             f"  {p['label']:22s} cost=${p['costUsd']:<9} see={p['see']:>3}/{p['seeMax']} "
-            f"do={p['do']:>5}/{p['doMax']} adj={p['adjusted']:>3} effort={p['reasoningEffort']}"
+            f"do={p['do']:>5}/{p['doMax']} adj={p['adjusted']:>3} "
+            f"effort={p['reasoningEffort']}{flags}"
         )
+    print(f"\n  DO measured on {len(doMeasured)}/{len(points)} models; "
+          f"route-failed on {len(doFailed)}.")
 
 
 if __name__ == "__main__":

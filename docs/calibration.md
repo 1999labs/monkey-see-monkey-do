@@ -588,6 +588,66 @@ before choosing a pin.
 
 ---
 
+## 9.6 The DO call budget is the binding constraint on Cohort 1 (Phase 9)
+
+The DO eval makes ONE model call and the model must return a complete solver
+inside it. That call's HTTP budget is `DEFAULT_TIMEOUT_MS = 420000` (7 minutes)
+in `src/adapters/openai.mjs`. On Cohort 1 the budget, not the models, decided
+the DO column:
+
+| model | pinned effort | DO call elapsed | outcome |
+|---|---|---|---|
+| `tencent/hy3` | high | 322,390 ms | answered (77% of budget) |
+| `deepseek/deepseek-v4.1-flash` | high | 420,007 ms x3 | timed out |
+| `xiaomi/mimo-v2.6-pro` | unset | 420,004 ms x3 | timed out |
+| `z-ai/glm-5.3` | high | 420,003 ms x3 | timed out |
+| `qwen/qwen3.8-27b` | medium | answered | answered, 0/50 on one run |
+
+Four of five models saturate or exceed the budget. So:
+
+- **A timed-out DO call scores 0/50 and is not a model result.** Its
+  `callFailure.do` is non-null, its usage is absent (so its half of the cost is
+  unmeasured), and any `adjusted` figure derived from it inherits the zero.
+  Never quote one of those totals as a model score (AGENTS.md).
+- **The cohort's DO column is therefore two measurements, not five.** Only hy3
+  and qwen3.8-27b returned a solver; the other three are harness measurements.
+- **Raising the budget is a cohort-wide decision, not a retry.** A higher budget
+  would make the three measurable, but their numbers would not be comparable
+  with hy3's and qwen's unless those two were re-run under the same budget. Do
+  not raise it per-model.
+
+This is recorded here rather than fixed: changing `DEFAULT_TIMEOUT_MS` changes
+what the eval measures for every future run, and that is the user's call.
+
+### A note on SEE reproducibility vs SEE totals — and a defect found here
+
+SEE reported REPRODUCIBLE for every Cohort 1 model, including GLM with a
+per-run total spread of 7. Those are not contradictory *if* the verdict is
+sound: the verdict compares the model's response text per task across runs,
+while the scored totals can move because a few held-out cases are scored against
+a sandbox that can throw (the robustness term).
+
+**But the verdict is not sound, and that was found while writing this section.**
+`runLevel`'s USABLE return path does not set a `response` field (only its
+failure paths do). `run-all.mjs` builds the SEE prints from
+`run.out.response`, so every usable call hashes the string `"undefined"` — the
+constant `c21f6150`. Every usable call therefore produces the same fingerprint,
+and `reproducibility()` can only ever return REPRODUCIBLE when the calls
+succeed. Verified directly: a dry-run SEE run yields 3 distinct real
+fingerprints under `out.responseFingerprint`, but 1 distinct value under
+`out.response`.
+
+Consequence: **SEE's REPRODUCIBLE verdict is not evidence of anything.** It
+cannot distinguish a deterministic model from a highly variable one. It is
+reported per model in Cohort 1's stability block and must not be quoted as a
+determinism claim until this is fixed. The fix is one line (hash
+`out.responseFingerprint`, which is already computed, or set `response` on the
+usable path), but it changes what a verdict means, so it is left to the user's
+explicit go-ahead rather than bundled into a docs pass.
+
+The DO verdict is unaffected: it hashes `doOut.responseFingerprint`, a real
+value, which is why it reports NOT_REPRODUCIBLE for hy3 and qwen3.8-27b.
+
 ## 10. Suite history at a glance
 
 Suite 1.0.0 replaced DO's original task design with the chain eval; suite
