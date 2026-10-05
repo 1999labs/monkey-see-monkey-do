@@ -1,0 +1,216 @@
+{
+  "schema": "monkey-see-monkey-do/combined@5",
+  "eval": "COMBINED",
+  "timestamp": "2026-10-05T20:18:43.544Z",
+  "model": {
+    "requested": "openrouter/z-ai/glm-5.3",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "date": "2026-10-05T20:18:43.544Z",
+  "temperature": {
+    "requested": 0,
+    "sent": true,
+    "supported": null,
+    "override": false,
+    "comparable": null,
+    "statement": "temperature 0 requested; whether the provider honours it is UNKNOWN until a --runs 3 reproducibility check",
+    "keySource": ".env file"
+  },
+  "reasoningEffort": "high",
+  "callFailure": {
+    "seeCount": 0,
+    "do": {
+      "reason": "timeout",
+      "message": "Request timed out after 420000ms: This operation was aborted",
+      "elapsedMs": 420003,
+      "timeoutMs": 420000,
+      "attempts": 1
+    }
+  },
+  "see": {
+    "total": 38,
+    "max": 50,
+    "perLevel": {
+      "2": {
+        "seen": {
+          "correct": 6,
+          "total": 6,
+          "rate": 1
+        },
+        "heldOut": {
+          "correct": 87,
+          "total": 150,
+          "rate": 0.58
+        },
+        "gz": 0.42000000000000004
+      },
+      "4": {
+        "seen": {
+          "correct": 12,
+          "total": 12,
+          "rate": 1
+        },
+        "heldOut": {
+          "correct": 117,
+          "total": 150,
+          "rate": 0.78
+        },
+        "gz": 0.21999999999999997
+      },
+      "8": {
+        "seen": {
+          "correct": 24,
+          "total": 24,
+          "rate": 1
+        },
+        "heldOut": {
+          "correct": 136,
+          "total": 150,
+          "rate": 0.9066666666666666
+        },
+        "gz": 0.09333333333333338
+      },
+      "16": {
+        "seen": {
+          "correct": 48,
+          "total": 48,
+          "rate": 1
+        },
+        "heldOut": {
+          "correct": 130,
+          "total": 150,
+          "rate": 0.8666666666666667
+        },
+        "gz": 0.1333333333333333
+      }
+    },
+    "gzMean": 21.6667,
+    "perTask": {
+      "A": {
+        "weightedRate": 0.48400000000000004,
+        "gzMean": 0.44499999999999995
+      },
+      "B": {
+        "weightedRate": 0.9939999999999999,
+        "gzMean": 0.010000000000000009
+      },
+      "C": {
+        "weightedRate": 0.724,
+        "gzMean": 0.195
+      }
+    }
+  },
+  "do": {
+    "total": 0,
+    "max": 50,
+    "usable": false,
+    "compileError": null,
+    "perBand": {},
+    "chainEngagementRate": 0,
+    "poolSha256": "dc98e89e5541b9d83ad22663940a62fe8ade3020975b6071319ae41069b08113",
+    "fullPool": true
+  },
+  "combined": {
+    "total": 38,
+    "max": 100,
+    "reading": [
+      "MONKEY SEE         33.03/45   weighted: A=48.4%  B=99.4%  C=72.4%",
+      "GZ (per level): L2=42.0%  L4=22.0%  L8=9.3%  L16=13.3%  GZ_mean=21.67%",
+      "MONKEY DO (v2)    0/50   0/50 chains full credit, 0 partial",
+      "SEE 33/45 + DO 0/50 = combined 33.03/95"
+    ],
+    "perRunTotals": [
+      32,
+      39,
+      38
+    ]
+  },
+  "cost": {
+    "see": {
+      "usage": {
+        "prompt_tokens": 1671,
+        "completion_tokens": 7402
+      },
+      "pricing": "pay-per-token",
+      "costUsd": 0.034908
+    },
+    "do": {
+      "usage": null,
+      "pricing": "unpriced",
+      "costUsd": null
+    }
+  },
+  "adjusted": {
+    "total": 24,
+    "max": 100,
+    "base": 38,
+    "generalizationIndexPenalty": 4.12,
+    "gzMeanPenalty": 4.12,
+    "unearnedPenalty": 10,
+    "earnedFraction": 0.38,
+    "components": {
+      "seeTotal": 38,
+      "doTotal": 0,
+      "gzMean": 21.666666666666668,
+      "chainEngagementRate": 0,
+      "generalizationWeight": 0.5,
+      "noConfidentErrorPoints": 10,
+      "formula": "clamp(see + do - GENERALIZATION_WEIGHT*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+      "formulaVersion": "1.1.0"
+    }
+  },
+  "stability": {
+    "runs": 3,
+    "seeTotals": [
+      32,
+      39,
+      38
+    ],
+    "doTotals": [
+      0,
+      0,
+      0
+    ],
+    "combinedTotals": [
+      32,
+      39,
+      38
+    ],
+    "seeSpread": 7,
+    "doSpread": 0,
+    "combinedSpread": 0,
+    "answeredDoRuns": 0,
+    "withinTwoPoints": false,
+    "seeReproducible": true,
+    "seeVerdict": "REPRODUCIBLE",
+    "doReproducible": false,
+    "doVerdict": "NO_VERDICT",
+    "doCallFailures": [
+      true,
+      true,
+      true
+    ]
+  },
+  "reports": {
+    "see": "results/openrouter-z-ai-glm-5.3-2026-10-05-201843.json",
+    "do": "results/do-openrouter-z-ai-glm-5.3-2026-10-05-201843.json"
+  },
+  "limitations": [
+    "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and chain-rewrite derivation (DO), not software engineering.",
+    "DO scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
+    "A low Generalization Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
+    "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
+    "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
+    "Not comparable to SWE-bench, HumanEval, or any external leaderboard. Different scale, different construction; never present these numbers alongside one.",
+    "DO has residual contamination risk. The 5-rule / 7-symbol formal system is novel, but BFS on derivable search spaces is a textbook technique; a high DO score shows the model can produce a correct solver, not that it deduced one afresh.",
+    "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 1.1.0)."
+  ],
+  "notes": [
+    "Combined report. DO is the chain eval (string-rewrite derivation); SEE is the sample-efficiency eval (levels 2/4/8/16).",
+    "SEE gzMean drives the Generalization-Index half of the adjusted formula;",
+    "DO chainEngagementRate drives the chain-engagement clawback half.",
+    "An unusable response counts as 50 failed cases for SEE and 50 chains with no legal step for DO.",
+    "A zero beside a non-null callFailure is the score of a call that never returned and is NOT evidence about the model.",
+    "A NOT_REPRODUCIBLE verdict means the endpoint returned different code for the same prompt; such a score is one sample from a range and must not be compared to another model or to a future run."
+  ]
+}
