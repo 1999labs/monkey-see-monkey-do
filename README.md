@@ -17,14 +17,6 @@ run is cheaply repeatable.
 | **Monkey See** | Given a handful of examples of an unknown function, does the model infer the rule, or copy the surface? | 50 points |
 | **Monkey Do** | Given a string-rewrite chain of up to 50 steps in a 5-rule formal system, does the model write a derivation where every step is provably legal and the chain reaches the target? | 50 points |
 
-```
-run it locally (no key):        ollama pull qwen2.5-coder:7b
-                                npm run all -- -m ollama/qwen2.5-coder:7b
-score a hosted model:           export OPENROUTER_API_KEY=sk-or-...
-                                npm run all -- -m openrouter/<model-id>
-validate the harness first:     npm run self-test && npm run dry-run
-```
-
 ## Quickstart
 
 Node.js 20+ required. Nothing to `npm install`.
@@ -102,10 +94,16 @@ recorded with its re-derivation command in
 
 ## Results
 
+### Cohort 1 
+
+Seven frontier reasoning models
+
+### Cohort 2
+
 Five small local Ollama models, each scored `-r 3` at temperature 0 (spreads 0,
 REPRODUCIBLE on both evals; methodology in
 [`docs/ollama-local-models.json`](docs/ollama-local-models.json)). The **adjusted**
-column is the suite 1.1.0 reading; the **penalties** column shows both formula
+column is the one used in the Pareto chart; the **penalties** column shows both formula
 components so a reader sees why each figure is what it is.
 
 | model | paramsB | SEE | DO | gzMean | engagement | **adjusted** | penalties |
