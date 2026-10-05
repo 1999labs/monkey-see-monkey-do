@@ -90,6 +90,21 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
   // contract note in src/adapters/responses.mjs for the symmetry.
   if (config.supportsTemperatureZero !== false && !config.temperatureOverride) body.temperature = 0;
 
+  // Reasoning effort, when the operator has pinned one.
+  //
+  // Effort is a confound on the order of temperature: the same model at "low"
+  // and at "max" is a different experiment. OpenRouter normalises the field
+  // across providers to `reasoning: { effort }`, and the levels are model
+  // specific ("max", "xhigh", "high", "medium", "low", "minimal", "none").
+  //
+  // UNSET IS NOT "none". When config.reasoningEffort is absent the parameter
+  // is omitted entirely and the provider applies its own default; a model that
+  // lists no rungs at all (MiMo) is representable exactly this way. An
+  // explicit "none" is a different request and is sent as such. The CLI's
+  // pre-flight refuses an effort the model does not list, so anything that
+  // reaches this line is one the operator declared.
+  if (config.reasoningEffort) body.reasoning = { effort: config.reasoningEffort };
+
   // Reproducibility controls. Both are opt-in via config so the same adapter
   // serves every provider.
   //

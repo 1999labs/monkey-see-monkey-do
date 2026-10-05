@@ -1,0 +1,69 @@
+{
+  "_readme": [
+    "Phase 9 cohort definition. This file is BOTH the cohort's record and a usable",
+    "model registry: point the runner at it with --config config/phase9-cohort.json.",
+    "A model id here is the full \"openrouter/<vendor>/<slug>\" the CLI takes; the",
+    "exact-match entry supplies the endpoint, key variable and effort, so a run is",
+    "reproducible from this file alone.",
+    "",
+    "reasoningEffort is the rung this cohort pins. Effort is a confound on the order",
+    "of temperature: the same model at two rungs is a different experiment, so it is",
+    "recorded per model and quoted beside every score. The rungs differ per model and",
+    "two of these reason mandatorily, so there is no single cohort-wide constant.",
+    "The ladder each model actually lists lives in config/reasoning-efforts.json;",
+    "pre-flight refuses an effort the model does not list.",
+    "",
+    "An ABSENT reasoningEffort (MiMo) means the parameter is omitted and the provider",
+    "default applies - it is NOT the same as \"none\", which is an explicit level.",
+    "",
+    "The provider pin is passed on the command line, not from this file: every model",
+    "here is multi-endpoint on OpenRouter, so every run needs --only-provider",
+    "--no-fallback or the score mixes quantizations.",
+    "",
+    "Rates live in config/openrouter-rates.json (dated); this file does not carry them."
+  ],
+  "cohort": "Cohort 1 — open-weight frontier models (OpenRouter)",
+  "_asOf": "2026-10-05",
+  "_source": "https://openrouter.ai/api/v1/models",
+  "models": {
+    "openrouter/qwen/qwen3.8-2.4t-a95b": {
+      "adapter": "openai",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "qwen/qwen3.8-2.4t-a95b",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "supportsTemperatureZero": null,
+      "reasoningEffort": "medium"
+    },
+    "openrouter/deepseek/deepseek-v4.1-flash": {
+      "adapter": "openai",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "deepseek/deepseek-v4.1-flash",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "supportsTemperatureZero": null,
+      "reasoningEffort": "high"
+    },
+    "openrouter/z-ai/glm-5.3": {
+      "adapter": "openai",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "z-ai/glm-5.3",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "supportsTemperatureZero": null,
+      "reasoningEffort": "high"
+    },
+    "openrouter/xiaomi/mimo-v2.6-pro": {
+      "adapter": "openai",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "xiaomi/mimo-v2.6-pro",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "supportsTemperatureZero": null
+    },
+    "openrouter/tencent/hy3": {
+      "adapter": "openai",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "tencent/hy3",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "supportsTemperatureZero": null,
+      "reasoningEffort": "high"
+    }
+  }
+}

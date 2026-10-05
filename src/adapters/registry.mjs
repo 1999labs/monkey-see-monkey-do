@@ -158,6 +158,10 @@ const FIELDS = {
   maxOutputTokens: (v) => Number.isInteger(v) && v > 0,
   maxTokens: (v) => Number.isInteger(v) && v > 0,
   anthropicVersion: (v) => typeof v === "string" && v.length > 0,
+  // Reasoning effort rung, passed through to the request as
+  // `reasoning: { effort }`. Model specific; an absent value means the
+  // parameter is omitted and the provider default applies.
+  reasoningEffort: (v) => typeof v === "string" && v.length > 0,
 };
 
 const describeField = {
@@ -172,6 +176,7 @@ const describeField = {
   maxOutputTokens: "a positive integer (Responses adapters only)",
   maxTokens: "a positive integer (Messages adapters; defaults to 32000)",
   anthropicVersion: "a date string, e.g. 2023-06-01 (Messages adapters)",
+  reasoningEffort: "a non-empty string, e.g. high (see config/reasoning-efforts.json)",
 };
 
 /** Validate one entry; the error names the file, the entry and the field. */
@@ -318,6 +323,75 @@ export const complete = (config, promptText, opts) => {
   const fn = ADAPTERS[config.adapter ?? "openai"];
   if (!fn) throw new AdapterError(`Unknown adapter "${config.adapter}"`);
   return fn(config, promptText, opts);
+};
+
+/**
+ * Reasoning-effort ladders, from the committed config/reasoning-efforts.json.
+ *
+ * Effort is a confound on the order of temperature: the same model at "low"
+ * and at "max" is a different experiment. The levels are model specific, and
+ * an UNLISTED level is often silently rendered as the provider's default — so
+ * the ladder is recorded and an effort outside it is refused, never sent.
+ */
+const EFFORT_TABLE_PATH = fileURLToPath(new URL("../../config/reasoning-efforts.json", import.meta.url));
+let _effortCache = null;
+export const reasoningEffortTable = () => {
+  if (_effortCache) return _effortCache;
+  try {
+    _effortCache = JSON.parse(readFileSync(EFFORT_TABLE_PATH, "utf8"));
+  } catch (err) {
+    _effortCache = { models: {} };
+  }
+  return _effortCache;
+};
+
+/**
+ * The effort ladder for a model id, or null when the table has no row.
+ *
+ * Returns { supportedEfforts, defaultEffort, mandatory }. An empty
+ * supportedEfforts means the model lists no rungs at all (the parameter is
+ * omitted); null means the table does not know this model.
+ */
+export const effortLadder = (model) => {
+  if (!model) return null;
+  return reasoningEffortTable().models?.[String(model).toLowerCase()] ?? null;
+};
+
+/**
+ * Refuse a pinned effort the model's ladder does not list.
+ *
+ * An unlisted level is often silently rendered as the default, which would
+ * misdescribe the run as a pinned measurement. A model absent from the table
+ * has an unknown ladder: a pinned effort is refused (the level cannot be
+ * proven accepted) but an unset effort is fine, since there is nothing to
+ * check. Throws; the caller reports and exits.
+ */
+export const assertEffortSupported = (config) => {
+  const effort = config?.reasoningEffort;
+  if (!effort) return; // unset: nothing pinned, nothing to refuse
+  const model = config?.model?.model ?? config?.model;
+  const ladder = effortLadder(model);
+  if (!ladder) {
+    throw new Error(
+      `${model} has reasoningEffort "${effort}" pinned, but config/reasoning-efforts.json has no\n` +
+        `  ladder for it, so the level cannot be checked. Either add the model's ladder (from the\n` +
+        `  OpenRouter catalog's reasoning block) or leave reasoningEffort unset.`
+    );
+  }
+  if (!ladder.supportedEfforts?.length) {
+    throw new Error(
+      `${model} lists no reasoning-effort rungs, so reasoningEffort "${effort}" cannot be sent.\n` +
+        `  Leave reasoningEffort unset for this model; the parameter is then omitted and the\n` +
+        `  provider default applies.`
+    );
+  }
+  if (!ladder.supportedEfforts.includes(effort)) {
+    throw new Error(
+      `${model} does not list reasoning effort "${effort}". Supported: ${ladder.supportedEfforts.join(", ")}.\n` +
+        `  An unlisted level is often rendered as the provider default (here: ${ladder.defaultEffort ?? "unknown"}),\n` +
+        `  which would misdescribe the run. Pick a listed level or leave it unset.`
+    );
+  }
 };
 
 export const KNOWN_EXAMPLES = [

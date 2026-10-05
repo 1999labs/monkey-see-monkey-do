@@ -106,6 +106,13 @@ export const complete = async (config, promptText, { timeoutMs } = {}) => {
   // stamps the run as `not comparable`; the override here must do the
   // same. See src/cli.mjs for the user-facing wording.
   if (config.supportsTemperatureZero !== false && !config.temperatureOverride) body.temperature = 0;
+
+  // Reasoning effort, when the operator has pinned one. Same contract as the
+  // chat-completions adapter (see src/adapters/openai.mjs): the Responses
+  // dialect takes `reasoning: { effort }`, unset omits the parameter so the
+  // provider's own default applies, and an effort the model does not list is
+  // refused earlier, at pre-flight.
+  if (config.reasoningEffort) body.reasoning = { effort: config.reasoningEffort };
   // Omitted rather than defaulted: a cap this harness chose could truncate a
   // solver the model had room to finish, and a self-inflicted truncation is
   // indistinguishable from a weak model once it is scored.

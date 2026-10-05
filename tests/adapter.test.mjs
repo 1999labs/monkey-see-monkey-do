@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { complete, AdapterError, openRouterConfig } from "../src/adapters/openai.mjs";
-import { resolveModel } from "../src/adapters/registry.mjs";
+import { resolveModel, assertEffortSupported } from "../src/adapters/registry.mjs";
 
 process.env.TEST_KEY = "test-key-1234";
 
@@ -1287,4 +1287,90 @@ test("anthropic adapter omits temperature when override is set", async () => {
   await anthropicComplete(cfg, "PROMPT");
   const body = getBody();
   assert.equal("temperature" in body, false, "body must not carry a temperature field under the override");
+});
+
+
+// ---------------------------------------------------------------------------
+// Reasoning effort. Effort is a confound on the order of temperature: the same
+// model at two rungs is a different experiment. These pins cover the three
+// states that matter — pinned, unset (MiMo), and the explicit level "none" —
+// across both dialects that send it.
+// ---------------------------------------------------------------------------
+
+test("chat-completions sends reasoning.effort when one is pinned, omits it otherwise", async () => {
+  const capture = async (extra) => {
+    let body;
+    const fetchImpl = async (url, init) => {
+      body = JSON.parse(init.body);
+      return jsonResponse(okBody("x"));
+    };
+    await complete(config(fetchImpl, extra), "PROMPT");
+    return body;
+  };
+  const pinned = await capture({ reasoningEffort: "high" });
+  assert.deepEqual(pinned.reasoning, { effort: "high" }, "a pinned rung must be sent");
+  assert.equal(pinned.temperature, 0, "pinning effort must not disturb temperature");
+
+  const unset = await capture({});
+  assert.equal("reasoning" in unset, false, "unset must OMIT the field, not send a default");
+});
+
+test("an explicit reasoning effort of 'none' is sent, and is not the same as unset", async () => {
+  // "none" is a real level some models list (Hy3 does). Unset means "let the
+  // provider decide"; sending nothing for an explicit "none" would conflate
+  // the two and misdescribe the run.
+  let body;
+  const fetchImpl = async (url, init) => {
+    body = JSON.parse(init.body);
+    return jsonResponse(okBody("x"));
+  };
+  await complete(config(fetchImpl, { reasoningEffort: "none" }), "PROMPT");
+  assert.deepEqual(body.reasoning, { effort: "none" });
+});
+
+test("the responses adapter sends reasoning.effort on the same contract", async () => {
+  const capture = async (extra) => {
+    let body;
+    const fetchImpl = async (url, init) => {
+      body = JSON.parse(init.body);
+      return jsonResponse({
+        id: "r", object: "response", status: "completed", model: "m",
+        output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "OK" }] }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+    };
+    await responsesComplete(
+      { endpoint: "https://example.test/v1/responses", model: "test/model", apiKeyEnv: "TEST_KEY", fetchImpl, maxRetries: 0, ...extra },
+      "PROMPT"
+    );
+    return body;
+  };
+  assert.deepEqual((await capture({ reasoningEffort: "low" })).reasoning, { effort: "low" });
+  assert.equal("reasoning" in (await capture({})), false);
+});
+
+test("pre-flight accepts every pinned rung in the Phase 9 cohort and refuses an unlisted one", () => {
+  // The five cohort rows resolve through the committed registry and each
+  // pinned rung is on that model's ladder. A rung the model does not list is
+  // refused, because an unlisted level is often rendered as the default.
+  const cohort = [
+    ["openrouter/qwen/qwen3.8-2.4t-a95b", "medium"],
+    ["openrouter/deepseek/deepseek-v4.1-flash", "high"],
+    ["openrouter/z-ai/glm-5.3", "high"],
+    ["openrouter/xiaomi/mimo-v2.6-pro", undefined],
+    ["openrouter/tencent/hy3", "high"],
+  ];
+  for (const [id, effort] of cohort) {
+    const cfg = resolveModel(id, { configPath: "config/phase9-cohort.json" });
+    assert.equal(cfg.reasoningEffort, effort, `${id} must resolve its pinned effort`);
+    assertEffortSupported(cfg); // must not throw
+  }
+  // qwen lists xhigh/medium/low, not "max".
+  const qwen = resolveModel("openrouter/qwen/qwen3.8-2.4t-a95b", { configPath: "config/phase9-cohort.json" });
+  assert.throws(() => assertEffortSupported({ ...qwen, reasoningEffort: "max" }), /does not list reasoning effort "max"/);
+  // MiMo lists no rungs at all: any pinned effort is refused.
+  const mimo = resolveModel("openrouter/xiaomi/mimo-v2.6-pro", { configPath: "config/phase9-cohort.json" });
+  assert.throws(() => assertEffortSupported({ ...mimo, reasoningEffort: "high" }), /lists no reasoning-effort rungs/);
+  // An unset effort is always allowed, even for a model the table does not know.
+  assertEffortSupported({ model: "unknown/model" });
 });

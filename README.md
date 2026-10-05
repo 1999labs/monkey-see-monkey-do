@@ -94,13 +94,17 @@ recorded with its re-derivation command in
 
 ## Results
 
-### Cohort 1 
+### Cohort 1
 
-Qwen/Qwen3.8-2.4T-A95B
-deepseek-ai/DeepSeek-V4.1-Flash
-zai-org/GLM-5.3
-XiaomiMiMo/MiMo-V2.6-Pro-RL
-tencent/Hy4-preview
+Open-weight frontier models on OpenRouter, one per family: Qwen/Qwen3.8-2.4T-A95B,
+deepseek-ai/DeepSeek-V4.1-Flash, zai-org/GLM-5.3, XiaomiMiMo/MiMo-V2.6-Pro,
+tencent/Hy3.
+
+**Pending: sweep not yet run.** The cohort definition is committed
+([`config/phase9-cohort.json`](config/phase9-cohort.json)); the scores, table and
+chart land here once the runs finish. Each model is pinned to one provider,
+temperature 0, `-r 3`, with a per-model reasoning-effort rung recorded beside
+its score.
 
 ### Cohort 2
 
@@ -199,6 +203,8 @@ Reference only. Nothing in here is needed to run the evals.
 monkey-see-monkey-do/
 ├── config/models.example.json   model registry template
 ├── config/*-rates.json          committed $/1M tables (go, openrouter), dated
+├── config/phase9-cohort.json    Cohort 1 definition; also a usable --config registry
+├── config/reasoning-efforts.json per-model effort ladders (checked at pre-flight)
 ├── AGENTS.md                    working conventions for agent sessions
 ├── docs/calibration.md          every asserted number, and how it was measured
 ├── docs/scoring-detail.md       the full scoring machinery

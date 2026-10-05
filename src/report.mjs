@@ -304,6 +304,10 @@ export const buildSeeLevelsReport = ({ model, last, reproducibility, config, key
     generation: {
       temperature: 0,
       temperatureControl: temperatureStatus(config),
+      // The reasoning-effort rung, or null when none was pinned. Recorded
+      // beside temperature because it is a confound on the same order: the
+      // same model at two rungs is a different experiment.
+      reasoningEffort: config?.reasoningEffort ?? null,
       temperatureHonoured: reproducibility ? honouredFrom(reproducibility.seeVerdict) : null,
       seed: config?.seed ?? null,
       providerPin: config?.provider ?? null,
@@ -443,6 +447,9 @@ export const buildChainDoReport = ({ model, result, config, keySource, pool, rep
     generation: {
       temperature: 0,
       temperatureControl: temperatureStatus(config),
+      // The reasoning-effort rung, or null when none was pinned. Same
+      // confound-as-temperature rule as the SEE report.
+      reasoningEffort: config?.reasoningEffort ?? null,
       // Only ANSWERED runs are evidence of determinism. A failed run
       // records an empty response, whose fingerprint is the same constant
       // for every failure mode.
@@ -579,6 +586,9 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
     model: { requested: model, endpoint: config?.endpoint ?? null },
     date: new Date().toISOString(),
     temperature: { ...temperatureStatus(config), keySource: keySource ?? null },
+    // The reasoning-effort rung, or null when none was pinned. Sits beside
+    // temperature because it is the other sampling confound of the same order.
+    reasoningEffort: config?.reasoningEffort ?? null,
 
     // ROUTE failures, not model failures. A zero beside a non-null
     // entry here is the score of a call that never returned and says

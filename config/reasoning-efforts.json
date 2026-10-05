@@ -1,0 +1,53 @@
+{
+  "_readme": [
+    "Reasoning-effort ladders, per model, as reported by the OpenRouter catalog's",
+    "`reasoning` block. Copied here so a pinned effort is auditable and so pre-flight",
+    "can refuse an effort a model does not list.",
+    "",
+    "Why this exists: effort is a confound on the order of temperature. The same model",
+    "at \"low\" and at \"max\" is a different experiment. The levels are model specific -",
+    "there is no universal ladder - and an UNLISTED level is often silently rendered as",
+    "the provider's default, which would misdescribe the run. So the runner refuses a",
+    "level the model does not list rather than sending it.",
+    "",
+    "`mandatory: true` means reasoning cannot be switched off for that model; the",
+    "lowest rung is as close to \"off\" as it gets. An empty `supportedEfforts` means the",
+    "model lists no rungs at all (the parameter is omitted and the provider default",
+    "applies) - it is NOT the same as [\"none\"], which is an explicit level.",
+    "",
+    "Absent model = unknown ladder. Pre-flight then refuses a pinned effort (it cannot",
+    "prove the level is accepted) but still permits an unset effort.",
+    "",
+    "Re-derive a row: https://openrouter.ai/api/v1/models, the model's `reasoning`",
+    "block: supported_efforts, default_effort, mandatory."
+  ],
+  "_asOf": "2026-10-05",
+  "_source": "https://openrouter.ai/api/v1/models",
+  "models": {
+    "qwen/qwen3.8-2.4t-a95b": {
+      "supportedEfforts": ["xhigh", "medium", "low"],
+      "defaultEffort": "xhigh",
+      "mandatory": true
+    },
+    "deepseek/deepseek-v4.1-flash": {
+      "supportedEfforts": ["max", "high", "low"],
+      "defaultEffort": "high",
+      "mandatory": false
+    },
+    "z-ai/glm-5.3": {
+      "supportedEfforts": ["max", "high", "low"],
+      "defaultEffort": "max",
+      "mandatory": true
+    },
+    "xiaomi/mimo-v2.6-pro": {
+      "supportedEfforts": [],
+      "defaultEffort": null,
+      "mandatory": false
+    },
+    "tencent/hy3": {
+      "supportedEfforts": ["high", "low", "none"],
+      "defaultEffort": "high",
+      "mandatory": false
+    }
+  }
+}

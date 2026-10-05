@@ -1,6 +1,6 @@
 {
   "_readme": [
-    "OpenRouter pay-per-token rates, $/1M tokens, for the Phase 9 open-weight cohort.",
+    "OpenRouter pay-per-token rates, $/1M tokens, for the Cohort 1 open-weight frontier models.",
     "Source: https://openrouter.ai/api/v1/models (the `pricing` block, per-token, multiplied by 1e6). Captured 2026-10-05; rates drift, so the as-of date is the audit anchor — a chart's costUsd is only defensible against a row from this date.",
     "Shape mirrors config/opencode-go-rates.json so the same rateFor() lookup path serves both. Each entry has tiers[]; OpenRouter's listed rate is the base rate, so there is exactly one tier per model here (maxPromptTokens: null).",
     "The runner stamps pricing: 'pay-per-token' and costUsd from this table when an OpenRouter model resolves a rate and the run carries usage. computeCost() checks config.model.price first (a per-model override in config/models.json) and falls back to this table.",
@@ -30,9 +30,9 @@
         { "maxPromptTokens": null, "inputPer1M": 0.435, "outputPer1M": 0.87 }
       ]
     },
-    "tencent/hy4-preview": {
+    "tencent/hy3": {
       "tiers": [
-        { "maxPromptTokens": null, "inputPer1M": 0.834, "outputPer1M": 2.501 }
+        { "maxPromptTokens": null, "inputPer1M": 0.132, "outputPer1M": 0.528 }
       ]
     }
   }

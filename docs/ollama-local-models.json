@@ -1,5 +1,5 @@
 {
-  "cohort": "Cohort 1 (post-pivot) \u2014 small local models (<8B, Ollama on Apple M2)",
+  "cohort": "Cohort 2 (post-pivot) \u2014 small local models (<8B, Ollama on Apple M2)",
   "suiteVersion": "1.1.0",
   "date": "2026-10-05",
   "xAxis": "paramsB",

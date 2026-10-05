@@ -4,10 +4,10 @@
 // logic, which is how one of them ended up with a key variable that was out of
 // scope where it was read. One copy now.
 
-import { resolveModel, temperatureStatus, TEMPERATURE_OVERRIDE_FLAG } from "./adapters/registry.mjs";
+import { resolveModel, temperatureStatus, TEMPERATURE_OVERRIDE_FLAG, assertEffortSupported, effortLadder } from "./adapters/registry.mjs";
 import { resolveKey, setupHint } from "./key.mjs";
 
-export { temperatureStatus, TEMPERATURE_OVERRIDE_FLAG };
+export { temperatureStatus, TEMPERATURE_OVERRIDE_FLAG, assertEffortSupported };
 
 // Which flags take a value, and which stand alone.
 const VALUE_FLAGS = new Set([
@@ -146,6 +146,20 @@ export const temperatureNotice = (config, log = console.log) => {
 };
 
 /**
+ * A short parenthetical for the console line, naming what the rung means for
+ * this model: its default (so a reader sees when the pin differs from what the
+ * provider would have done anyway) and whether reasoning is mandatory.
+ */
+export const effortNote = (config) => {
+  const ladder = effortLadder(config?.model?.model ?? config?.model);
+  if (!ladder) return "";
+  const bits = [];
+  if (ladder.defaultEffort) bits.push(`default ${ladder.defaultEffort}`);
+  if (ladder.mandatory) bits.push("reasoning mandatory");
+  return bits.length ? `  (${bits.join("; ")})` : "";
+};
+
+/**
  * Resolve the model, enforce the temperature rule, and load the key.
  *
  * THROWS on any failure rather than exiting the process: a setup error must
@@ -207,6 +221,14 @@ export const prepareModel = async (args, { log = console.log } = {}) => {
         `  The result will be stamped as not comparable.`
     );
   }
+
+  // Reasoning effort, when one is pinned. Refused here rather than at the
+  // request, because an unlisted level is often silently rendered as the
+  // provider default and the run would then claim a pin it did not have.
+  // Effort is a confound on the order of temperature: it is recorded on the
+  // report beside it, and it is a per-model value, never a cohort constant.
+  assertEffortSupported(config);
+  if (config.reasoningEffort) log(`  reasoning effort: ${config.reasoningEffort}${effortNote(config)}`);
 
   let keySource = "not required";
   if (config.apiKeyEnv) {

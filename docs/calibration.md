@@ -522,7 +522,7 @@ The Phase 9 open-weight cohort's rates as of 2026-10-05:
 | `deepseek/deepseek-v4.1-flash` | 0.30 | 1.20 |
 | `z-ai/glm-5.3` | 0.05 | 7.00 |
 | `xiaomi/mimo-v2.6-pro` | 0.435 | 0.87 |
-| `tencent/hy4-preview` | 0.834 | 2.501 |
+| `tencent/hy3` | 0.132 | 0.528 |
 
 ### The chart's x-axis is declared, not inferred
 
@@ -538,37 +538,40 @@ the local chart regenerates byte-for-byte.
 
 Reasoning effort sits on the same order as temperature: the same model at
 `low` and at `max` is a different experiment. The Phase 9 cohort's models do
-**not** share an effort vocabulary, verified against the live catalog:
-
-| Model | supported efforts | default |
-|---|---|---|
-| `z-ai/glm-5.3` | max, high, low (mandatory) | max |
-| `qwen/qwen3.8-2.4t-a95b` | xhigh, medium, low (mandatory) | xhigh |
-| `deepseek/deepseek-v4.1-flash` | max, high, low | high |
-| `tencent/hy4-preview` | high, low, none | high |
-| `xiaomi/mimo-v2.6-pro` | (none listed) | provider default |
+**not** share an effort vocabulary, verified against the live catalog.
 
 There is no rung common to all five, and two of them reason **mandatorily** —
 reasoning cannot be switched off, only dialled down to each model's lowest
 supported rung. "One fixed effort across the cohort" is therefore not
-literally achievable by naming a single rung. The honest options are:
+literally achievable by naming a single rung, so the rung is a **per-model
+recording**: the operator's pick per model, quoted beside its score.
 
-1. **Lowest supported rung per model** (glm→low, qwen→low, deepseek→low,
-   hy4→low, mimo→unset), recorded per model on the cohort JSON. This equalises
-   the *direction* of the dial, not the absolute token spend.
-2. **Provider default per model**, recorded per model. This is what a user
-   actually experiences, but it stacks the models' own defaults (glm at max,
-   qwen at xhigh) against each other.
+The Phase 9 rungs, and the reason for each:
 
-Either way the effort level is recorded beside the score and quoted with it,
-exactly as temperature is. The runner does not currently send a `reasoning`
-field at all, so a pinned effort needs a config key and a body-builder line
-before the sweep — that plumbing is **not** part of this commit.
+| Model | pinned | ladder | note |
+|---|---|---|---|
+| `z-ai/glm-5.3` | high | max, high, low | mandatory; default is max |
+| `qwen/qwen3.8-2.4t-a95b` | medium | xhigh, medium, low | mandatory; default is xhigh |
+| `deepseek/deepseek-v4.1-flash` | high | max, high, low | optional; default is high |
+| `tencent/hy3` | high | high, low, none | optional; default is high |
+| `xiaomi/mimo-v2.6-pro` | unset | (none listed) | parameter omitted; provider default |
+
+**Unset is not "none".** MiMo lists no rungs at all, so the parameter is
+omitted and the provider's own default applies; `hy3` lists `none` as an
+explicit level, which is a different request. The runner sends
+`reasoning: { effort }` only when a rung is pinned, and the report stamps
+`reasoningEffort` (null when unset) beside temperature.
+
+The ladders live in `config/reasoning-efforts.json`; the pins live in
+`config/phase9-cohort.json`, which doubles as the runner's `--config` file. An
+effort a model does not list is **refused at pre-flight** rather than sent: an
+unlisted level is often silently rendered as the provider default, which would
+misdescribe the run as a pinned measurement.
 
 ### Provider pinning
 
 Every cohort member is multi-endpoint on OpenRouter: all five route to several
-providers (Qwen 7, DeepSeek 30, GLM 41, MiMo 4, Hy4 4), so **every** run needs
+providers (Qwen 7, DeepSeek 30, GLM 41, MiMo 4, Hy3 4), so **every** run needs
 `--only-provider --no-fallback`. An unpinned run mixes quantizations and the
 score stops describing one model. Use
 `npm run providers -- -m openrouter/<id>` to list the real provider slugs

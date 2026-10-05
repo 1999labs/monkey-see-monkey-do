@@ -239,12 +239,13 @@ test("the combined report adds up, and follows the required section order", asyn
   assert.equal(r.combined.total, r.see.total + 38);
   assert.equal(r.combined.max, 100);
   // Schema is at 0. Section order is fixed and pinned by the test.
-  assert.deepEqual(Object.keys(r).slice(1, 9), [
+  assert.deepEqual(Object.keys(r).slice(1, 10), [
     "eval",
     "timestamp",
     "model",
     "date",
     "temperature",
+    "reasoningEffort",
     "callFailure",
     "see",
     "do",
@@ -454,7 +455,7 @@ test("rateFor resolves an OpenRouter slug from the committed table and misses cl
     "deepseek/deepseek-v4.1-flash",
     "z-ai/glm-5.3",
     "xiaomi/mimo-v2.6-pro",
-    "tencent/hy4-preview",
+    "tencent/hy3",
   ]) {
     assert.ok(rateFor(id, { source: "openrouter" }), `${id} must resolve a rate`);
   }
@@ -516,4 +517,45 @@ test("ratesTable returns the committed table and rateFor is case-insensitive", (
   // Empty / null model returns null.
   assert.equal(rateFor(null), null);
   assert.equal(rateFor(""), null);
+});
+
+
+test("the combined report stamps reasoningEffort beside temperature", () => {
+  // Effort is a confound on the order of temperature, so a report must carry
+  // it the same way. A run with no rung pinned stamps null (not "none" and
+  // not the model's default), because that is what was actually sent.
+  const base = {
+    model: { requested: "openrouter/z-ai/glm-5.3", endpoint: "https://openrouter.ai/api/v1/chat/completions" },
+    config: { endpoint: "https://openrouter.ai/api/v1/chat/completions", supportsTemperatureZero: null, reasoningEffort: "high" },
+  };
+  // buildCombinedReport needs full run shapes; assert on the field directly
+  // via the two builders that carry it, which is where it is produced.
+  const see = buildSeeLevelsReport({
+    model: "openrouter/z-ai/glm-5.3",
+    last: {
+      perTask: {},
+      perLevel: {},
+      robustness: { points: 0, max: 5, threw: 0, total: 0, rate: 0, crashed: false },
+      runs: [],
+      usage: null,
+    },
+    config: base.config,
+    keySource: "env",
+  });
+  assert.equal(see.generation.reasoningEffort, "high", "the SEE report must carry the pinned rung");
+  assert.ok("temperatureControl" in see.generation, "effort sits beside temperature, not instead of it");
+
+  const unpinned = buildSeeLevelsReport({
+    model: "openrouter/xiaomi/mimo-v2.6-pro",
+    last: {
+      perTask: {},
+      perLevel: {},
+      robustness: { points: 0, max: 5, threw: 0, total: 0, rate: 0, crashed: false },
+      runs: [],
+      usage: null,
+    },
+    config: { endpoint: "https://openrouter.ai/api/v1/chat/completions", supportsTemperatureZero: null },
+    keySource: "env",
+  });
+  assert.equal(unpinned.generation.reasoningEffort, null, "an unpinned run stamps null, never a default");
 });

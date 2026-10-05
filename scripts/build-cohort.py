@@ -146,7 +146,7 @@ def main():
             p["adjusted_1_1_0_components"] = rj["adjusted"].get("total_1_1_0_components")
 
     out = {
-        "cohort": "Cohort 1 (post-pivot) — small local models (<8B, Ollama on Apple M2)",
+        "cohort": "Cohort 2 (post-pivot) — small local models (<8B, Ollama on Apple M2)",
         "suiteVersion": "1.1.0",
         "date": "2026-10-05",
         "xAxis": "paramsB",
