@@ -21,10 +21,10 @@ def find_report(model: str) -> Path:
     model_slug = model.replace(":", "-")
     pattern = f"combined-ollama-{model_slug}-*.json"
     matches = sorted(RESULTS.glob(pattern))
-    # Skip the old Minesweeper-era reports (their filenames start with
-    # the *same* model prefix but their content is the old schema).
-    # The post-pivot schema is `monkey-see-monkey-do/combined@5`; old
-    # ones are `combined@4` (Minesweeper) or carry poolAWon/progressIndex.
+    # Only combined@5 (post 1.0.0) reports are cohortable. Older schemas
+    # (combined@4 and below) are skipped defensively — none exist in the
+    # tree any more, but the filter keeps the builder honest if one ever
+    # reappears from a stale checkout.
     post_pivot = [
         m for m in matches
         if json.loads(m.read_text()).get("schema", "").startswith("monkey-see-monkey-do/combined@5")

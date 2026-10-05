@@ -27,25 +27,24 @@ import { SAMPLE_WEIGHTS } from "./see/score.mjs";
 
 /**
  * A report omitting the limitations is invalid, regardless of the scores. So
- * every report — SEE, DO v2 and combined — carries all of them, and the
+ * every report — SEE, DO and combined — carries all of them, and the
  * console prints them after every run.
  *
  * These are the load-bearing ones. Two in particular constrain how far any
- * score can be read: DO v2 scores a program rather than a chain of thought,
+ * score can be read: DO scores a program rather than a chain of thought,
  * and a low Generalization Index is evidence of generalization but not of
  * abstraction.
  */
 export const LIMITATIONS = [
-  "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and chain-rewrite derivation (DO v2), not software engineering.",
-  "DO v2 scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO v2 score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
+  "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and chain-rewrite derivation (DO), not software engineering.",
+  "DO scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
   "A low Generalization Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
   "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
   "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
   "Not comparable to SWE-bench, HumanEval, or any external leaderboard. Different scale, different construction; never present these numbers alongside one.",
-  "DO v2 has residual contamination risk. The 5-rule / 7-symbol formal system is novel, but BFS on derivable search spaces is a textbook technique; a high DO v2 score shows the model can produce a correct solver, not that it deduced one afresh.",
-  "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 1.0.0).",
-  "Suite 1.0.0 DO scores are not comparable to suite 0.x.x DO scores. The pivot changed the task, the pool, the prompt, the scorer, and the limit, with no continuity arithmetic. Old DO scores keep their numbers; new DO scores are reported on the new scale.",
-];
+  "DO has residual contamination risk. The 5-rule / 7-symbol formal system is novel, but BFS on derivable search spaces is a textbook technique; a high DO score shows the model can produce a correct solver, not that it deduced one afresh.",
+  "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 1.1.0).",
+ ];
 
 /** A filesystem-safe, readable filename for a model id. */
 const slug = (model) =>
@@ -299,11 +298,11 @@ export const writeSeeLevelsReport = (report, outDir = "results", opts = {}) => {
 };
 
 /**
- * DO v2 (chain eval) report.
+ * DO (chain eval) report.
  *
  * Records per-band results, per-chain outcomes, and the chain engagement
  * rate. The engagement rate is the new signal the adjusted formula uses
- * in place of the legacy Minesweeper progress index.
+ * in place of the retired Progress Index.
  */
 export const buildChainDoReport = ({ model, result, config, keySource, pool, reproducibility }) => {
   const perBand = {};
@@ -392,7 +391,7 @@ export const buildChainDoReport = ({ model, result, config, keySource, pool, rep
       callTimeoutMs: result.callTimeoutMs ?? null,
       // The canary strings the prompt asked the model to echo verbatim.
       canary: result.canary ?? null,
-      // Token usage from the adapter (Phase 7.5 plumbing). DO v2 is
+      // Token usage from the adapter (Phase 7.5 plumbing). DO is
       // one model call per run; usageIn/usageOut live on `solver` so
       // they survive if any future variant moves to per-chain calls.
       usage: result.usage ?? null,
@@ -413,7 +412,7 @@ export const buildChainDoReport = ({ model, result, config, keySource, pool, rep
   };
 };
 
-/** Write a DO v2 report. Shares the naming scheme with SEE so results sort together. */
+/** Write a DO report. Shares the naming scheme with SEE so results sort together. */
 export const writeChainDoReport = (report, outDir = "results", opts = {}) => {
   mkdirSync(outDir, { recursive: true });
   const path = join(outDir, `do-${slug(report.model.requested)}-${fileStamp(report.timestamp)}.json`);
@@ -422,7 +421,7 @@ export const writeChainDoReport = (report, outDir = "results", opts = {}) => {
 
 /**
  * The combined report written by run-all, in the order the tests pin:
- * model, date, temperature guarantee, route failures, SEE score, DO v2 score,
+ * model, date, temperature guarantee, route failures, SEE score, DO score,
  * limitations, combined total. The per-eval reports remain the primary
  * artefacts; this one points at them.
  *
@@ -439,7 +438,7 @@ export const writeChainDoReport = (report, outDir = "results", opts = {}) => {
 export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, reading, stability = null, paths = {} }) => {
   // SEE total = sum of (per-task weightedRate × 15) + robustness.
   const seeTotal = Object.values(see.perTask).reduce((s, t) => s + t.weightedRate * 15, 0) + see.robustness.points;
-  // DO v2 total = chain score total (sum across bands, max 50).
+  // DO total = chain score total (sum across bands, max 50).
   const doTotal = doo.score.total;
 
   // Per-level pooled GZ rolled into a single number (percentage, 0-100).
@@ -449,7 +448,7 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
     ? (levels.reduce((s, l) => s + (perLevel[l].gz ?? 0) * 100, 0) / levels.length)
     : 0;
 
-  // DO v2 chain engagement rate (fraction of chains on which the model
+  // DO chain engagement rate (fraction of chains on which the model
   // made at least one legal step). Computed once at the top so the
   // adjusted formula and the report field agree on the same number.
   const engagement = Number(chainEngagementRate(doo.score.perChain).toFixed(4));
@@ -593,11 +592,10 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
     limitations: LIMITATIONS,
 
     notes: [
-      "Suite 1.0.0 combined report. DO v2 (chain eval) replaces the legacy Minesweeper DO.",
-      "Old Minesweeper DO reports in results/ keep their numbers; they were not rewritten.",
+      "Combined report. DO is the chain eval (string-rewrite derivation); SEE is the sample-efficiency eval (levels 2/4/8/16).",
       "SEE gzMean drives the Generalization-Index half of the adjusted formula;",
-      "DO v2 chainEngagementRate drives the chain-engagement clawback half.",
-      "An unusable response counts as 50 failed cases for SEE and 50 chains with no legal step for DO v2.",
+      "DO chainEngagementRate drives the chain-engagement clawback half.",
+      "An unusable response counts as 50 failed cases for SEE and 50 chains with no legal step for DO.",
       "A zero beside a non-null callFailure is the score of a call that never returned and is NOT evidence about the model.",
       "A NOT_REPRODUCIBLE verdict means the endpoint returned different code for the same prompt; such a score is one sample from a range and must not be compared to another model or to a future run.",
     ],

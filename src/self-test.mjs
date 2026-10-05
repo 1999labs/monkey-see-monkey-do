@@ -405,16 +405,14 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
     `taskPoints=${expectedPoints.toFixed(2)}, robustness=${audit.robustness.points}`);
 
   // ===================================================================
-  // MONKEY DO — adjusted total + DO v2 chain eval
+  // MONKEY DO — adjusted total + chain eval
   //
-  // Section 18 pins the audit. The Phase 6 wiring removes the
-  // Minesweeper DO entirely; the remaining block at the end of this
-  // file is the DO v2 chain eval self-test.
+  // Section 18 pins the audit.
   // ===================================================================
 
 
   // --- 18. The adjusted total (reported, never scored) -------------------
-  // Suite 1.0.0: the formula uses the SEE gzMean and the DO v2 chain
+  // Suite 1.0.0: the formula uses the SEE gzMean and the DO chain
   // engagement rate. See the long header in src/adjusted.mjs for the
   // rationale behind the weights.
   log("\n18. The adjusted total");
@@ -516,14 +514,13 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
 
 
   // ===================================================================
-  // MONKEY DO v2 (chain eval)
+  // MONKEY DO (chain eval)
   //
   // Exercises the prompt + scorer + reference-solver path on the
   // published chain pool, pins the recorded prompt digest, and
-  // verifies the dry-run path scores 50/50. Replaces the Minesweeper
-  // DO blocks retired with suite 1.0.0.
+  // verifies the dry-run path scores 50/50.
   // ===================================================================
-  log("\n\n\x1b[1mMONKEY DO v2 · self-test\x1b[0m\n");
+  log("\n\n\x1b[1mMONKEY DO · self-test\x1b[0m\n");
 
   // 19. Prompt digest pin
   const chainPromptModule = await import("./do/chain/prompt.mjs");
@@ -531,11 +528,11 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
   const chainRunModule = await import("./do/chain/run.mjs");
 
   const chainDigest = chainPromptModule.promptDigest();
-  check("the DO v2 prompt digest matches the recorded value",
+  check("the DO prompt digest matches the recorded value",
     chainDigest === RECORDED_DIGESTS.DO,
     `digest=${chainDigest.slice(0, 16)}…, recorded=${RECORDED_DIGESTS.DO.slice(0, 16)}…`);
 
-  check("the DO v2 prompt's canary carries the suite version and seed",
+  check("the DO prompt's canary carries the suite version and seed",
     chainPromptModule.CANARY === "monkey-do-chain@1.0.0" &&
       chainPromptModule.SEED_CANARY === `monkey-do-chain-seed:${chainPromptModule.POOL_SEED_HEX}`,
     `canary=${chainPromptModule.CANARY}, seed=${chainPromptModule.SEED_CANARY}`);
@@ -549,8 +546,8 @@ export const runSelfTest = async ({ log = console.log, full = false } = {}) => {
   try {
     chainPool = chainPoolModule.loadPublishedPool();
   } catch (err) {
-    failures.push(`DO v2 chain pool missing — run npm run gen-chain-pool: ${err.message}`);
-    log(`  \x1b[31mFAIL\x1b[0m  DO v2 chain pool missing — run npm run gen-chain-pool: ${err.message}`);
+    failures.push(`DO chain pool missing — run npm run gen-chain-pool: ${err.message}`);
+    log(`  \x1b[31mFAIL\x1b[0m  DO chain pool missing — run npm run gen-chain-pool: ${err.message}`);
   }
 
   if (chainPool) {

@@ -1,4 +1,4 @@
-// Regenerate the published MONKEY DO v2 chain pool.
+// Regenerate the published MONKEY DO chain pool.
 //
 //   node bin/gen-chain-pool.mjs                   write src/do/chain/pool.json
 //   node bin/gen-chain-pool.mjs --check           regenerate in memory and compare
@@ -38,7 +38,7 @@ if (!Number.isInteger(seed)) {
   process.exit(1);
 }
 
-console.log(`\nMONKEY DO v2 · chain pool`);
+console.log(`\nMONKEY DO · chain pool`);
 console.log(`  seed 0x${seed.toString(16).toUpperCase()}`);
 const started = Date.now();
 

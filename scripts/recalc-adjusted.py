@@ -91,8 +91,9 @@ def main(argv):
     n_changed = 0
     n_skipped = 0
     for path in targets:
-        # Skip Minesweeper-era (combined@4) reports — only post-pivot
-        # combined@5 reports have the four components the recalc needs.
+        # Only combined@5 reports carry the four components the recalc
+        # needs. Older schemas are skipped defensively — none exist in
+        # the tree any more.
         import json
         r = json.loads(path.read_text())
         if not r.get("schema", "").startswith("monkey-see-monkey-do/combined@5"):

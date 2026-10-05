@@ -1,4 +1,4 @@
-// MONKEY DO v2 — scoring.
+// MONKEY DO — scoring.
 //
 // 50 points, one band per length:
 //

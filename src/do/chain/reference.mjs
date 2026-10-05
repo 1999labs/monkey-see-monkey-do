@@ -1,4 +1,4 @@
-// MONKEY DO v2 — the reference solver.
+// MONKEY DO — the reference solver.
 //
 // BFS over the formal system from `start` until `target` is reached, returning
 // a SHORTEST derivation as a list of { rule, start, next } steps.

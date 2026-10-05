@@ -1,10 +1,10 @@
-// MONKEY DO v2 — the chain pool.
+// MONKEY DO — the chain pool.
 //
 // A pool of {start, target, length, steps} chains across 5 length bands,
 // deterministically generated from a single seed. The pool is the artifact
-// that every other change in DO v2 is computed against.
+// that every other change in DO is computed against.
 //
-// DESIGN PARALLEL TO THE OLD MINESWEEPER POOL:
+// DESIGN CONVENTIONS (shared with the pool regime):
 //   - POOL_SEED          the published seed; changing it invalidates every score
 //   - GENERATOR_VERSION  bump on any change to generator, rules or band layout
 //   - generatorFingerprint: a stable hash of every constant that decides what

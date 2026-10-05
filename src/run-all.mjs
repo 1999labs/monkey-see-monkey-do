@@ -2,12 +2,12 @@
 //
 //   node src/run-all.mjs --model openrouter/dots-3-note-preview:free
 //
-// Suite 1.0.0: this runner executes the DO v2 chain eval.
+// Suite 1.0.0: this runner executes the DO chain eval.
 //
 // WHY THIS EXISTS RATHER THAN TWO SEPARATE RUNS.
 //
 // The two evals share a model, a key and a reproducibility verdict, and they are
-// only interesting TOGETHER: SEE scores rule induction from examples, DO v2 scores
+// only interesting TOGETHER: SEE scores rule induction from examples, DO scores
 // the soundness of a chain-rewrite derivation. Run separately, the two JSON files
 // could legitimately disagree (different provider fallback, a different run
 // count, one sampled at temperature 0 and one not), and there would be no way
@@ -40,12 +40,12 @@ import {
 import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "./cli.mjs";
 
 const HELP = `
-MONKEY SEE and MONKEY DO (suite 1.0.0 — DO v2 chain eval)
+MONKEY SEE and MONKEY DO (suite 1.0.0 — DO chain eval)
 
   node src/run-all.mjs --model <provider/model>
 
   Runs BOTH evals against one resolved model and key, then writes three
-  reports: SEE (per-level), DO v2 (chain), and a combined one. Cost is
+  reports: SEE (per-level), DO (chain), and a combined one. Cost is
   12 model calls for SEE (3 tasks x 4 sample levels) plus 1 for DO, per run.
 
   --model, -m    the model to score (openrouter/..., openai/..., ollama/...,
@@ -55,7 +55,7 @@ MONKEY SEE and MONKEY DO (suite 1.0.0 — DO v2 chain eval)
   --runs,  -r    repeat both evals N times (default 1). Use 3 for the stability
                  check the acceptance gate requires: totals must agree within
                  2 points.
-  --per-band N   DO v2: score only the first N chains per band (a quick,
+  --per-band N   DO: score only the first N chains per band (a quick,
                  non-comparable subset run)
   --out DIR      where to write results (default results/)
   --config FILE  model registry
@@ -72,7 +72,7 @@ MONKEY SEE and MONKEY DO (suite 1.0.0 — DO v2 chain eval)
 `;
 
 /**
- * Combined SEE + DO v2 summary.
+ * Combined SEE + DO summary.
  *
  * Computes the per-task weighted scores (Phase 4) and the chain
  * engagement rate (Phase 5). The text returned is a flat summary, not
@@ -96,7 +96,7 @@ const poolChainsCount = (doOut) => doOut.score.perChain.length;
 const spread = (xs) => (xs.length ? Math.max(...xs) - Math.min(...xs) : 0);
 
 /**
- * Run SEE levels + DO v2 once. Exported so the acceptance gate scores
+ * Run SEE levels + DO once. Exported so the acceptance gate scores
  * models through exactly the same path as a normal run.
  *
  * @returns {{ runs: Array<{seeOut, doOut, seeTotal, doTotal}>, stability }}
@@ -106,11 +106,10 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
   for (let i = 0; i < runs; i++) {
     onProgress(`run ${i + 1}/${runs}: SEE levels (12 calls)...`);
     const seeOut = await runAllLevels(config, {});
-    onProgress(`run ${i + 1}/${runs}: DO v2 (1 call, ${pool.chains.length} chains)...`);
+    onProgress(`run ${i + 1}/${runs}: DO (1 call, ${pool.chains.length} chains)...`);
     // The DO call can fail (network, timeout, refusal). Record it as a
-    // route failure with doTotal: 0 — the same shape a Minesweeper-era
-    // run would produce, and what runDo did to keep reproducibility
-    // stats honest. Two answered runs must still get a verdict.
+    // route failure with doTotal: 0, keeping reproducibility stats
+    // honest. Two answered runs must still get a verdict.
     let doOut;
     try {
       doOut = await runChainDo(config, { chains: pool.chains, seed: pool.seed });

@@ -1,4 +1,4 @@
-// MONKEY DO v2 — the prompt.
+// MONKEY DO — the prompt.
 //
 // INTEGRIty, mirroring prompt.mjs in see/: this module builds what the model
 // SEES and must never import the chain pool, the reference solver, or the
@@ -20,7 +20,7 @@ export const POOL_SEED_HEX = "0xC0FFEE";
 
 /** The committed canary string. Two distinct slots:
  *
- *   - "monkey-do-chain@1.0.0"  the suite version + DO v2 marker. A model
+ *   - "monkey-do-chain@1.0.0"  the suite version + DO marker. A model
  *     whose training data has this prompt verbatim can be flagged by the
  *     harness: the response either echoes it back or reproduces the exact
  *     comment line near the function, and either is detectable.
@@ -122,7 +122,7 @@ export const hashPrompt = (text) => createHash("sha256").update(text, "utf8").di
 export const buildPrompt = () => PREAMBLE;
 export const promptDigest = () => hashPrompt(PREAMBLE);
 
-/** All DO v2 prompt digests in the form the self-test expects. The key
+/** All DO prompt digests in the form the self-test expects. The key
  * is the canary version (used by self-test pins) and the value is the
  * recorded SHA-256. */
 export const allPromptDigests = () => [
@@ -131,8 +131,8 @@ export const allPromptDigests = () => [
 
 /**
  * Detect a model that returns an answer mentioning a different prompt's
- * canary (for example, an old Minesweeper-era prompt's signature). The
- * check is a substring match on the response — a paraphrase round will
+ * canary (for example, a signature from a prompt other than this suite's).
+ * The check is a substring match on the response — a paraphrase round will
  * not reproduce the canary verbatim.
  *
  * @returns {{ ok: boolean, missingCanary: boolean, missingSeedCanary: boolean }}

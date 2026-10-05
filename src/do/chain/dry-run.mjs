@@ -1,4 +1,4 @@
-// MONKEY DO v2 — the dry-run entry point.
+// MONKEY DO — the dry-run entry point.
 //
 // `node src/do/chain/dry-run.mjs` loads the published chain pool, runs a
 // STUBBED MODEL (the reference solver, as sandbox source) through the
@@ -58,7 +58,7 @@ if (isMain) {
     const outArgIdx = process.argv.indexOf("--out");
     const outDir = outArgIdx > -1 ? process.argv[outArgIdx + 1] : "results";
 
-    console.log(`\nMONKEY DO v2 · chain dry-run`);
+    console.log(`\nMONKEY DO · chain dry-run`);
     let pool;
     try {
       pool = loadPublishedPool({ path: POOL_FILE });

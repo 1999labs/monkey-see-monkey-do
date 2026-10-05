@@ -1,4 +1,4 @@
-// MONKEY DO v2 — chain generator.
+// MONKEY DO — chain generator.
 //
 // Given a seed and a target length L, deterministically produces ONE chain:
 //   { start: string, target: string, length: L, steps: [{rule, start, next}, ...] }

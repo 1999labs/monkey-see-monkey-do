@@ -1,4 +1,4 @@
-// MONKEY DO v2 — run the eval against a model.
+// MONKEY DO — run the eval against a model.
 //
 //   node src/do/chain/run.mjs --model openrouter/<model-id>
 //
@@ -198,7 +198,7 @@ export const runChainDo = async (
     responseFingerprint: fingerprint(completion.text),
     digest: null, // set by caller from buildPrompt digest
     canary: checkCanary(completion.text),
-    // Token usage from the adapter. DO v2 emits a single solver per
+    // Token usage from the adapter. DO emits a single solver per
     // run, so per-call === per-run: surface once on the top-level.
     usage: completion.usage ?? null,
     dryRun,
@@ -332,7 +332,7 @@ export const REFERENCE_SOLVER_SOURCE = `function solve(start, target, reference)
 // --- CLI -----------------------------------------------------------------
 
 const HELP = `
-MONKEY DO v2
+MONKEY DO
 
   node src/do/chain/run.mjs --model <provider/model>
 
@@ -383,7 +383,7 @@ if (isMain) {
     process.exit(args.help ? 0 : 1);
   }
   const model = args.dryRun ? "dry-run/reference-solver" : args.model;
-  console.log(`\nMONKEY DO v2 · ${model}`);
+  console.log(`\nMONKEY DO · ${model}`);
   await selfTestGate();
   let config = null;
   let keySource = "none (dry run)";

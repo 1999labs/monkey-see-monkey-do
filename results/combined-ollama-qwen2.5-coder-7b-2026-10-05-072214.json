@@ -253,11 +253,10 @@
     "Suite 1.0.0 DO scores are not comparable to suite 0.x.x DO scores. The pivot changed the task, the pool, the prompt, the scorer, and the limit, with no continuity arithmetic. Old DO scores keep their numbers; new DO scores are reported on the new scale."
   ],
   "notes": [
-    "Suite 1.0.0 combined report. DO v2 (chain eval) replaces the legacy Minesweeper DO.",
-    "Old Minesweeper DO reports in results/ keep their numbers; they were not rewritten.",
+    "Combined report. DO is the chain eval (string-rewrite derivation); SEE is the sample-efficiency eval (levels 2/4/8/16).",
     "SEE gzMean drives the Generalization-Index half of the adjusted formula;",
-    "DO v2 chainEngagementRate drives the chain-engagement clawback half.",
-    "An unusable response counts as 50 failed cases for SEE and 50 chains with no legal step for DO v2.",
+    "DO chainEngagementRate drives the chain-engagement clawback half.",
+    "An unusable response counts as 50 failed cases for SEE and 50 chains with no legal step for DO.",
     "A zero beside a non-null callFailure is the score of a call that never returned and is NOT evidence about the model.",
     "A NOT_REPRODUCIBLE verdict means the endpoint returned different code for the same prompt; such a score is one sample from a range and must not be compared to another model or to a future run."
   ]

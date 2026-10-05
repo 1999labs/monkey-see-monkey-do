@@ -1,4 +1,4 @@
-// MONKEY DO v2 — the formal system.
+// MONKEY DO — the formal system.
 //
 // Phase 1 (frozen) decisions:
 //   - 7 symbols:  A B C D X Y Z
@@ -10,7 +10,7 @@
 // generator and the prompt all import from here, so a change to any rule is
 // a one-file edit AND a deliberate bump of GENERATOR_VERSION in pool.mjs.
 //
-// DETERMINISM is a hard requirement (same as the Minesweeper pool):
+// DETERMINISM is a hard requirement (same as every pool in this suite):
 //   - no Math.random
 //   - no Date
 //   - rule application order is fixed (leftmost occurrence first)

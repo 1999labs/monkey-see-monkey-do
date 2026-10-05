@@ -225,7 +225,7 @@ test("an unusable response counts as 50 failed, thrown cases in the index and th
 
 // --- Multi-run stability ---------------------------------------------------
 //
-// The DO v2 runner produces one model call per run (single derivation
+// The DO runner produces one model call per run (single derivation
 // across all 50 chains); SEE produces 12 calls (3 tasks × 4 levels).
 // The stability block in run-all tracks per-run fingerprints for both
 // evals separately, so a run that fails in DO does not poison SEE's

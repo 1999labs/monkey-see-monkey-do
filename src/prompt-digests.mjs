@@ -8,17 +8,10 @@
 // here, bump the suite version, and treat every score recorded under the old digest
 // as a different experiment. Every report embeds the digests it actually used.
 //
-// DO history: the first three DO digests (69200346…, f2f520b6…, b7a62fe6…)
-// described the Minesweeper eval and were retired with suite 1.0.0. They no
-// longer appear in RECORDED_DIGESTS; old reports under those digests describe
-// a different experiment and are not comparable to anything in this version.
-//
-// Current DO digest d46e8e3f082d… (suite 1.0.0) is the DO v2 pivot: the prompt
-// describes the string-rewrite formal system (5 rules, 7 symbols) and asks
-// for a single solve(start, target) function. The Minesweeper pool and the
-// DO v2 pool are non-comparable — a clean break, marked by the suite
-// version bump to 1.0.0. The v2 DO has its own pool (sha256
-// f87d0b1906fc7906…, seed 0xC0FFEE) and its own scorer.
+// Current DO digest d46e8e3f082d… (since suite 1.0.0) is the chain eval: the
+// prompt describes the string-rewrite formal system (5 rules, 7 symbols) and
+// asks for a single solve(start, target) function. The chain pool is
+// sha256 f87d0b1906fc7906…, seed 0xC0FFEE.
 //
 // SEE history: under suite 0.x.x, every SEE run used the 8-shown-example
 // prompt (level 8). The level-8 digests A=043dd2b7…, B=4f200996…,
@@ -70,13 +63,9 @@ export const SEE_LEVEL_DIGESTS = {
 /** Suite version. Bumped deliberately whenever a prompt changes, the pool
  * regenerates, or a phase introduces a scoring change that moves scores.
  *
- *   0.1.0 / 0.2.0  the Minesweeper eval, two prompt revisions
- *   0.3.0           verdict pool split (Pool B = stop + sound + sharp)
- *   1.0.0           DO v2 pivot (string-rewrite formal system, new pool,
- *                   new prompt, new scorer) AND SEE sample efficiency
- *                   (levels 2, 4, 8, 16). Minesweeper digests retired:
- *                   any report under 0.x.x is not comparable to anything
- *                   recorded at 1.0.0. Old SEE scores under level 8 remain
+ *   1.0.0           DO chain-eval pivot (string-rewrite formal system, new
+ *                   pool, new prompt, new scorer) AND SEE sample efficiency
+ *                   (levels 2, 4, 8, 16). Old SEE scores under level 8 remain
  *                   comparable because the level-8 prompt is byte-identical.
  *   1.1.0           Derived-figure recalculation: the adjusted total's GZ
  *                   penalty is now scaled by the model's earned fraction

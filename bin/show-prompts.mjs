@@ -1,5 +1,5 @@
 // Prints the exact prompt text and SHA-256 for every prompt: the three SEE
-// tasks and the DO v2 chain prompt. Compare against src/prompt-digests.mjs.
+// tasks and the DO chain prompt. Compare against src/prompt-digests.mjs.
 //
 // Exits 1 when any digest does not match, so the check is usable as a gate by
 // anything that reads exit codes; a mismatch used to be a printed line and a

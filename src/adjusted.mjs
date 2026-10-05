@@ -76,7 +76,7 @@
 // the DO pool whose free-pass nature this clawback corrects. Both are
 // recorded here rather than buried so a reader can disagree with them.
 //
-// Suite 0.x.x used the Minesweeper progress index for engagement;
+// Suite 0.x.x sized the engagement correction from the retired Progress Index;
 // that field is gone now and the clawback weights reported under it
 // are not comparable to scores recorded here.
 

@@ -43,7 +43,7 @@ test("the CLI runners work end to end, write their reports, and score a correct 
   const log = join(seeDir, "requests.jsonl");
 
   // Run concurrently: each child pays for the self-test gate.
-  // The DO v2 runner uses the published chain pool (50 chains, deterministic
+  // The DO runner uses the published chain pool (50 chains, deterministic
   // from seed 0xC0FFEE); a stubbed model that emits a valid derivation
   // should score 50/50 on every chain.
   const [doRun, allRun, seeRun] = await Promise.all([

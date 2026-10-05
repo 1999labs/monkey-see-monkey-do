@@ -21,7 +21,7 @@ and this file is the only record of what the current numbers mean.
 - [7. The chain pool](#7-the-chain-pool)
 - [8. The rewrite rules and BFS state cap](#8-the-rewrite-rules-and-bfs-state-cap)
 - [9. The adjusted total's weights](#9-the-adjusted-totals-weights)
-- [10. The retired Minesweeper scaffolding (DO pre-1.0.0)](#10-the-retired-minesweeper-scaffolding-do-pre-100)
+- [10. Suite history at a glance](#10-suite-history-at-a-glance)
 - [11. Changing any of this](#11-changing-any-of-this)
 
 ---
@@ -490,53 +490,20 @@ the v1.0.0 cohort pipeline updates that on every `npm run all`.)
 
 ---
 
-## 10. The retired Minesweeper scaffolding (DO pre-1.0.0)
+## 10. Suite history at a glance
 
-Retired with suite 1.0.0. Documented here because the **non-comparability
-note** in `README.md` references these numbers, and a future reader will
-want to know what they were.
-
-### The Minesweeper DO (suite 0.1.0 → 0.3.0)
-
-Pool A (300 boards, 3 tiers, deterministic from seed `0x5EED`) + Pool B
-(150 boards, endgame-guess-laying). Per-board classification:
-`won`, `premature_surrender`, `detonation`, `unproven_move`,
-`surrender`, `protocol_violation`. The 50-point score decomposed as:
-
-```
-40 × poolA_correctStop + 10 × poolBCorrectStop
-+ 0.5 × generalization + 10 × (1 − initiationRate)
-```
-
-with the progress index (depth + breadth + initiation) as a separate
-**reported**, never-scored, 15-point axis.
-
-### Why retired
-
-The Minesweeper 90-100 score range became a measure of textbook
-constraint-propagation recall, not sustained deduction. The system
-prompt's rules were a single-source-of-truth description of the same
-constraint propagation algorithm — recall of the textbook IS a
-component, but the eval measured only that component.
-
-### Numbers preserved for the non-comparability note
-
-- The Minesweeper "Drift / depth / breadth / initiation" axes are gone.
-- The "Pool A / random / effort-cap" properties are gone (Minesweeper
-  boards were 1-shot, not chain-derived).
-- The Minesweeper digests (`b7a62fe68203…` for suite 0.3.0,
-  `f2f520b6f296…` for suite 0.2.0, `69200346a3f1…` for suite 0.1.0)
-  appear nowhere in `src/prompt-digests.mjs` pins — only as a one-line
-  note describing the retired digests. Any score recorded under those
-  digests describes a different experiment and is not comparable to
-  anything at suite 1.0.0.
+Suite 1.0.0 replaced DO's original task design with the chain eval; suite
+1.1.0 rescaled the adjusted total's GZ penalty to the earned-fraction form
+(section 9). The full decision trail, including the reasons each change was
+made, lives in `docs/pivot-plan.md` (Amendments A through E). This file
+records only what the current numbers mean; history lives there.
 
 ---
 
 ## 11. Changing any of this
 
 The rule is that **the pool and the harness must never be able to drift apart.**
-`capForTier` (Minesweeper-era) and `MAX_STATES` (chain) are the shared caps
+`MAX_STATES` and its siblings are the shared caps
 between pool generation and the scoring harness. The harness carries its own
 copy of the cap rather than recomputing it — if the harness carried a
 separate `MAX_STATES=10000`, the existing pool's BFS-saturated chains
