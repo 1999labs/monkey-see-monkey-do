@@ -1,0 +1,39 @@
+{
+  "_readme": [
+    "OpenRouter pay-per-token rates, $/1M tokens, for the Phase 9 open-weight cohort.",
+    "Source: https://openrouter.ai/api/v1/models (the `pricing` block, per-token, multiplied by 1e6). Captured 2026-10-05; rates drift, so the as-of date is the audit anchor — a chart's costUsd is only defensible against a row from this date.",
+    "Shape mirrors config/opencode-go-rates.json so the same rateFor() lookup path serves both. Each entry has tiers[]; OpenRouter's listed rate is the base rate, so there is exactly one tier per model here (maxPromptTokens: null).",
+    "The runner stamps pricing: 'pay-per-token' and costUsd from this table when an OpenRouter model resolves a rate and the run carries usage. computeCost() checks config.model.price first (a per-model override in config/models.json) and falls back to this table.",
+    "costUsd = (prompt_tokens * inputPer1M + completion_tokens * outputPer1M) / 1e6, rounded to 6dp.",
+    "Re-derive a row: node bin/providers.mjs -m openrouter/<id> for the endpoint list, and the /api/v1/models pricing block for the rate. Do not type a number you have no source for."
+  ],
+  "_asOf": "2026-10-05",
+  "_source": "https://openrouter.ai/api/v1/models",
+  "models": {
+    "qwen/qwen3.8-2.4t-a95b": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 2.00, "outputPer1M": 6.00 }
+      ]
+    },
+    "deepseek/deepseek-v4.1-flash": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 0.30, "outputPer1M": 1.20 }
+      ]
+    },
+    "z-ai/glm-5.3": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 0.05, "outputPer1M": 7.00 }
+      ]
+    },
+    "xiaomi/mimo-v2.6-pro": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 0.435, "outputPer1M": 0.87 }
+      ]
+    },
+    "tencent/hy4-preview": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 0.834, "outputPer1M": 2.501 }
+      ]
+    }
+  }
+}

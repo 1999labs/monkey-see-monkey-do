@@ -408,6 +408,67 @@ test("computeCost emits subscription-estimate for a Go run with usage but no mod
   assert.equal(r.costUsd, 0.35, "1000000 prompt * 0.10 + 500000 completion * 0.50 = 0.35 USD");
 });
 
+test("computeCost emits pay-per-token for an OpenRouter run with usage and a rates-table entry", () => {
+  // The Phase 9 cohort: OpenRouter is pay-per-token, and the rate comes from
+  // the committed config/openrouter-rates.json rather than config/models.json.
+  // A run with usage and a table entry must produce a NON-NULL costUsd — this
+  // is the pin that would have caught the pre-fix "unpriced"/null stamp.
+  const config = {
+    adapter: "openai",
+    endpoint: "https://openrouter.ai/api/v1/chat/completions",
+    model: "z-ai/glm-5.3", // openRouterConfig stores the id as a bare string
+  };
+  const usage = { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 };
+  const r = computeCost(config, usage);
+  // $0.05/1M prompt + $7.00/1M completion = 0.05 + 7.00 = 7.05
+  assert.equal(r.pricing, "pay-per-token");
+  assert.notEqual(r.costUsd, null, "an OpenRouter run with usage + a table entry must price");
+  assert.equal(r.costUsd, 7.05, "1000000 * 0.05/1M + 1000000 * 7.00/1M = 7.05 USD");
+});
+
+test("computeCost routes OpenRouter to pay-per-token, not subscription-estimate", () => {
+  // The label follows the GATEWAY, not the presence of a rate: the same model
+  // id served by a subscription route would be an estimate, but OpenRouter is
+  // metered, so it is the real price. A regression that dropped the source
+  // routing would mislabel every frontier row.
+  const or = computeCost(
+    { adapter: "openai", endpoint: "https://openrouter.ai/api/v1/chat/completions", model: "z-ai/glm-5.3" },
+    { prompt_tokens: 1000, completion_tokens: 1000 }
+  );
+  const go = computeCost(
+    { adapter: "openai", endpoint: "https://opencode.ai/zen/go/v1/chat/completions", model: { model: "gpt-6-luna" } },
+    { prompt_tokens: 1000, completion_tokens: 1000 }
+  );
+  assert.equal(or.pricing, "pay-per-token");
+  assert.equal(go.pricing, "subscription-estimate");
+});
+
+test("rateFor resolves an OpenRouter slug from the committed table and misses cleanly", () => {
+  const hit = rateFor("z-ai/glm-5.3", { source: "openrouter" });
+  assert.ok(hit, "the Phase 9 cohort's models must be in the committed table");
+  assert.equal(hit.inputPer1M, 0.05);
+  assert.equal(hit.outputPer1M, 7.0);
+  // Every cohort member must resolve, or a run would stamp unpriced.
+  for (const id of [
+    "qwen/qwen3.8-2.4t-a95b",
+    "deepseek/deepseek-v4.1-flash",
+    "z-ai/glm-5.3",
+    "xiaomi/mimo-v2.6-pro",
+    "tencent/hy4-preview",
+  ]) {
+    assert.ok(rateFor(id, { source: "openrouter" }), `${id} must resolve a rate`);
+  }
+  assert.equal(rateFor("not/a-real-model", { source: "openrouter" }), null);
+});
+
+test("the committed OpenRouter rates table carries its as-of date", () => {
+  // Rates drift; a costUsd is only auditable against a dated row.
+  const t = ratesTable("openrouter");
+  assert.ok(t._asOf, "the table must carry an as-of date");
+  assert.match(t._asOf, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(t._source, "https://openrouter.ai/api/v1/models");
+});
+
 test("computeCost emits pay-per-token when model.price is on the host", () => {
   const config = { adapter: "openai", model: { price: { inputPer1k: 0.003, outputPer1k: 0.015 } } };
   const usage = { prompt_tokens: 1000, completion_tokens: 500 };

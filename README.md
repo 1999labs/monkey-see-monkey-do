@@ -96,7 +96,11 @@ recorded with its re-derivation command in
 
 ### Cohort 1 
 
-Seven frontier reasoning models
+Qwen/Qwen3.8-2.4T-A95B
+deepseek-ai/DeepSeek-V4.1-Flash
+zai-org/GLM-5.3
+XiaomiMiMo/MiMo-V2.6-Pro-RL
+tencent/Hy4-preview
 
 ### Cohort 2
 
@@ -194,6 +198,7 @@ Reference only. Nothing in here is needed to run the evals.
 ```
 monkey-see-monkey-do/
 ├── config/models.example.json   model registry template
+├── config/*-rates.json          committed $/1M tables (go, openrouter), dated
 ├── AGENTS.md                    working conventions for agent sessions
 ├── docs/calibration.md          every asserted number, and how it was measured
 ├── docs/scoring-detail.md       the full scoring machinery

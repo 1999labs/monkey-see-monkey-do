@@ -485,8 +485,94 @@ To see the effect on a real cohort:
 node bin/chart.mjs docs/ollama-local-models.json
 ```
 
-(Chart-cost x-axis requires a `pricing` field on the combined report;
-the v1.0.0 cohort pipeline updates that on every `npm run all`.)
+(A chart-cost x-axis is selected by the cohort JSON's `"xAxis": "costUsd"`,
+and prices come from the committed rate table that serves the model's
+endpoint — see section 9.5.)
+
+---
+
+## 9.5 The cost axis and the reasoning-effort confound (Phase 9 pre-flight)
+
+### Two rate tables, one lookup
+
+`computeCost()` prices a run from a committed table, never from a live API
+call. Which table applies is decided by the config's endpoint, not by the
+model id:
+
+| Endpoint | Table | Report label | Meaning |
+|---|---|---|---|
+| `opencode.ai` | `config/opencode-go-rates.json` | `subscription-estimate` | A pre-paid allowance drains at the published $/1M rate. The dollars are an accounting estimate, not an invoice. |
+| `openrouter.ai` | `config/openrouter-rates.json` | `pay-per-token` | Metered. The dollars are what the request costs. |
+| Ollama | (none) | `local` | No price exists; `costUsd` is null by design. |
+| anything else, or no usage | (none) | `unpriced` | `costUsd` is null. |
+
+Both tables carry an `_asOf` date because rates drift. A chart's `costUsd` is
+only auditable against a row from that date. Re-derive a row from
+`https://openrouter.ai/api/v1/models` (the `pricing` block is per-token;
+multiply by 1e6 for the per-1M figure the table stores).
+
+A per-model `model.price` in `config/models.json` still wins over either
+table — the committed tables are the fallback, not an override.
+
+The Phase 9 open-weight cohort's rates as of 2026-10-05:
+
+| Model id | $/1M in | $/1M out |
+|---|---|---|
+| `qwen/qwen3.8-2.4t-a95b` | 2.00 | 6.00 |
+| `deepseek/deepseek-v4.1-flash` | 0.30 | 1.20 |
+| `z-ai/glm-5.3` | 0.05 | 7.00 |
+| `xiaomi/mimo-v2.6-pro` | 0.435 | 0.87 |
+| `tencent/hy4-preview` | 0.834 | 2.501 |
+
+### The chart's x-axis is declared, not inferred
+
+A cohort JSON names its own x-axis (`"xAxis": "paramsB" | "costUsd"`). The
+local cohort plots parameters, a capability proxy; the frontier cohort plots
+dollars per run. The chart reads the field and validates against it, so a
+`costUsd` cohort need not carry `paramsB` at all, and a point missing whichever
+axis its cohort declared is refused by name. An absent field defaults to
+`paramsB`, so every cohort JSON written before this switch still renders, and
+the local chart regenerates byte-for-byte.
+
+### Reasoning effort is a confound, and it is not yet plumbed
+
+Reasoning effort sits on the same order as temperature: the same model at
+`low` and at `max` is a different experiment. The Phase 9 cohort's models do
+**not** share an effort vocabulary, verified against the live catalog:
+
+| Model | supported efforts | default |
+|---|---|---|
+| `z-ai/glm-5.3` | max, high, low (mandatory) | max |
+| `qwen/qwen3.8-2.4t-a95b` | xhigh, medium, low (mandatory) | xhigh |
+| `deepseek/deepseek-v4.1-flash` | max, high, low | high |
+| `tencent/hy4-preview` | high, low, none | high |
+| `xiaomi/mimo-v2.6-pro` | (none listed) | provider default |
+
+There is no rung common to all five, and two of them reason **mandatorily** —
+reasoning cannot be switched off, only dialled down to each model's lowest
+supported rung. "One fixed effort across the cohort" is therefore not
+literally achievable by naming a single rung. The honest options are:
+
+1. **Lowest supported rung per model** (glm→low, qwen→low, deepseek→low,
+   hy4→low, mimo→unset), recorded per model on the cohort JSON. This equalises
+   the *direction* of the dial, not the absolute token spend.
+2. **Provider default per model**, recorded per model. This is what a user
+   actually experiences, but it stacks the models' own defaults (glm at max,
+   qwen at xhigh) against each other.
+
+Either way the effort level is recorded beside the score and quoted with it,
+exactly as temperature is. The runner does not currently send a `reasoning`
+field at all, so a pinned effort needs a config key and a body-builder line
+before the sweep — that plumbing is **not** part of this commit.
+
+### Provider pinning
+
+Every cohort member is multi-endpoint on OpenRouter: all five route to several
+providers (Qwen 7, DeepSeek 30, GLM 41, MiMo 4, Hy4 4), so **every** run needs
+`--only-provider --no-fallback`. An unpinned run mixes quantizations and the
+score stops describing one model. Use
+`npm run providers -- -m openrouter/<id>` to list the real provider slugs
+before choosing a pin.
 
 ---
 

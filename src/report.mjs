@@ -114,35 +114,63 @@ export const median = (xs) => {
 };
 
 /**
- * Subscription-route (OpenCode Go / Zen) rate lookup. Reads the
- * committed rates table at config/opencode-go-rates.json and returns
- * { inputPer1M, outputPer1M } for the first matching tier of the
- * given model name, or null when no entry exists. The lookup is
- * exact-match on the lowercased model name; "subscription-estimate"
- * pricing only fires when the runner can resolve a rate.
+ * Committed rate tables, keyed by the gateway that serves them.
+ *
+ *   go          — OpenCode Go / Zen (subscription; pre-paid allowance
+ *                 drains at the published $/1M rate). Report label:
+ *                 "subscription-estimate".
+ *   openrouter  — OpenRouter (pay-per-token; the rate is what the
+ *                 request actually costs). Report label:
+ *                 "pay-per-token".
+ *
+ * Both files carry an as-of date because rates drift; a chart's costUsd
+ * is only auditable against a row from that date.
  */
-const RATES_PATH = new URL("../config/opencode-go-rates.json", import.meta.url);
-let _ratesCache = null;
-export const ratesTable = () => {
-  if (_ratesCache) return _ratesCache;
-  try {
-    _ratesCache = JSON.parse(readFileSync(RATES_PATH, "utf8"));
-  } catch (err) {
-    _ratesCache = { models: {} };
-  }
-  return _ratesCache;
+const RATE_TABLE_PATHS = {
+  go: new URL("../config/opencode-go-rates.json", import.meta.url),
+  openrouter: new URL("../config/openrouter-rates.json", import.meta.url),
 };
-export const rateFor = (model) => {
+const _ratesCache = {};
+export const ratesTable = (source = "go") => {
+  if (_ratesCache[source]) return _ratesCache[source];
+  try {
+    _ratesCache[source] = JSON.parse(readFileSync(RATE_TABLE_PATHS[source], "utf8"));
+  } catch (err) {
+    _ratesCache[source] = { models: {} };
+  }
+  return _ratesCache[source];
+};
+
+/**
+ * Look up a model's rate in one table (or both when `source` is omitted).
+ *
+ * Returns the first matching tier's { inputPer1M, outputPer1M } or null.
+ * The lookup is exact-match on the lowercased model id; ids are
+ * namespaced differently per gateway (OpenRouter: "vendor/model";
+ * Go: bare "gpt-6-luna"), so searching both is collision-safe in
+ * practice. Callers that know the gateway pass `source` to keep the
+ * lookup deterministic.
+ */
+export const rateFor = (model, { source } = {}) => {
   if (!model) return null;
   const key = String(model).toLowerCase();
-  const entry = ratesTable().models?.[key];
-  if (!entry || !Array.isArray(entry.tiers) || entry.tiers.length === 0) return null;
-  // Tier selection: the FIRST tier whose maxPromptTokens is null or
-  // >= the model's prompt_tokens. We don't have prompt_tokens on the
-  // model at this point, so we default to the first tier (which is
-  // the smaller-token tier per the doc). A future refinement can
-  // pass prompt_tokens through and pick the matching tier.
-  return entry.tiers[0];
+  const sources = source ? [source] : Object.keys(RATE_TABLE_PATHS);
+  for (const s of sources) {
+    const entry = ratesTable(s).models?.[key];
+    if (!entry || !Array.isArray(entry.tiers) || entry.tiers.length === 0) continue;
+    // Tier selection: the first tier (the smallest-token tier). A future
+    // refinement can pass prompt_tokens through and pick the matching tier.
+    return entry.tiers[0];
+  }
+  return null;
+};
+
+/** Which committed table serves a config, from its endpoint. Null when unknown. */
+const rateSourceFor = (config) => {
+  const endpoint = String(config?.endpoint ?? "");
+  if (/openrouter\.ai/.test(endpoint)) return "openrouter";
+  if (/opencode\.ai/.test(endpoint)) return "go";
+  return null;
 };
 
 /**
@@ -187,15 +215,23 @@ export const computeCost = (config, usage) => {
     return { pricing: "pay-per-token", costUsd: Number(cost.toFixed(6)) };
   }
 
-  // Subscription route: pull the rate from the committed table.
-  // The model name can be a chat-completions id ("gpt-6-luna"), a
-  // responses id, or anything else the server returned; match
-  // case-insensitively on the bare id (no prefix, no dialect suffix).
-  const rate = rateFor(config?.model?.model ?? config?.model);
+  // Committed-rate path: pull the rate from the table that serves this
+  // gateway. The model name can be a chat-completions id ("gpt-6-luna"), a
+  // responses id, an OpenRouter slug ("z-ai/glm-5.3"), or anything else the
+  // server returned; match case-insensitively on the bare id (no prefix, no
+  // dialect suffix). The label follows the gateway: OpenRouter is
+  // pay-per-token (the rate is what the request costs); Go/Zen is a
+  // subscription (the pre-paid allowance drains at the published rate).
+  const source = rateSourceFor(config);
+  const bareModel = config?.model?.model ?? config?.model;
+  const rate = rateFor(bareModel, source ? { source } : undefined);
   if (rate) {
     const cost = (usage.prompt_tokens ?? 0) * (rate.inputPer1M ?? 0) / 1_000_000
                + (usage.completion_tokens ?? 0) * (rate.outputPer1M ?? 0) / 1_000_000;
-    return { pricing: "subscription-estimate", costUsd: Number(cost.toFixed(6)) };
+    return {
+      pricing: source === "openrouter" ? "pay-per-token" : "subscription-estimate",
+      costUsd: Number(cost.toFixed(6)),
+    };
   }
 
   return { pricing: "unpriced", costUsd: null };
