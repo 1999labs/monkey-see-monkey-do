@@ -18,13 +18,6 @@ mechanical, and the workload fixed and bounded. The adjusted score is an auditab
 | **Monkey See** | Given a handful of examples of an unknown function, does the model infer the rule, or copy the surface? | 50 points |
 | **Monkey Do** | Given a string-rewrite chain of up to 50 steps in a 5-rule formal system, does the model write a derivation where every step is provably legal and the chain reaches the target? | 50 points |
 
-### Suite version
-
-The repo is at the version pinned in `package.json` and `src/prompt-digests.mjs`
-(named `SUITE_VERSION`); `npm run prompts` echoes it. See
-[`docs/pivot-plan.md`](docs/pivot-plan.md) for the history of the
-chain-eval pivot.
-
 ## Quickstart
 
 You need Node.js 20 or newer, and nothing else: there is nothing to `npm install`.
