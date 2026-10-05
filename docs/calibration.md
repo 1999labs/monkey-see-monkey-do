@@ -366,6 +366,7 @@ reach depth 50 across the L50 band.
 | `MAX_STRING_LENGTH` | 64 | intermediate string length; derivations can't grow past 64 chars. |
 | `MAX_STEPS`       | 60 | derivation length cap. The published chains are 5/10/20/30/50 — the cap is 20% above the longest chain. |
 | `CHAIN_GEN_BUDGET_MS` | 2000 | per-chain generation budget in milliseconds. |
+| `CALL_TIMEOUT_MS` | 10,000 | sandbox per-chain timeout for the model's `solve(start, target)` call. Stage 1.5 OOM-tested against qwen2.5-coder:7b's unbounded global-replace solver: 30000ms grew the V8 heap past the 4 GB limit before all 50 chains were played; 10000ms is the highest value tested that does not OOM against this failure mode. A correctly-bounded solver finishes in ≪10s (the reference BFS is ~2s worst case on L50). |
 
 The 5/50 gap between the dry-run 50/50 and real-mode 45/50 comes from the 5
 chains in L50 whose shortest derivation requires more than 50,000 visited
@@ -373,6 +374,23 @@ states to find. Measured: with `MAX_STATES=10000` (Amendment A's original
 value), 5 chains' BFS can't find the shortest derivation. With 50,000 it
 can for all but 5 chains. The `MAX_STATES` raise from 10000 to 50000 was
 deliberate (recorded as Amendment A in `docs/pivot-plan.md`).
+
+`CALL_TIMEOUT_MS = 10000` is the sandbox per-chain timeout — load-bearing
+in the same way `MAX_STATES` is. Stage 1 of Phase 8 measured the previous
+5000ms cap as binding on the qwen2.5-coder:7b smoke test: every one of
+the model's 50 chain runs was killed by the sandbox at 5000ms before its
+solver could finish, so the published DO score partially measured the
+cap, not the model. Stage 1.5 then tried 30000ms: the model's
+unbounded global-replace solver grew the V8 heap past 4 GB and the
+process was killed with `Reached heap limit Allocation failed`
+(exit code -6). 10000ms is the highest value that does not OOM against
+that failure mode on this machine; it gives the reference BFS (~2s
+worst case on L50) ~5× head room while bounding the worst-case
+wall-clock at 50 chains × 10s = 8 min. The takeaway: a correctly-bounded
+solver finishes in ≪10s on this machine; the cap protects against
+unbounded solvers, not legitimate work. The default stays low because
+an unbounded solver IS the most common Stage 1 failure mode for models
+that emit a solver but don't reason about termination.
 
 ---
 

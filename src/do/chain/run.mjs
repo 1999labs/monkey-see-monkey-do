@@ -33,13 +33,29 @@ import { scoreRun, chainIdOf, isEmpty } from "./score.mjs";
 
 /** Per-chain call timeout for the model's solve() function.
  *
- * The reference solver's BFS visits up to MAX_STATES (10000) states on the
- * longest chains; on the slowest machines that has been measured at ~2s.
- * The cap is the same in the sandbox as in the host, so we set the sandbox
- * timeout above the worst-case host runtime to keep the dry-run gate green
- * on every machine the suite has shipped on.
+ * The reference solver's BFS visits up to MAX_STATES (50000) states on the
+ * longest chains; on this machine that's ~2s, and worst-case ~2s is well
+ * inside this cap. The cap protects against two distinct failure modes:
+ *   (a) an INFINITE-LOOP solver — the qwen2.5-coder:7b Stage 1 smoke
+ *       test emitted `while (current !== target) { current = next; }`
+ *       with no upper bound, so any chain that doesn't reach target
+ *       runs forever. A wall-clock cap kills it.
+ *   (b) a slow-but-progressing solver. The reference solver itself
+ *       is fast on every chain, but the test is load-bearing for any
+ *       future model that needs longer.
+ *
+ * Stage 1.5 attempted 30000ms; the model emitted an unbounded global-
+ * replace solver that grew the heap past V8's 4 GB limit in ~4 minutes
+ * and the process was killed with `Reached heap limit Allocation
+ * failed`. 10000ms is the highest value tested that does not OOM
+ * against the qwen failure mode. A future model that emits a
+ * correctly-bounded solver can use a higher value via
+ * config/models.json's timeoutMs; the in-source default stays low
+ * because an unbounded solver IS the most common Stage 1 failure mode.
+ *
+ * This cap is load-bearing — see docs/calibration.md §8.
  */
-export const CALL_TIMEOUT_MS = 5000;
+export const CALL_TIMEOUT_MS = 10000;
 
 /**
  * Play the model against every chain in the pool.
@@ -182,6 +198,9 @@ export const runChainDo = async (
     responseFingerprint: fingerprint(completion.text),
     digest: null, // set by caller from buildPrompt digest
     canary: checkCanary(completion.text),
+    // Token usage from the adapter. DO v2 emits a single solver per
+    // run, so per-call === per-run: surface once on the top-level.
+    usage: completion.usage ?? null,
     dryRun,
   };
 };
