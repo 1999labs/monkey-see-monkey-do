@@ -289,13 +289,27 @@ export const temperatureStatus = (config) => {
         `${TEMPERATURE_OVERRIDE_FLAG} and is NOT comparable with scores sampled at temperature 0.`,
     };
   }
+  // Unknown registry state (the common case for frontier reasoning models
+  // on the Responses / chat-completions dialects). Two sub-cases:
+  //   - no override flag: the runner sends temperature: 0 and does not yet
+  //     know whether the provider honoured it. comparable stays null
+  //     ("unknown"), and the -r 3 reproducibility check is what resolves it.
+  //   - override flag set: the runner deliberately OMITS the temperature
+  //     field because the endpoint rejects it. The run is sampled at the
+  //     provider default, so it is NOT comparable with a temperature-0 run
+  //     and comparable must be false, not null — "unknown" would be a
+  //     lie once the user has explicitly told us the field is omitted.
+  const override = Boolean(config?.temperatureOverride);
   return {
     requested: 0,
-    sent: true,
+    sent: !override,
     supported: null,
-    override: false,
-    comparable: null,
-    statement: "temperature 0 requested; whether the provider honours it is UNKNOWN until a --runs 3 reproducibility check",
+    override,
+    comparable: override ? false : null,
+    statement: override
+      ? `temperature 0 requested but NOT sent: this run was recorded under ${TEMPERATURE_OVERRIDE_FLAG} ` +
+        `and is NOT comparable with scores sampled at temperature 0 (sampled at the provider default).`
+      : "temperature 0 requested; whether the provider honours it is UNKNOWN until a --runs 3 reproducibility check",
   };
 };
 

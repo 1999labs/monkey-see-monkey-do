@@ -9,11 +9,11 @@
   "date": "2026-10-05T12:23:36.839Z",
   "temperature": {
     "requested": 0,
-    "sent": true,
+    "sent": false,
     "supported": null,
-    "override": false,
-    "comparable": null,
-    "statement": "temperature 0 requested; whether the provider honours it is UNKNOWN until a --runs 3 reproducibility check",
+    "override": true,
+    "comparable": false,
+    "statement": "temperature 0 requested but NOT sent: this run was recorded under --i-cannot-control-temperature and is NOT comparable with scores sampled at temperature 0 (sampled at the provider default).",
     "keySource": ".env file"
   },
   "callFailure": {
@@ -229,5 +229,14 @@
     "An unusable response counts as 50 failed cases for SEE and 50 chains with no legal step for DO.",
     "A zero beside a non-null callFailure is the score of a call that never returned and is NOT evidence about the model.",
     "A NOT_REPRODUCIBLE verdict means the endpoint returned different code for the same prompt; such a score is one sample from a range and must not be compared to another model or to a future run."
-  ]
+  ],
+  "temperature_original_pre_drift_fix": {
+    "requested": 0,
+    "sent": true,
+    "supported": null,
+    "override": false,
+    "comparable": null,
+    "statement": "temperature 0 requested; whether the provider honours it is UNKNOWN until a --runs 3 reproducibility check",
+    "keySource": ".env file"
+  }
 }

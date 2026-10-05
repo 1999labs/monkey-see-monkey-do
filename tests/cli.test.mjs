@@ -134,6 +134,49 @@ test("a model configured without temperature-0 support is refused unless the awk
   for (const b of bodies) assert.equal(b.temperature, undefined);
 });
 
+test("a model with UNKNOWN temperature support reports override/sent/comparable honestly under the flag", async () => {
+  // The gpt-6-luna case: the registry does not know whether the endpoint
+  // honours temperature 0 (supportsTemperatureZero absent => null), so the
+  // run is scored through the "unknown" branch. When the user passes the
+  // override flag, the runner omits the field and the report must say so:
+  // override: true, sent: false, comparable: false. Pre-fix the null branch
+  // hardcoded override:false / sent:true / comparable:null, which is the
+  // drift this pin exists to catch.
+  const dir = mkdtempSync(join(tmpdir(), "md-cli-unknown-"));
+  const config = join(dir, "models.json");
+  const log = join(dir, "requests.jsonl");
+  writeFileSync(
+    config,
+    JSON.stringify({
+      models: {
+        // No supportsTemperatureZero field at all => null ("unknown").
+        "luna/model": {
+          adapter: "openai",
+          endpoint: "https://luna.example/v1/chat/completions",
+          model: "model",
+          apiKeyEnv: "LUNA_API_KEY",
+        },
+      },
+    })
+  );
+  const args = ["-m", "luna/model", "--config", config, "--key", "sk-test", "--out", dir, "--i-cannot-control-temperature"];
+  const r = await run("src/see/run.mjs", args, { STUB_FETCH_LOG: log });
+  assert.equal(r.code, 0, `${r.stdout}\n${r.stderr}`);
+
+  const report = readReport(dir, "luna-model-");
+  const tc = report.generation.temperatureControl;
+  assert.equal(tc.supported, null, "an unmeasured provider stays 'unknown', never 'supported'");
+  assert.equal(tc.override, true, "the override flag must be reflected in the report");
+  assert.equal(tc.sent, false, "the temperature field must be reported as NOT sent under the override");
+  assert.equal(tc.comparable, false, "an override run is not comparable with a temperature-0 run");
+  assert.match(tc.statement, /NOT comparable/);
+
+  // And the field really is omitted from the request bodies.
+  const bodies = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l).body);
+  assert.ok(bodies.length > 0, "the stub fetch must have captured at least one request");
+  for (const b of bodies) assert.equal(b.temperature, undefined);
+});
+
 test("a chain dry run passes its safety gate and scores 50/50", async () => {
   const dir = mkdtempSync(join(tmpdir(), "md-cli-dry-"));
   const r = await run("src/do/chain/dry-run.mjs", ["--out", dir]);
