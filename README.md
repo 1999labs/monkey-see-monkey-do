@@ -20,9 +20,10 @@ mechanical, and the workload fixed and bounded. The adjusted score is an auditab
 
 ### Suite version
 
-The repo is at **suite version 1.0.0**. The 9-phase pivot that produced it is
-documented in [`docs/pivot-plan.md`](docs/pivot-plan.md) as four dated amendments
-(A, B, C, D). See "Non-comparability" below for the score breaks the pivot introduces.
+The repo is at the version pinned in `package.json` and `src/prompt-digests.mjs`
+(named `SUITE_VERSION`); `npm run prompts` echoes it. See
+[`docs/pivot-plan.md`](docs/pivot-plan.md) for the history of the
+chain-eval pivot.
 
 ## Quickstart
 
@@ -372,33 +373,56 @@ which is a real and common failure rather than a harness fault.
 `SEE + DO` is out of 100 and already maxes out, so the two reported axes have
 nowhere to go. The adjusted total folds both in. **It is a reporting layer only**:
 SEE, DO, both axes and their components are all unchanged on every report, and the
-reference solver still scores 100.
+reference solver still scores 100. The formula was bumped from suite 1.0.0 to
+suite 1.1.0; the earned-fraction scaling (see below) is what changed; the
+1.0.0 readings are still preserved on every report as evidence under
+`adjusted.total`.
 
 ```
-adjusted = clamp( SEE + DO  −  0.5 × GZ_mean  −  10 × (1 − chainEngagementRate),  0, 100 )
+adjusted = clamp( SEE + DO  −  0.5 × GZ_mean × ((SEE + DO) / 100)
+                   −  10 × (1 − chainEngagementRate),  0, 100 )
 ```
 
-The two adjustments point in **opposite directions**, which is why they are not one formula:
+The two adjustments point in **opposite directions**, which is why they are not
+one formula:
 
 - A high **GZ_mean inflates** a score. Memorising the shown examples looks like
-  competence and collects held-out points it has not earned, so it is **subtracted**.
-- A low **chainEngagementRate** inflates nothing; it means a solver did nothing on
-  some chains. The empty-array submission scores 0 DO directly; the clawback
-  fires on the adjusted figure so an empty solver never earns the SEE-side 50
-  points as a free ride.
+  competence and collects held-out points it has not earned, so it is
+  **subtracted**. Under 1.1.0 the subtraction is scaled by `(SEE + DO) / 100`:
+  a model can only lose surface-fit points out of the points it actually
+  earned. A model with base 50 can lose at most half the GZ penalty; a
+  model with base 20 can lose at most a fifth. The shield cannot exceed
+  the wound.
+- A low **chainEngagementRate** inflates nothing; it means a solver did nothing
+  on some chains. The empty-array submission scores 0 DO directly; the
+  clawback fires on the adjusted figure so an empty solver never earns
+  the SEE-side 50 points as a free ride. The clawback is FIXED at
+  `10 × (1 − engagement)` — the sword cannot pity the weak.
 
-Worked example. A model that emits `[]` on every chain scores SEE 50 + DO 0 = 50 raw,
-but the engagement clawback fires:
-
-```
-50  −  0 (GZ_mean)  −  10 (never engaged)  =  40
-```
-
-…an adjusted 40 — the SEE-side 50 are real, but the model never made a legal chain
-move. A perfect run with engagement 1 still scores 100:
+Worked examples (suite 1.1.0 readings; the qwen shape is real Stage 1.5 data):
 
 ```
-50  +  50  −  0 (GZ_mean)  −  0 (engagement = 1)  =  100
+Empty submission (SEE 50, DO 0, GZ 0, eng 0):
+  earned = 0.5 → GZ penalty scaled by 0.5
+  raw = 50 − 0.5 × 0 × 0.5 − 10 × (1 − 0) = 50 − 0 − 10 = 40
+  total = 40/100  (the SEE-side 50 are real, the model never made a
+  legal chain move; the clawback fires)
+```
+
+```
+qwen2.5-coder:7b, -r 3 (SEE 19, DO 1, GZ 26.7, eng 0.04):
+  earned = 20 / 100 = 0.2
+  raw = 20 − 0.5 × 26.7 × 0.2 − 10 × (1 − 0.04)
+      = 20 − 2.67 − 9.6 = 7.73
+  total = 8/100  (the floor-saturation fix: under 1.0.0 this resolved
+  to 0, with the GZ penalty at 13.35 exceeding the model's base)
+```
+
+```
+Perfect run (SEE 50, DO 50, GZ 0, eng 1):
+  earned = 1.0
+  raw = 100 − 0.5 × 0 × 1.0 − 10 × (1 − 1) = 100 − 0 − 0 = 100
+  total = 100/100  (round-trip; the clamp is the load-bearing invariant)
 ```
 
 The weights are hand-chosen, and this project freezes hand-chosen weights for a reason.
@@ -406,6 +430,8 @@ See [`docs/calibration.md`](docs/calibration.md) section 9. They live in
 `src/adjusted.mjs` rather than buried in a formula so a reader can disagree with
 them. The adjusted total is a **derived figure**: never quote it without the
 components it came from.
+
+---
 
 ## Results
 
@@ -422,15 +448,39 @@ recovers resolving power. Each model's combined report carries the
 same two readings stamped with their formula version, so the audit
 trail is intact.
 
-The Cohort 1 local-small numbers recorded under the Minesweeper DO
-(`results/combined-ollama-*-2026-10-02-*.json`) describe the suite
-**before** suite 1.0.0; the Minesweeper pool, the Progress Index, and
-the cohort numbers all retired with Phase 6. They are non-comparable
-to anything at suite 1.0.0 — see "Non-comparability" below.
+| model | paramsB | SEE | DO | gzMean | engagement | **adjusted** | penalties |
+|---|---|---|---|---|---|---|---|
+| `deepseek-coder:6.7b` | 6.7 | 20 | 0 | 16.9 | 0    | **8** | −1.69 GZ, −10 claw |
+| `qwen2.5-coder:7b`    | 7.6 | 19 | 1 | 21.65 | 0.04 | **8** | −2.16 GZ, −9.6 claw |
+| `mistral:7b-instruct` | 7.0 | 13 | 0 |  7.06 | 0    | **3** | −0.46 GZ, −10 claw |
+| `llama3.2:3b`         | 3.2 | 18 | 0 | 24.9 | 0    | **6** | −2.24 GZ, −10 claw |
+| `gemma2:2b`           | 2.0 | 14 | 0 | 20.12 | 0    | **3** | −1.41 GZ, −10 claw |
 
-The chart path:
+The **adjusted** column is the suite 1.1.0 reading (the headline
+under the floor-saturation fix); the **penalties** column quotes
+the two components of the formula (`adjusted = base − gzPenalty −
+engagementClawback`, then clamped) so a reader sees why an adjusted
+figure is what it is without opening one.
+
+*Methodology footnote: each model -r 3, temperature 0, spreads 0 on
+both evals, REPRODUCIBLE on both evals. `CALL_TIMEOUT_MS = 10000`
+(Phase 8 Stage 1.5). All five runs are local Ollama (pricing: `'local'`,
+`costUsd: null`).
+
+![Cohort chart](docs/cohort-1-local-small-postpivot.svg)
+
+*Chart alt text:* adjusted score against parameter count (billions)
+for five local Ollama models under 8B parameters, scored -r 3 at
+temperature 0 under suite 1.1.0. The reference solver sits at the
+100 mark on the y-axis, far above every model — these are real-model
+DO scores, not BFS reference scores. Each model's dot is a real
+combined report (sources on the `source` field of
+`docs/cohort-1-local-small-postpivot.json`).
+
+Re-derive from a fresh clone:
 
 ```bash
+python3 scripts/build-cohort.py              # assembles docs/cohort-1-local-small-postpivot.json
 node bin/chart.mjs docs/cohort-1-local-small-postpivot.json docs/cohort-1-local-small-postpivot.svg
 ```
 
@@ -446,43 +496,6 @@ score 0 DO with `chainEngagementRate = 0` and the adjusted figure must
 floor at 0) is the structural reason this repo's number-gates are about
 "free points earned by doing nothing" rather than about a random walk —
 see [`docs/calibration.md`](docs/calibration.md) section 5.
-
-## Non-comparability
-
-> **DO scores recorded before suite 1.0.0 (Minesweeper DO) are not comparable.**
-> The 50 points describe a different experiment: the Minesweeper DO scored a
-> constraint-propagation solver on 450 Minesweeper boards. The DO at suite 1.0.0
-> scores a string-rewrite derivation on 50 chains in a 5-rule formal system.
-> The two DO prompts are unrelated, the two pools are unrelated, the two
-> scoring functions are unrelated. Any number recorded under the
-> Minesweeper DO describes a Minesweeper eval that this repo no longer runs.
-
-> **DO scores recorded before suite 0.3.0 are not comparable** (the earlier
-> band-split + verdict-split changes in the same Minesweeper era). Re-run
-> any pre-0.3.0 cohort against the current prompt if a number needs to be
-> on the same scale as a current one.
-
-The two non-comparability notes describe two different breaks in the DO
-history:
-
-- The **Minesweeper → chain-eval pivot** at 1.0.0 changes the eval entirely.
-  Old reports are kept on disk under `results/` for historical reference,
-  but every score in them is on the Minesweeper scale and reads as
-  descriptive, not numeric.
-- The **0.3.0 → 1.0.0 evolution** inside the Minesweeper era changes the
-  scoring weights and adds the verdict pool. Pre-0.3.0 reports describe a
-  different Minesweeper eval than the 0.3.0 → 1.0.0 Minesweeper eval.
-
-For SEE, **level-8 numbers are still comparable across suite versions** —
-the level-8 prompt is byte-identical to suite 0.x.x (pinned in
-`src/prompt-digests.mjs`). Levels 2, 4 and 16 are NEW prompt slots at 1.0.0
-and have no pre-1.0.0 numbers to compare to.
-
-For the adjusted total, the formula and weights at 1.0.0 (`0.5 × GZ_mean`
-and `10 × (1 − chainEngagementRate)`) are a deliberate replacement for the
-0.x.x formula (`0.5 × GZ` and `10 × (1 − initiationRate)`). The
-`initiationRate` axis is gone with the Minesweeper DO — the chain
-engagement rate is the new signal.
 
 ---
 
@@ -519,18 +532,19 @@ Every report carries these, and a score quoted without them is misleading:
   produced one afresh. The chain engagement clawback catches "do nothing" submissions but
   cannot catch a model that emits legal-step random walks — the random-walk baseline scores 50/50.
 - **Two narrow tasks.** Not a general intelligence measure, and the 50-point weights are hand-chosen
-  (frozen at suite version 1.0.0).
-- **The adjusted total is derived and hand-weighted.** It subtracts `0.5 × GZ_mean` and claws back
-  the chain-engagement points a solver did not earn, both with judgement-call weights. It moves no
-  50-point score and the reference solver still reads 100, but it is a convenience for plotting,
-  not an independent measurement. Quote the components.
+  (frozen at suite version 1.1.0).
+- **The adjusted total is derived and hand-weighted.** It subtracts `0.5 × GZ_mean × (SEE+DO)/100` and
+  claws back the chain-engagement points a solver did not earn (`10 × (1 − engagement)`, fixed). Both
+  weights are judgement calls; the GZ penalty is scaled by the earned fraction so it cannot exceed
+  what the model actually earned. It moves no 50-point score and the reference solver still reads
+  100, but it is a convenience for plotting, not an independent measurement. Quote the components.
 
 ## Maintaining the suite
 
 | Command | What it does |
 |---|---|
 | `npm test` | Unit and end-to-end tests (no network; the CLI tests use a stubbed fetch) |
-| `npm run self-test` | The 108-check gate every runner enforces before it will score anything |
+| `npm run self-test` | The 114-check gate every runner enforces before it will score anything |
 | `npm run self-test:full` | Self-test plus a byte-for-byte regeneration of the chain pool (minutes) |
 | `npm run gen-pool` | Regenerates `src/do/chain/pool.json` from seed `0xC0FFEE` |
 | `npm run check-pool` | Regenerates in memory and compares with the file byte for byte |
@@ -571,7 +585,7 @@ report a pass.
 | Reference solver wins every chain | The dry-run path plays all 50 chains and scores 50/50 |
 | Chain-naive baseline floors at 0 | An empty-array submission scores 0/50 DO with `chainEngagementRate = 0` and the adjusted figure floors at 0 |
 | Variance is low | Three runs at `temperature: 0` differ by ≤ 2 points |
-| Self-test passes | Every self-test check (108 checks at suite 1.0.0) |
+| Self-test passes | Every self-test check (114 checks at suite 1.1.0) |
 
 If any criterion fails, the eval is not published. An eval that does not
 discriminate is worse than no eval, because it manufactures false confidence.
