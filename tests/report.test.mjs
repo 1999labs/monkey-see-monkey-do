@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildSeeLevelsReport, writeSeeLevelsReport, buildChainDoReport, writeChainDoReport } from "../src/report.mjs";
+import { buildSeeLevelsReport, writeSeeLevelsReport, buildChainDoReport, writeChainDoReport, computeCost, ratesTable, rateFor } from "../src/report.mjs";
 import { runSee } from "../src/see/run.mjs";
 import { groundTruth } from "../src/see/reference.mjs";
 import { taskById } from "../src/see/tasks.mjs";
@@ -352,4 +352,107 @@ test("with runs > 1 the combined headline is the median, not the last run", asyn
   assert.equal(r.see.total, 40, "median of [21, 40, 40] is 40, whatever the last run scored");
   assert.equal(r.do.total, 50, "median of [21, 50, 50] is 50");
   assert.deepEqual(r.stability.seeTotals, [21, 40, 40], "every per-run total stays in the file");
+});
+
+// -------------------------------------------------------------
+// Phase 8 tripwires (Fix 1 + Fix 2):
+//
+// (a) An all-unusable SEE run must serialise a report with rate:null
+//     fields, not crash the report writer. This is the exact failure
+//     the gpt-6-luna smoke run hit before the half-guarded mapper
+//     was fixed.
+// (b) computeCost emits exactly one of four labels:
+//     pay-per-token | subscription-estimate | local | unpriced.
+// -------------------------------------------------------------
+
+test("an all-unusable SEE run serialises with rate:null fields, no crash", async () => {
+  // Simulate the gpt-6-luna smoke state: every per-level entry has
+  // no usable runs, so run-levels.mjs leaves rate unset on seen and
+  // heldOut, and gz undefined. The pre-fix mapper threw at the
+  // unguarded .toFixed call; the post-fix mapper writes null everywhere.
+  const last = {
+    perTask: {
+      A: { taskId: "A", name: "A", levels: {}, weightedRate: 0, gzMean: 0 },
+      B: { taskId: "B", name: "B", levels: {}, weightedRate: 0, gzMean: 0 },
+      C: { taskId: "C", name: "C", levels: {}, weightedRate: 0, gzMean: 0 },
+    },
+    perLevel: {
+      2:  { seen: null, heldOut: null },
+      4:  { seen: null, heldOut: null },
+      8:  { seen: null, heldOut: null },
+      16: { seen: null, heldOut: null },
+    },
+    robustness: { points: 0, max: 5, threw: 0, total: 0, rate: 0, crashed: false },
+    runs: [],
+    usage: null,
+  };
+  const r = buildSeeLevelsReport({ model: "gogo/gpt-6-luna", last, config: {}, keySource: "env" });
+  // The mapper must not throw, AND every perLevel rate is null:
+  for (const lvl of ["2", "4", "8", "16"]) {
+    const pe = r.score.perLevel[lvl];
+    assert.ok(pe, "perLevel[" + lvl + "] must exist");
+    assert.equal(pe.seen, null, "seen must be null when no usable runs");
+    assert.equal(pe.heldOut, null, "heldOut must be null when no usable runs");
+    assert.equal(pe.gz, null, "gz must be null when undefined");
+    assert.equal(pe.usageIn, 0);
+    assert.equal(pe.usageOut, 0);
+  }
+});
+
+test("computeCost emits subscription-estimate for a Go run with usage but no model.price", () => {
+  const config = { adapter: "openai", endpoint: "https://opencode.ai/zen/go/v1/chat/completions", model: { model: "gpt-6-luna" } };
+  const usage = { prompt_tokens: 1000000, completion_tokens: 500000 };
+  const r = computeCost(config, usage);
+  // $0.10/1M prompt + $0.50/1M completion = $0.10 + $0.25 = $0.35
+  assert.equal(r.pricing, "subscription-estimate");
+  assert.equal(r.costUsd, 0.35, "1000000 prompt * 0.10 + 500000 completion * 0.50 = 0.35 USD");
+});
+
+test("computeCost emits pay-per-token when model.price is on the host", () => {
+  const config = { adapter: "openai", model: { price: { inputPer1k: 0.003, outputPer1k: 0.015 } } };
+  const usage = { prompt_tokens: 1000, completion_tokens: 500 };
+  const r = computeCost(config, usage);
+  // 1000 * 0.003/1000 + 500 * 0.015/1000 = 0.003 + 0.0075 = 0.0105
+  assert.equal(r.pricing, "pay-per-token");
+  assert.equal(r.costUsd, 0.0105);
+});
+
+test("computeCost emits local for Ollama regardless of usage", () => {
+  const config = { adapter: "ollama", model: { model: "qwen2.5-coder:7b" } };
+  const usage = { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 };
+  const r = computeCost(config, usage);
+  assert.equal(r.pricing, "local");
+  assert.equal(r.costUsd, null);
+});
+
+test("computeCost emits unpriced when usage exists but no model.price and no rates-table entry", () => {
+  const config = { adapter: "openai", model: { model: "no-such-model-xyz" } };
+  const usage = { prompt_tokens: 100, completion_tokens: 50 };
+  const r = computeCost(config, usage);
+  assert.equal(r.pricing, "unpriced");
+  assert.equal(r.costUsd, null);
+});
+
+test("computeCost emits unpriced when usage is null regardless of pricing", () => {
+  // Use a non-Ollama adapter so we exercise the null-usage branch of
+  // the function (the Ollama branch returns "local" before null is
+  // checked, by design — Ollama always reports "local").
+  const config = { adapter: "openai", model: { model: "gpt-6-luna" } };
+  const r = computeCost(config, null);
+  assert.equal(r.pricing, "unpriced");
+  assert.equal(r.costUsd, null);
+});
+
+test("ratesTable returns the committed table and rateFor is case-insensitive", () => {
+  const t = ratesTable();
+  assert.ok(t.models, "ratesTable must expose models");
+  assert.ok(t.models["gpt-6-luna"], "ratesTable must contain gpt-6-luna");
+  assert.equal(rateFor("gpt-6-luna").inputPer1M, 0.10);
+  // Case-insensitive lookup:
+  assert.equal(rateFor("GPT-6-LUNA").inputPer1M, 0.10);
+  // Unknown model returns null, not throw.
+  assert.equal(rateFor("no-such-model"), null);
+  // Empty / null model returns null.
+  assert.equal(rateFor(null), null);
+  assert.equal(rateFor(""), null);
 });

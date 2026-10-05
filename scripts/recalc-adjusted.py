@@ -87,7 +87,11 @@ def main(argv):
     if len(argv) > 1:
         targets = [Path(a) for a in argv[1:]]
     else:
-        targets = sorted(RESULTS.glob("combined-ollama-*.json"))
+        # All post-pivot combined reports: ollama AND gogo (OpenCode Go /
+        # Zen subscription). Anything that matches combined-{prefix}*.json
+        # under results/ is in scope; the schema check below filters out
+        # the pre-pivot Minesweeper combined@4 reports.
+        targets = sorted(RESULTS.glob("combined-*.json"))
     n_changed = 0
     n_skipped = 0
     for path in targets:

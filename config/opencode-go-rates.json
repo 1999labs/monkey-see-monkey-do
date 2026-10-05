@@ -1,0 +1,86 @@
+{
+  "_readme": [
+    "OpenCode Go (Zen) $/1M-token rates for the frontier cohort's subscription-estimate label.",
+    "Source: https://opencode.ai/docs/zen — captured on 2026-10-05 (the as-of date for every entry in this table; rates drift, so a re-derivation against an older table will under- or over-charge the subscription-estimate costUsd field).",
+    "Each entry is USD per million tokens, sliced into input/output. Subscription routes drain the pre-paid allowance at the model's published $/1M rates; this table is the rate the runner uses to stamp pricing: subscription-estimate and costUsd. Re-derive the table from the docs URL above; the table is committed here so a chart's costUsd is auditable against its row, not a live API.",
+    "Cost is computed per-eval (computeCost in src/report.mjs):",
+    "  total = (prompt_tokens * inputPer1M + completion_tokens * outputPer1M) / 1000000",
+    "USD rounded to 6dp. The label is always subscription-estimate for a Go run with usage — never pay-per-token (no model.price on the provider) and never unpriced (a run with usage carries a published rate).",
+    "Tokens with a tier boundary (e.g. <= 272K vs > 272K) are recorded as one row per tier so a chart reader can match the published tier to the run's prompt-token count. The runner uses the FIRST matching tier's rate (the smaller-token tier); a future refinement could pick the actual tier, but that needs a prompt-tokens field on the report shape we don't yet stamp.",
+    "Adding a new model: copy one entry, change the model name and rates, leave the rest of the entry alone. Re-derive the table from the docs URL — do NOT type in numbers you don't have a source for."
+  ],
+  "_asOf": "2026-10-05",
+  "_source": "https://opencode.ai/docs/zen",
+  "models": {
+    "gpt-6-luna": {
+      "tiers": [
+        { "maxPromptTokens": 272000, "inputPer1M": 0.10, "outputPer1M": 0.50, "cachedReadPer1M": 0.01, "cachedWritePer1M": 0.125 }
+      ]
+    },
+    "gpt-6-sol": {
+      "tiers": [
+        { "maxPromptTokens": 272000, "inputPer1M": 2.00, "outputPer1M": 10.00, "cachedReadPer1M": 0.20, "cachedWritePer1M": 2.50 }
+      ]
+    },
+    "gpt-6-astra": {
+      "tiers": [
+        { "maxPromptTokens": 272000, "inputPer1M": 10.00, "outputPer1M": 50.00, "cachedReadPer1M": 1.00, "cachedWritePer1M": 12.50 }
+      ]
+    },
+    "claude-opus-5-5": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 4.00, "outputPer1M": 20.00, "cachedReadPer1M": 0.20, "cachedWritePer1M": 5.00 }
+      ]
+    },
+    "claude-sonnet-5": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 2.00, "outputPer1M": 10.00, "cachedReadPer1M": 0.20, "cachedWritePer1M": 2.50 }
+      ]
+    },
+    "claude-haiku-4-5": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 1.00, "outputPer1M": 5.00, "cachedReadPer1M": 0.10, "cachedWritePer1M": 1.25 }
+      ]
+    },
+    "gemini-3-1-pro": {
+      "tiers": [
+        { "maxPromptTokens": 200000, "inputPer1M": 2.00, "outputPer1M": 12.00, "cachedReadPer1M": 0.20, "cachedWritePer1M": null }
+      ]
+    },
+    "gemini-3-5-flash": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 1.50, "outputPer1M": 9.00, "cachedReadPer1M": 0.15, "cachedWritePer1M": null }
+      ]
+    },
+    "grok-4-7": {
+      "tiers": [
+        { "maxPromptTokens": 200000, "inputPer1M": 2.00, "outputPer1M": 6.00, "cachedReadPer1M": 0.50, "cachedWritePer1M": null }
+      ]
+    },
+    "minimax-m3": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 0.30, "outputPer1M": 1.20, "cachedReadPer1M": 0.06, "cachedWritePer1M": null }
+      ]
+    },
+    "glm-5-3": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 1.40, "outputPer1M": 4.40, "cachedReadPer1M": 0.26, "cachedWritePer1M": null }
+      ]
+    },
+    "kimi-k3": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 3.00, "outputPer1M": 15.00, "cachedReadPer1M": 0.30, "cachedWritePer1M": null }
+      ]
+    },
+    "qwen3-8-max": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 2.00, "outputPer1M": 6.00, "cachedReadPer1M": 0.25, "cachedWritePer1M": 2.50 }
+      ]
+    },
+    "deepseek-v4-pro": {
+      "tiers": [
+        { "maxPromptTokens": null, "inputPer1M": 1.74, "outputPer1M": 3.48, "cachedReadPer1M": 0.145, "cachedWritePer1M": null }
+      ]
+    }
+  }
+}

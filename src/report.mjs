@@ -15,7 +15,7 @@
 //
 // Deliberately NOT recorded: the API key, or any fragment of it.
 
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { allPromptDigests, SAMPLE_LEVELS } from "./see/prompt.mjs";
@@ -114,18 +114,62 @@ export const median = (xs) => {
 };
 
 /**
+ * Subscription-route (OpenCode Go / Zen) rate lookup. Reads the
+ * committed rates table at config/opencode-go-rates.json and returns
+ * { inputPer1M, outputPer1M } for the first matching tier of the
+ * given model name, or null when no entry exists. The lookup is
+ * exact-match on the lowercased model name; "subscription-estimate"
+ * pricing only fires when the runner can resolve a rate.
+ */
+const RATES_PATH = new URL("../config/opencode-go-rates.json", import.meta.url);
+let _ratesCache = null;
+export const ratesTable = () => {
+  if (_ratesCache) return _ratesCache;
+  try {
+    _ratesCache = JSON.parse(readFileSync(RATES_PATH, "utf8"));
+  } catch (err) {
+    _ratesCache = { models: {} };
+  }
+  return _ratesCache;
+};
+export const rateFor = (model) => {
+  if (!model) return null;
+  const key = String(model).toLowerCase();
+  const entry = ratesTable().models?.[key];
+  if (!entry || !Array.isArray(entry.tiers) || entry.tiers.length === 0) return null;
+  // Tier selection: the FIRST tier whose maxPromptTokens is null or
+  // >= the model's prompt_tokens. We don't have prompt_tokens on the
+  // model at this point, so we default to the first tier (which is
+  // the smaller-token tier per the doc). A future refinement can
+  // pass prompt_tokens through and pick the matching tier.
+  return entry.tiers[0];
+};
+
+/**
  * Compute the costUsd field for a model call given its usage.
  *
- * Three cases:
- *   - adapter is "ollama" → pricing = "local", costUsd = null (no cost).
- *   - config.price exists (USD per prompt/completion token, set in
- *     config/models.json) → costUsd = usageIn × price.in + usageOut × price.out.
- *   - otherwise → pricing = "unpriced", costUsd = null. The report
- *     records the unpriced state explicitly so a reader knows cost is
- *     available but unset, not missing.
+ * The label is one of exactly:
+ *   - "pay-per-token"         — host has model.price (USD per 1k tokens);
+ *                              costUsd is EXACT (usage × rate).
+ *   - "subscription-estimate" — host is OpenCode Go / Zen, no model.price;
+ *                              a rate lives in the rates table at
+ *                              config/opencode-go-rates.json; costUsd
+ *                              is an ESTIMATE at the model's published
+ *                              $/1M-token rate (pre-paid allowance, not
+ *                              a real charge). Re-derive the table from
+ *                              https://opencode.ai/docs/zen — drift is
+ *                              a real risk, the table is committed so a
+ *                              chart's costUsd is auditable against its
+ *                              row.
+ *   - "local"                 — Ollama. costUsd null (no cost).
+ *   - "unpriced"               — usage exists but the host has no price
+ *                              AND the rates table has no entry for the
+ *                              model. costUsd null. Marks the unpriced
+ *                              state explicitly so a reader knows cost
+ *                              is available but unset.
  *
  * Token totals are summed from the per-level/per-run records; a null
- * usage (e.g. dry-run) yields costUsd = null regardless.
+ * usage yields costUsd = null regardless of pricing.
  */
 export const computeCost = (config, usage) => {
   const adapter = config?.adapter ?? null;
@@ -133,14 +177,28 @@ export const computeCost = (config, usage) => {
   if (!usage || (usage.prompt_tokens == null && usage.completion_tokens == null)) {
     return { pricing: "unpriced", costUsd: null };
   }
-  const inPrice = config?.model?.price?.inputPer1k ?? null;
-  const outPrice = config?.model?.price?.outputPer1k ?? null;
-  if (inPrice == null && outPrice == null) {
-    return { pricing: "unpriced", costUsd: null };
+
+  // Pay-per-token path: model.price on the host config.
+  const inPricePerK = config?.model?.price?.inputPer1k ?? null;
+  const outPricePerK = config?.model?.price?.outputPer1k ?? null;
+  if (inPricePerK != null || outPricePerK != null) {
+    const cost = (usage.prompt_tokens ?? 0) * (inPricePerK ?? 0) / 1000
+               + (usage.completion_tokens ?? 0) * (outPricePerK ?? 0) / 1000;
+    return { pricing: "pay-per-token", costUsd: Number(cost.toFixed(6)) };
   }
-  const cost = (usage.prompt_tokens ?? 0) * (inPrice ?? 0) / 1000
-             + (usage.completion_tokens ?? 0) * (outPrice ?? 0) / 1000;
-  return { pricing: "configured", costUsd: Number(cost.toFixed(6)) };
+
+  // Subscription route: pull the rate from the committed table.
+  // The model name can be a chat-completions id ("gpt-6-luna"), a
+  // responses id, or anything else the server returned; match
+  // case-insensitively on the bare id (no prefix, no dialect suffix).
+  const rate = rateFor(config?.model?.model ?? config?.model);
+  if (rate) {
+    const cost = (usage.prompt_tokens ?? 0) * (rate.inputPer1M ?? 0) / 1_000_000
+               + (usage.completion_tokens ?? 0) * (rate.outputPer1M ?? 0) / 1_000_000;
+    return { pricing: "subscription-estimate", costUsd: Number(cost.toFixed(6)) };
+  }
+
+  return { pricing: "unpriced", costUsd: null };
 };
 
 /**
@@ -154,8 +212,16 @@ export const buildSeeLevelsReport = ({ model, last, reproducibility, config, key
   const perLevel = {};
   for (const [level, e] of Object.entries(last.perLevel)) {
     perLevel[level] = {
-      seen: e.seen ? { correct: e.seen.correct, total: e.seen.total, rate: Number(e.seen.rate.toFixed(4)) } : null,
-      heldOut: e.heldOut ? { correct: e.heldOut.correct, total: e.heldOut.total, rate: Number(e.heldOut.rate.toFixed(4)) } : null,
+      seen: e.seen ? {
+        correct: e.seen.correct,
+        total: e.seen.total,
+        rate: e.seen.rate == null ? null : Number(e.seen.rate.toFixed(4)),
+      } : null,
+      heldOut: e.heldOut ? {
+        correct: e.heldOut.correct,
+        total: e.heldOut.total,
+        rate: e.heldOut.rate == null ? null : Number(e.heldOut.rate.toFixed(4)),
+      } : null,
       gz: e.gz === null || e.gz === undefined ? null : Number(e.gz.toFixed(4)),
       // Token usage rolled up across the 3 tasks at this level.
       usageIn: e.usageIn ?? 0,
@@ -509,7 +575,7 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
           l,
           {
             seen: e.seen ? { correct: e.seen.correct, total: e.seen.total, rate: e.seen.rate } : null,
-            heldOut: { correct: e.heldOut.correct, total: e.heldOut.total, rate: e.heldOut.rate },
+            heldOut: e.heldOut ? { correct: e.heldOut.correct, total: e.heldOut.total, rate: e.heldOut.rate } : null,
             gz: e.gz,
           },
         ])
