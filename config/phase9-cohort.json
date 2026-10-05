@@ -20,9 +20,10 @@
     "here is multi-endpoint on OpenRouter, so every run needs --only-provider",
     "--no-fallback or the score mixes quantizations.",
     "",
-    "Rates live in config/openrouter-rates.json (dated); this file does not carry them."
+    "Rates live in config/openrouter-rates.json (dated); this file does not carry them.",
+    "deepseek/deepseek-v4.1-flash is pinned to DeepInfra, not DeepSeek: the first-party endpoint is excluded by this account's privacy setting. Pass --only-provider DeepInfra for that row."
   ],
-  "cohort": "Cohort 1 — open-weight frontier models (OpenRouter)",
+  "cohort": "Cohort 1 \u2014 open-weight frontier models (OpenRouter)",
   "_asOf": "2026-10-05",
   "_source": "https://openrouter.ai/api/v1/models",
   "models": {

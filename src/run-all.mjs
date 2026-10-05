@@ -149,14 +149,27 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
     );
     const doPrints = out.filter((r) => r.doOut.usable).map((r) => r.doOut.responseFingerprint);
     const seeRep = reproducibility(seePrints);
+    // A run whose DO call failed at the route contributes NO determinism
+    // evidence: its 0/50 is the score of a call that never returned, not a
+    // model result. Such a run must not widen the DO or combined spread, or a
+    // dead call reads as model variance. The exclusion set is the same one
+    // doPrints uses (answered runs), so the spread and the verdict can never
+    // disagree about which runs count.
+    const doAnswered = out.filter((r) => !r.doOut.callFailure);
+    const doTotalsAnswered = doAnswered.map((r) => r.doTotal);
+    const combinedAnswered = doAnswered.map((r) => r.seeTotal + r.doTotal);
     stability = {
       runs,
       seeTotals,
       doTotals,
       combinedTotals,
       seeSpread: spread(seeTotals),
-      doSpread: spread(doTotals),
-      withinTwoPoints: spread(seeTotals) <= 2 && spread(doTotals) <= 2,
+      // Spreads over ANSWERED runs only; the full per-run totals above stay in
+      // the record so a reader can still see the failed run and its zero.
+      doSpread: spread(doTotalsAnswered),
+      combinedSpread: spread(combinedAnswered),
+      answeredDoRuns: doTotalsAnswered.length,
+      withinTwoPoints: spread(seeTotals) <= 2 && spread(doTotalsAnswered) <= 2,
       seeReproducible: seeRep.reproducible,
       seeVerdict: seeRep.verdict ?? "NO_VERDICT",
       seePrints,
@@ -222,7 +235,13 @@ const main = async () => {
   if (stability) {
     console.log(`\n  STABILITY over ${stability.runs} runs`);
     console.log(`    SEE totals ${stability.seeTotals.join(", ")}  (spread ${stability.seeSpread})`);
-    console.log(`    DO  totals ${stability.doTotals.join(", ")}  (spread ${stability.doSpread})`);
+    // The spread is over ANSWERED runs; a failed route's 0 is not model
+    // variance. Say so inline when a run was excluded, so the printed spread
+    // and the printed totals cannot look contradictory.
+    const doNote = stability.answeredDoRuns < stability.runs
+      ? `  (spread ${stability.doSpread} over ${stability.answeredDoRuns} answered; ${stability.runs - stability.answeredDoRuns} route-failed and excluded)`
+      : `  (spread ${stability.doSpread})`;
+    console.log(`    DO  totals ${stability.doTotals.join(", ")}${doNote}`);
     console.log(
       stability.withinTwoPoints
         ? `    within 2 points, stable enough to compare`

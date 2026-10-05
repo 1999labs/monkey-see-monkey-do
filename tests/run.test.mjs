@@ -293,6 +293,17 @@ test("a failed DO run does not poison the reproducibility verdict", async () => 
   // in the record, but it is not evidence about determinism.
   assert.equal(stability.doTotals[1], 0);
   assert.ok(stability.doTotals[0] > 0 || stability.doTotals[2] > 0, "an answered run should have scored something");
+  // THE SPREAD MUST AGREE WITH THE VERDICT. This is the assertion that was
+  // missing: the verdict correctly excluded the failed run while doSpread was
+  // still computed over all three totals, so a dead call read as a 50-point
+  // swing and the report said NOT_REPRODUCIBLE about a deterministic model.
+  // A verdict and a spread that disagree is exactly the contradiction a reader
+  // cannot see through, so pin both here.
+  assert.equal(stability.answeredDoRuns, 2, "two runs answered; the failed one is excluded");
+  assert.equal(stability.doSpread, 0, "the two answered runs scored identically, so the DO spread is 0");
+  assert.equal(stability.doVerdict, "REPRODUCIBLE", "spread 0 and REPRODUCIBLE must agree");
+  assert.equal(stability.withinTwoPoints, true, "a route failure must not push the run outside the stable band");
+  assert.equal(stability.combinedSpread, 0, "the combined spread is over answered runs too");
   // SEE answered identically in every run, so its verdict stands.
   assert.equal(stability.seeVerdict, "REPRODUCIBLE");
 });
@@ -304,4 +315,11 @@ test("every DO run failing is NO_VERDICT, never REPRODUCIBLE", async () => {
   assert.equal(stability.doVerdict, "NO_VERDICT");
   assert.equal(stability.doReproducible, false, "three timeouts must not certify identical code");
   assert.deepEqual(stability.doTotals, [0, 0, 0]);
+  // With no answered run there is nothing to spread, so the spread is 0 and
+  // the verdict is NO_VERDICT — never "stable". The two must not be read as
+  // agreeing: 0 answered runs is the absence of evidence, not evidence of
+  // determinism.
+  assert.equal(stability.answeredDoRuns, 0);
+  assert.equal(stability.doSpread, 0);
+  assert.equal(stability.doVerdict, "NO_VERDICT");
 });

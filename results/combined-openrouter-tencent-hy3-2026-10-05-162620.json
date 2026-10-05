@@ -184,7 +184,7 @@
         },
         "cost_details": {
           "upstream_inference_cost": 0.0123382875,
-          "upstream_inference_prompt_cost": 0.0000342375,
+          "upstream_inference_prompt_cost": 3.42375e-05,
           "upstream_inference_completions_cost": 0.01230405
         },
         "completion_tokens_details": {
@@ -234,8 +234,8 @@
       88
     ],
     "seeSpread": 2,
-    "doSpread": 50,
-    "withinTwoPoints": false,
+    "doSpread": 0,
+    "withinTwoPoints": true,
     "seeReproducible": true,
     "seeVerdict": "REPRODUCIBLE",
     "doReproducible": false,
@@ -244,7 +244,9 @@
       true,
       false,
       false
-    ]
+    ],
+    "combinedSpread": 0,
+    "answeredDoRuns": 2
   },
   "reports": {
     "see": "results/openrouter-tencent-hy3-2026-10-05-162620.json",
@@ -252,7 +254,7 @@
   },
   "limitations": [
     "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and chain-rewrite derivation (DO), not software engineering.",
-    "DO scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
+    "DO scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO score describes the code it emitted \u2014 not deduction performed at inference time. A correct solver may be recalled rather than derived.",
     "A low Generalization Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
     "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
     "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
@@ -267,5 +269,15 @@
     "An unusable response counts as 50 failed cases for SEE and 50 chains with no legal step for DO.",
     "A zero beside a non-null callFailure is the score of a call that never returned and is NOT evidence about the model.",
     "A NOT_REPRODUCIBLE verdict means the endpoint returned different code for the same prompt; such a score is one sample from a range and must not be compared to another model or to a future run."
-  ]
+  ],
+  "stability_revision": {
+    "revised": "2026-10-05",
+    "reason": "doSpread was computed over ALL runs, so the route-failed run 1 (0/50) widened it to 50 and read as model variance. The spread is now computed over ANSWERED runs only, the same set the verdict uses.",
+    "doSpread_before": 50,
+    "doSpread_after": 0,
+    "doVerdict_before": "NOT_REPRODUCIBLE",
+    "doVerdict_after": "NOT_REPRODUCIBLE",
+    "verdict_unchanged_because": "The two ANSWERED runs (2 and 3) emitted DIFFERENT solver code \u2014 fingerprints 3e00c4de and d4616d58, neither the empty constant. Both happen to score 50/50, but the fingerprint test is about identical code, not identical totals, so NOT_REPRODUCIBLE is correct and is not an artefact of the failed run.",
+    "note": "Only the spread moved. doVerdict was already excluding the failed run and was already right."
+  }
 }

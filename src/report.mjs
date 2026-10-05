@@ -567,7 +567,7 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
   const doTotals = stability?.doTotals?.length ? stability.doTotals : [doTotal];
   const seeTotalMedian = median(seeTotals);
   const doTotalMedian = median(doTotals);
-  const combinedTotals = seeTotals.map((s, i) => s + doTotals[i] ?? s);
+  const combinedTotals = seeTotals.map((s, i) => s + (doTotals[i] ?? 0));
 
   // Adjusted total uses the medians so the chart and the committed
   // artefact never disagree on retries.

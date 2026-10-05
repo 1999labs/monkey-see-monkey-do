@@ -1,8 +1,9 @@
 {
   "_readme": [
     "OpenRouter pay-per-token rates, $/1M tokens, for the Cohort 1 open-weight frontier models.",
-    "These are the PINNED-ENDPOINT rates, not OpenRouter's list rates. Every cohort run pins one provider (--only-provider --no-fallback), and the host that serves a request sets the price. The list rate is the cheapest or default route and does NOT match the first-party endpoint: z-ai/glm-5.3 lists at 0.05/7.00 (Wafer) but Z.AI charges 1.40/4.40, and deepseek/deepseek-v4.1-flash lists at 0.30/1.20 but DeepSeek charges 0.15/0.60. Using the list rate would understate or overstate the chart's costUsd.",
+    "These are the PINNED-ENDPOINT rates, not OpenRouter's list rates. Every cohort run pins one provider (--only-provider --no-fallback), and the host that serves a request sets the price. The list rate is the cheapest or default route and does NOT match the pinned host: z-ai/glm-5.3 lists at 0.05/7.00 (Wafer) but Z.AI charges 1.40/4.40, and deepseek/deepseek-v4.1-flash lists at 0.30/1.20 but its pinned host DeepInfra charges 0.14/0.42. Using the list rate would understate or overstate the chart's costUsd.",
     "Each row names the `provider` it was priced for, so a costUsd is auditable against which host served the run as well as the as-of date.",
+    "deepseek/deepseek-v4.1-flash is pinned to DeepInfra, not DeepSeek: the first-party DeepSeek endpoint is excluded by this account's OpenRouter privacy setting (it trains on prompts), which returns HTTP 404 0-endpoints on a pinned request. DeepInfra serves the same model at 0.14/0.42 fp8.",
     "Source: https://openrouter.ai/api/v1/models/<id>/endpoints (the pinned endpoint's `pricing` block, per-token, multiplied by 1e6). Captured 2026-10-05; rates drift, so the as-of date and the provider name are the audit anchors.",
     "Shape mirrors config/opencode-go-rates.json so the same rateFor() lookup path serves both. Each entry has tiers[]; a pinned endpoint has one rate, so there is exactly one tier per model here (maxPromptTokens: null).",
     "The runner stamps pricing: 'pay-per-token' and costUsd from this table when an OpenRouter model resolves a rate and the run carries usage. computeCost() checks config.model.price first (a per-model override in config/models.json) and falls back to this table.",
@@ -19,9 +20,9 @@
       ]
     },
     "deepseek/deepseek-v4.1-flash": {
-      "provider": "DeepSeek",
+      "provider": "DeepInfra",
       "tiers": [
-        { "maxPromptTokens": null, "inputPer1M": 0.15, "outputPer1M": 0.60 }
+        { "maxPromptTokens": null, "inputPer1M": 0.14, "outputPer1M": 0.42 }
       ]
     },
     "z-ai/glm-5.3": {

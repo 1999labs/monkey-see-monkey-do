@@ -571,7 +571,7 @@ test("the OpenRouter rate table carries the PINNED-endpoint rates, with the host
   const t = ratesTable("openrouter");
   const expect = {
     "z-ai/glm-5.3": { provider: "Z.AI", in: 1.4, out: 4.4 },
-    "deepseek/deepseek-v4.1-flash": { provider: "DeepSeek", in: 0.15, out: 0.6 },
+    "deepseek/deepseek-v4.1-flash": { provider: "DeepInfra", in: 0.14, out: 0.42 },
     "qwen/qwen3.8-2.4t-a95b": { provider: "Alibaba", in: 2.0, out: 6.0 },
     "xiaomi/mimo-v2.6-pro": { provider: "Xiaomi", in: 0.435, out: 0.87 },
     "tencent/hy3": { provider: "Tencent", in: 0.132, out: 0.528 },
