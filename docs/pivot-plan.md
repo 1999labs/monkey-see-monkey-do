@@ -545,3 +545,76 @@ Phase 6 closes out the pivot. Everything pre-pivot is gone:
 The Minesweeper DO digests (69200346…, f2f520b6…, b7a62fe6…) are now
 historical context only — they describe retired digests in the comment
 block of `src/prompt-digests.mjs` and appear nowhere else in the suite.
+
+---
+
+## Amendment E (Phase 7 commit) — calibration consolidation and README rewrite
+
+Phase 7 is documentation-only. No scoring code changes.
+
+### What changed
+
+- **`docs/calibration.md`** rewritten from the Minesweeper-era baseline to the
+  chain-eval baseline. The new file documents every asserted number with the
+  command that re-derives it (the existing convention). Sections:
+    1. Why calibration matters (unchanged)
+    2. SEE: naive baseline at every sample level (Phase 4 axis added)
+    3. SEE: per-level GZ band
+    4. DO: chain-engagement random baseline — random walk scores 50/50
+       (correctSteps == submittedSteps); the right random benchmark is
+       the fullCredit rate (5/50 in the measured run, ~10%)
+    5. DO: empty-array "free points" baseline — 0/50 DO, engagement=0,
+       adjusted floors at 0 (the Phase 5 clawback fires)
+    6. DO: reference solver in two modes — dry-run 50/50 (recorded
+       derivation threaded), real-mode 45/50 (BFS from scratch; 5 L50
+       chains saturate MAX_STATES=50000). Distinction is now load-bearing.
+    7. The chain pool (50 chains, seed 0xC0FFEE, 5 bands × 10)
+    8. The rewrite rules and BFS state cap
+    9. The adjusted total's weights (0.5 × GZ_mean, 10 × (1 − chainEngagementRate))
+   10. The retired Minesweeper scaffolding — what the old numbers were,
+       the three old DO digests (`69200346…`, `f2f520b6…`, `b7a62…`)
+       documented as history only
+   11. Changing any of this (re-derived table for the new axes)
+
+- **`README.md`** structurally rewritten to describe suite 1.0.0. Notable
+  decisions:
+    - The Cohort 1 section was REMOVED. The cohort numbers were recorded under
+      the Minesweeper DO; per the user's instruction "Numbers quoted in the
+      README must match calibration.md outputs", the Minesweeper-era
+      numbers can't stay. The Results block now explains that no post-pivot
+      cohort is committed yet and points to the chart path + acceptance gate.
+    - The "Non-comparability" section adds the new "DO scores before 1.0.0
+      (Minesweeper DO) are not comparable" sentence alongside the old
+      "DO scores before 0.3.0 are not comparable" sentence, as two
+      separate sentences describing two separate breaks in the DO history.
+    - Both axes described: Generalization Index (per sample level, scored
+      minus held-out in points), chain-engagement rate (fraction of 50
+      chains with at least one legal step, [0,1]).
+    - The random-walk baseline is documented as **50/50** by construction
+      (every random pick is legal; the score axis is correctSteps /
+      submittedSteps, not "reached target"). The fullCredit rate is the
+      right random benchmark.
+    - The reference solver's two modes (dry-run 50/50, real-mode 45/50)
+      are documented with their per-band breakdown, and the test-author
+      implication (asserting 50/50 on the model path tests the gate, not
+      the model).
+    - The Limitations section updated to mention the chain-engagement
+      canary in the prompt (`monkey-do-chain@1.0.0`), the formal-system
+      algorithm recall risk (replaces "textbook algorithm" recall), and
+      the random-walk baseline's 50/50 property.
+    - The publication gate criteria table updated to the chain-eval
+      version (reference solver wins every chain, chain-naive baseline
+      floors at 0, 108 checks at 1.0.0).
+    - The Repository layout updated to the actual src/do/chain/ structure.
+    - The Maintaining section updated: 108-check gate, gen-pool and
+      check-pool point at the chain pool, the calibration reference list
+      reflects the new axes.
+
+### What did NOT change
+
+- No scoring code changes.
+- The chain pool was NOT regenerated — it was byte-identical under
+  `npm run check-pool` earlier in the session and treated as frozen.
+- The self-test's 108 checks all pass with `npm run self-test`.
+- `npm test` (224 checks) all pass with no failures.
+- `npm run dry-run` PASS 50/50 (chain dry-run via the canonical command).

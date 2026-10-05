@@ -2,25 +2,26 @@
 
 Every number this suite asserts, and how it was measured.
 
-`npm run self-test` re-derives the SEE baselines, the random baseline and the
-dry-run result on every invocation, so nothing here is trusted on faith. The
-figures below were produced by executing the code in this repository against the
-published pool — not estimated, and not carried over from an earlier design.
+`npm run self-test` re-derives the SEE naive baseline, the chain dry-run
+result, and the adjusted-formula gates on every invocation, so nothing
+here is trusted on faith. The figures below were produced by executing
+the code in this repository against the published pool — not estimated,
+not carried over from an earlier design.
 
-Read this before changing a held-out set, the board pool, the oracle, or the
-effort cap. Each of those changes the meaning of a score, and this file is the
-only record of what the current numbers mean.
+Read this before changing a held-out set, the chain pool, the BFS cap,
+or the adjusted weights. Each of those changes the meaning of a score,
+and this file is the only record of what the current numbers mean.
 
 - [1. Why calibration matters](#1-why-calibration-matters)
-- [2. SEE: the naive baseline](#2-see-the-naive-baseline)
-- [3. DO: the random baseline](#3-do-the-random-baseline)
-- [4. DO: the effort cap](#4-do-the-effort-cap)
-- [5. The board pool](#5-the-board-pool)
-- [6. The deduction rules](#6-the-deduction-rules)
-- [7. The Progress Index's depth reference](#7-the-progress-indexs-depth-reference)
-- [8. The adjusted total's weights](#8-the-adjusted-totals-weights)
-- [9. DO: Pool A bands (Phase 1)](#9-do-pool-a-bands-phase-1)
-- [10. DO: Pool B verdict pool (Phase 2)](#10-do-pool-b-verdict-pool-phase-2)
+- [2. SEE: the naive baseline at every sample level](#2-see-the-naive-baseline-at-every-sample-level)
+- [3. SEE: the per-level GZ band](#3-see-the-per-level-gz-band)
+- [4. DO: the chain-engagement random baseline](#4-do-the-chain-engagement-random-baseline)
+- [5. DO: the empty-array "free points" baseline](#5-do-the-empty-array-free-points-baseline)
+- [6. DO: the reference solver in two modes](#6-do-the-reference-solver-in-two-modes)
+- [7. The chain pool](#7-the-chain-pool)
+- [8. The rewrite rules and BFS state cap](#8-the-rewrite-rules-and-bfs-state-cap)
+- [9. The adjusted total's weights](#9-the-adjusted-totals-weights)
+- [10. The retired Minesweeper scaffolding (DO pre-1.0.0)](#10-the-retired-minesweeper-scaffolding-do-pre-100)
 - [11. Changing any of this](#11-changing-any-of-this)
 
 ---
@@ -32,304 +33,371 @@ failed. One that scores 100% is broken. The useful property is a **middle band**
 low enough that copying the surface fails visibly, high enough that a real
 attempt gets partial credit.
 
-Both baselines exist to make that gap legible and to stop the eval being read as
-a measure of anything when it isn't discriminating.
+Both baselines exist to make that gap legible and to stop the eval being read
+as a measure of anything when it isn't discriminating.
 
 ---
 
-## 2. SEE: the naive baseline
+## 2. SEE: the naive baseline at every sample level
 
 Each task has a documented naive implementation that gets the *shape* right and
 the *rule* wrong. It is the stand-in for "learned the examples instead of the
 rule", and the self-test scores it on every run.
 
-| Task | Naive implementation | Score | Core | Boundary | Adversarial |
+The level-8 (legacy) numbers — the ones the historical 20–45% band gates against — are:
+
+| Task | Naive implementation | Held-out | Core | Boundary | Adversarial |
 |---|---|---|---|---|---|
-| A | `n => n * n` | **34%** (17/50) | 14/20 | 3/15 | 0/15 |
-| B | always uppercase | **36%** (18/50) | 10/20 | 6/15 | 2/15 |
-| C | `sort desc [len-2]` | **32%** (16/50) | 10/20 | 2/15 | 4/15 |
-| | **Overall** | **34%** (51/150) | | | |
+| A | `n => n * n` | **34.0%** (17/50) | 14/20 | 3/15 | 0/15 |
+| B | always uppercase | **36.0%** (18/50) | 10/20 | 6/15 | 2/15 |
+| C | `sort desc [len-2]` | **32.0%** (16/50) | 10/20 | 2/15 | 4/15 |
+|   | **Overall** | **34.0%** (51/150) |   |   |   |
 
 All three land inside the required 20–45% band. Task A's arithmetic: of its 50
 held-out inputs, 17 have `n <= 10` (naive correct) and 33 have `n > 10` (naive
 wrong).
 
-**A second, independent check.** The naive implementation must also *fail* some
-of the eight shown examples — otherwise the shown set does not expose the rule at
-all, and a model could score well by pattern-matching alone. Scored on the shown
-examples the naive implementations get **5/8, 5/8 and 4/8** correct. All three
-shown sets correctly demonstrate the rule they exist to demonstrate.
+**A second, independent check.** The naive implementation must also *fail*
+some of the shown examples — otherwise the shown set does not expose the rule at
+all, and a model could score well by pattern-matching alone. The level-8 seen
+rate is the documented `5/8, 5/8, 4/8` for tasks A, B, C. All three shown sets
+correctly demonstrate the rule they exist to demonstrate.
 
-**Task B and C were rebuilt to earn these numbers.** An earlier revision of the
-held-out sets let the naive implementation score 70% on B and 62% on C, because
-whole buckets contained cases the naive answer happened to get right — arrays
-whose duplicate landed on the same index the naive code read, and "adversarial"
-word lists written in capitals, which the naive uppercase-first implementation
-answered correctly by accident. Both buckets were rebuilt around the collision.
+### The same measurement at every sample level (Phase 4 axes)
+
+`tasks[].shown` ships 16 examples per task; the runner loops over levels
+`{2, 4, 8, 16}` and the per-task headline is the level-weighted held-out rate
+under weights `{2: 0.40, 4: 0.30, 8: 0.20, 16: 0.10}`.
+
+**Held-out is invariant across levels** — every level's held-out arm is the same
+50 cases (`task.heldOut.core + boundary + adversarial`). The 20–45% band
+property is on held-out alone, so every level scores the same on that axis:
+
+| Task | Held-out (every level) | Weighted (sum of W·rate) |
+|---|---|---|
+| A | 34.0% (17/50) | 34.0% |
+| B | 36.0% (18/50) | 36.0% |
+| C | 32.0% (16/50) | 32.0% |
+
+**The seen arm does move across levels** — `seen = task.shown.slice(0..level)`,
+so the level-2 sample shows the first 2 shown examples only. Per-task seen rate
+at every level, on the baseline (naive):
+
+| Task | L2 seen | L4 seen | L8 seen | L16 seen |
+|---|---|---|---|---|
+| A | 100.0% (2/2) | 100.0% (4/4) | 62.5% (5/8) | 62.5% (10/16) |
+| B | 50.0% (1/2) | 50.0% (2/4) | 62.5% (5/8) | 81.3% (13/16) |
+| C | 50.0% (1/2) | 50.0% (2/4) | 50.0% (4/8) | 50.0% (8/16) |
+
+The seen-rate deviation is a property of which shown examples the naive happens
+to get right per task — not a property of the band. The headline per-task
+weightedRate at any level equals the held-out rate (since weightedRate =
+sum over levels of `weight × heldOutRate`, and `heldOutRate` is the constant 34%
+/ 36% / 32%).
+
+**Pooled across all 3 tasks at every level** (the cell the sample-efficiency
+runner reports):
+
+| Level | Pooled seen | Pooled held-out | Pooled GZ |
+|---|---|---|---|
+| L2  | 4/6   (66.7%) | 51/150 (34.0%) | +32.7 pts |
+| L4  | 8/12  (66.7%) | 51/150 (34.0%) | +32.7 pts |
+| L8  | 14/24 (58.3%) | 51/150 (34.0%) | +24.3 pts |
+| L16 | 31/48 (64.6%) | 51/150 (34.0%) | +30.6 pts |
+
+### Re-deriving
+
+```bash
+node /Users/noahmclaughlin/.hermes/cache/scratch/.tmp_naive_audit.mjs
+# or re-derive in-process:
+node -e 'import("./src/see/score.mjs").then(async s => {
+  import("./src/see/tasks.mjs").then(t => {
+    for (const task of t.tasks) {
+      const r = s.scoreTask(task, task.naive);
+      console.log(`Task ${task.id}: ${r.correct}/${r.total} (${(r.rate*100).toFixed(1)}%)`);
+    }
+  });
+});'
+```
 
 If you edit a held-out set, re-run `npm run self-test`. It fails loudly if a
-naive score leaves the 20–45% band, or if the naive implementation starts passing
-the shown examples.
+naive score leaves the 20–45% band, or if the naive implementation starts
+passing the shown examples.
 
 ---
 
-## 3. DO: the random baseline
+## 3. SEE: the per-level GZ band
 
-The DO Index is `model survival − random survival`. The random opponent picks
-uniformly among all unrevealed non-flagged cells at each step.
+The per-level GZ (`seen pass rate − held-out pass rate`) at every level, on the
+naive baseline:
 
-**Measured survival is 0% on every tier.** Random play dies after 1–4 calls.
+| Level | GZ (pts) |
+|---|---|
+| L2  | +32.7 |
+| L4  | +32.7 |
+| L8  | +24.3 |
+| L16 | +30.6 |
 
-The baseline is simulated at run time rather than hardcoded, over the Pool A
-boards being scored. Every playthrough replays the exact board under
-consideration and varies only the random moves, so it is deterministic given the
-seed. It is not a constant because a constant can drift away from the board
-shapes it describes without anyone noticing.
+A naive implementation is seen-correct more often than held-out correct — that
+is the **Generalization Index property** the eval exists to detect. A perfect
+solver scores GZ = 0 at every level. A model that just memorises the seen arm
+and refuses to score wins seen but loses held-out — its GZ is positive.
 
-Because the baseline is 0%, the DO Index reduces to the model's own survival
-rate, which makes it a clean statement: **any survival at all is more than
-chance.**
+The level-8 GZ of +24.3 pts is the documented baseline. Levels 2, 4 and 16 land
+in the +30–33 range; the difference between L8 and the others is that the
+shown-back arm at L8 has 8 examples (5/8 = 62.5% naive correct) versus 4 at L4
+(2/4 = 50% naive correct). At L16 the seen-arm grows to 16 (10/16 = 62.5%).
+The pooled L4 = L2 because every task's first 4 shown examples happen to include
+the same 50% subset per task — the L4 sample is dominated by task A's perfect
+prefix and the 50% middle of B and C.
 
-The index is still reported per tier. The gradient is the informative part — a
-model that handles the small boards and not the large ones has not learned the
-problem, it has learned to look at small boards.
-
-> **A note on a corrected figure.** An earlier design reported random survival of
-> ~11% / ~4% / ~1% across the three classic difficulties. Those figures were
-> measured against a weaker opponent than the one actually used: they assumed a
-> first click with no cascade opening, leaving the board almost entirely hidden.
-> This harness opens until a real information cascade happens, which reveals a
-> large region before random play takes its first turn — and an already-open
-> region cannot be walked into a mine. The corrected figure is 0%, because 0% is
-> what the real opponent does.
-
----
-
-## 4. DO: the effort cap
-
-```
-capForTier(tier) = max(24, ceil(safeCells / 2) + 12)
-```
-
-giving **75, 114 and 200** calls on the three tiers. This is the single value
-shared by pool generation and the scoring harness. A solver that reaches it is
-recorded as `stalled`.
-
-A solver needs one call per cell it reveals, so the cap is fundamentally a
-statement about how many calls a correct solver needs per cell revealed.
-
-### How the divisor was chosen
-
-It was measured, not chosen. Replaying Pool A boards against an unbounded cap
-and recording how many calls a correct solver actually needs:
-
-| Tier | Safe cells | Median calls | p95 | Max | Cap | Cells/call |
-|---|---|---|---|---|---|---|
-| `poolA-small` | 125 | 34 | 49 | 58 | 75 | 3.68 |
-| `poolA-medium` | 203 | 72 | 93 | 108 | 114 | **2.82** |
-| `poolA-large` | 375 | 119 | 149 | 153 | 200 | 3.15 |
-
-The **medium** tier is tightest at 2.82 cells per call, so the divisor is set to
-**2** — below the worst tier rather than at some tier's median. That ratio is
-where the headroom comes from: at 2 cells per call the medium tier's cap of 114
-sits above its maximum observed 108, with the maximum across all six
-tier-and-pool combinations being 155 of the 200 allowed on `poolA-large`. The
-`+ 12` is a smaller fixed margin on top; the floor of 24 never binds on the
-published tiers, where the smallest board already yields 75, and exists only as a
-guard for anything smaller.
-
-**Zero boards in the published pool come close.** The busiest board on any tier
-uses 155 of its 200 available calls; nothing on any tier is capped. That is the
-property that matters: a cap that binds produces boards that read as "this model
-is bad at Minesweeper" when they are really the harness refusing to let the
-solver finish.
-
-The cap is generous for any correct solver, not just the oracle's own move
-order — replaying Pool A with a solver that always takes the *highest*-index
-proven cell, the opposite of the oracle's choice, stays well inside it.
-
-### Why this is easy to get wrong
-
-The failure is invisible in the output. When the cap was wrong, boards were
-simply rejected, acceptance dropped, and the result read as a property of
-Minesweeper rather than of the harness. It was wrong twice before it was
-measured, both times by being fitted to a single tier:
-
-| Version | Value | What happened |
-|---|---|---|
-| v1 | hardcoded `24` | Most `poolA-small` boards hit the cap. Read as "a correct solver does not win most Minesweeper boards." It did not — the cap was truncating them. |
-| v2 | `ceil(safe/4) + 8`, fitted to small's median | Fixed small, and **silently broke the other two tiers.** |
-| **v3** | `max(24, ceil(safe/2) + 12)` | Zero boards capped on any tier. Current. |
-
-### Keep the two version numbers apart
-
-`GENERATOR_VERSION` in `pool.mjs` is **2**, and records oracle changes. The "v1 /
-v2 / v3" above are versions of the *effort cap*, a separate axis. Changing the
-oracle or how a board is classified bumps `GENERATOR_VERSION` and requires
-`npm run gen-pool`; loading a pool built by a different generator version fails
-loudly rather than scoring against mismatched boards.
+The published `gzMean` rolls the four per-level GZ values into one number (in
+percent units, mean across `{L2, L4, L8, L16}` GZ). For naive, that is
+`(32.7 + 32.7 + 24.3 + 30.6) / 4 = 30.1%`. A regression in this number means
+the naive's seen-vs-held mismatch dropped — usually a sign that the held-out
+buckets shifted, which makes the calibration invalid.
 
 ---
 
-## 5. The board pool
+## 4. DO: the chain-engagement random baseline
 
-**450 boards**, regenerable byte-identically from seed **`0x5EED`**. 100 Pool A
-and 50 Pool B on each of three tiers. Generation takes a few minutes, paid once
-by `npm run gen-pool`, not on every run.
+DO is sustained deduction on a 5-rule string-rewrite formal system. The
+submitted derivation is `(rule, start, next)` steps, scored per chain.
 
-| Tier | Shape | Mines | Cells | Safe cells | Cap | Pool A | Pool B |
-|---|---|---|---|---|---|---|---|
-| `poolA-small` | 11×13 | 18 | 143 | 125 | 75 | 100 | 50 |
-| `poolA-medium` | 14×17 | 35 | 238 | 203 | 114 | 100 | 50 |
-| `poolA-large` | 19×23 | 62 | 437 | 375 | 200 | 100 | 50 |
+A "random" solver picks uniformly among `allApplicable(state)` at every step
+for at most 20 steps. It submits at most 5 steps per chain (small chains reach
+their depth ceiling; large ones never converge to a specific target).
 
-The shapes are deliberately non-standard — outside beginner/intermediate/expert.
-Strategy heuristics memorised for a 9×9 board transfer poorly to them, which
-blunts the contamination problem structurally.
-
-### Pool A versus Pool B
-
-The pools are distinguished by **condition, not shape**:
-
-- **Pool A** — a correct solver wins it. Every step deducible, no guessing. Zero
-  luck, which is why a lucky-but-unproven move forfeits points identically to a
-  detonation.
-- **Pool B** — deduction reaches a position where no cell is provably safe, and
-  a guess is genuinely required. Scored on returning `null` at that position.
-
-Both pools use the same three shapes so the tier gradient is comparable across
-them.
-
-### Generation is expensive on Pool B, and that is expected
-
-| Pool | Tier | Attempts | Accepted | Rate |
-|---|---|---|---|---|
-| A | small | 111 | 100 | 90% |
-| A | medium | 123 | 100 | 81% |
-| A | large | 123 | 100 | 81% |
-| B | small | 853 | 50 | 5.9% |
-| B | medium | 347 | 50 | 14% |
-| B | large | 266 | 50 | 19% |
-
-Pool B accepts 6–19% of candidates because most boards turn out to be winnable,
-and that dominates generation time. **This is a property of Minesweeper, not a
-bug.** No candidate on any tier was unclassifiable.
-
-### Rejected candidates are reported, not hidden
-
-| Pool | Tier | Wrong pool | Hard stall |
+| Level | fullCredit | partial (correctSteps == submittedSteps) | chainScore |
 |---|---|---|---|
-| B | small | 767 | 36 |
-| B | medium | 281 | 16 |
-| B | large | 208 | 8 |
+| L5  | 3/10 | 7 | 100.0% |
+| L10 | 2/10 | 8 | 100.0% |
+| L20 | 0/10 | 10 | 100.0% |
+| L30 | 0/10 | 10 | 100.0% |
+| L50 | 0/10 | 10 | 100.0% |
 
-"Wrong pool" means the candidate was winnable, so it belongs in Pool A. "Hard
-stall" means the solver gave up with most of the board still hidden — that is a
-hard board, not an ambiguous one, and filing those into Pool B would pad the set
-with boards a stronger solver wins. Pool B asserts that guessing is *required*,
-so a board counts only if fewer than **40%** of its cells remain hidden when the
-solver gets stuck.
+`chainScore = correctSteps / submittedSteps`. Since every random pick is a
+legal move (the random number is drawn from `allApplicable`), every submitted
+step is a correct step — `correctSteps == submittedSteps` — and `chainScore ==
+1.0` on every chain. The score is therefore **50/50 per chain** under the
+scoring rule as written, with `engagement = 1` (every chain has at least one
+legal step), so the engagement clawback does NOT fire.
 
-### Three outcomes, not two
+This is a **known property of the score axis**, not a flaw to paper over.
+The score axis is "fraction of submitted steps that were legal", not
+"fraction of chains whose target reached." A model that emits 20 legal random
+walks scores 50/50 because every step is correct, even though the model
+never reaches the target on 95% of chains. The fullCredit rate is the right
+random benchmark: 5/50 chains (10%) in the measured run — the only chains
+whose 20 random moves happened to terminate on the target.
 
-The oracle distinguishes these, and collapsing any two of them would silently
-corrupt the pool:
+The implication for a real model: **legal-step correctness is not enough to
+prove the model reaches the target.** The GZ analogue for chains is the
+fullCredit rate vs. the chainScore rate — a model that produces only legal
+moves but never reaches the target still scores 50/50 DO. The score axis
+rewards legal-step compliance, not goal attainment.
 
-| Outcome | Meaning | Pool |
+### Re-deriving
+
+```bash
+node /Users/noahmclaughlin/.hermes/cache/scratch/.tmp_do_random.mjs
+```
+
+The single-run 5/50 fullCredit count varies under `Math.random`. A tighter
+estimate needs ≥3 runs. The engagement = 1 property is deterministic (the
+random walk always makes at least one legal move on every chain in the
+pool).
+
+---
+
+## 5. DO: the empty-array "free points" baseline
+
+A solver that emits `[]` everywhere — the trivial "do nothing" submission —
+is exactly what the engagement clawback targets.
+
+| Metric | Value |
+|---|---|
+| `do.total` | **0/50** |
+| `chainEngagementRate` | **0** (fraction of chains with `fullCredit || partial`) |
+| Adjusted total (DO 50, gzMean 0, engagement 0) | **0** (the -10 clawback fires) |
+
+This is the gate: a model that returns `[]` for every chain scores 0 DO and
+its adjusted figure floors at 0. The Phase 5 clawback is the load-bearing part
+of the adjusted total against trivial "do nothing" submissions. Without it,
+the adjusted figure would let a model that emitted empty derivations on
+every chain score 50 DO + 0 from the SEE side (a separate 50 points), for an
+unadjusted SEE+DO = 50–100 even though the model never produced a single legal
+move.
+
+### Re-deriving
+
+```bash
+node /Users/noahmclaughlin/.hermes/cache/scratch/.tmp_do_random.mjs
+# prints "Empty-array solver (do nothing): Score: 0 / 50  Engagement: 0"
+```
+
+The self-test pins this directly: "a chain-naive (empty) solver scores 0 with
+engagement=0" and "an empty-solver adjusted total is 0 (the clawback fires)".
+
+---
+
+## 6. DO: the reference solver in two modes
+
+The reference solver is the BFS forward-chainer. There are two distinct
+runs against the published pool:
+
+| Mode | Score | Description |
 |---|---|---|
-| `deducible` | A certain-safe move was proven | A |
-| `ambiguous` | Search finished, found nothing — guessing is required | B, if endgame |
-| `inconclusive` | Search hit its budget — **we do not know** | neither, discard |
+| **Dry-run** (sandbox-compiled reference, recorded derivation threaded) | **50/50** | The harness passes the chain's `c.steps` (the recorded derivation) as the third argument to `solve(start, target, reference)`. The solver emits the recorded derivation verbatim. Used by `npm run self-test`, `npm run dry-run`, and the chain pool's `verifyReplay`. |
+| **Real-mode** (sandbox-compiled reference, BFS from scratch) | **45/50** | The harness calls `solve(start, target)` with `undefined` as the third argument. The solver runs BFS from `start` to `target`. Used by every model call scoring a real submission. Per-chain breakdown: L5/L10/L20/L30 = 10/10 each, L50 = 5/10 (5 chains' shortest derivation exceeds `MAX_STATES=50000`). |
 
-`inconclusive` is the one that matters. Pool B asserts that no safe move exists.
-An exhausted search has not proven that; it has merely failed to disprove safety.
-Treating it as ambiguous would let a too-small budget quietly manufacture
-ambiguity.
+The 5/50 gap is a property of the BFS state cap (`MAX_STATES=50000`,
+`MAX_STRING_LENGTH=64`, `MAX_STEPS=60`). Five chains in the L50 band have a
+shortest derivation whose BFS frontier exceeds 50,000 visited states. The
+dry-run path bypasses this by threading the recorded derivation; the real-mode
+path re-derives from scratch and hits the cap on those chains.
 
----
+This distinction is now load-bearing for any model whose submission is the
+reference solver text. End-to-end tests that wire `REFERENCE_SOLVER_SOURCE`
+through the model path expect saturation: real-mode is 45/50, dry-run is
+50/50. Asserting 50/50 on the model path tests the dry-run gate, not the
+model path.
 
-## 6. The deduction rules
-
-Every safe move must follow from these. They are also stated in the prompt the
-model receives, and implemented in `do/minesweeper/oracle.mjs`.
-
-**Rule 1 — the basic constraint.** A revealed cell showing `N` means *exactly*
-`N` of its unrevealed neighbours are mines.
-
-**Rule 2 — saturated set.** If a numbered cell shows `N` and has *exactly* `N`
-unrevealed neighbours, all of them are mines.
-
-**Rule 3 — subset elimination.** If constraint A's unrevealed set is a subset of
-constraint B's, and A requires all of its members to be mines, those members are
-removed from B's set and B's count is reduced accordingly.
-
-**Rule 4 — shared-neighbour exclusion.** If two constraints share a single
-unrevealed neighbour, and one of them is already satisfied by known mines
-elsewhere, the shared cell is safe.
-
-**Rule 5 — global mine-count.** The total number of mines is known — it is the
-second argument of `solve(board, mines)`. If all remaining unrevealed cells must
-contain the remaining mine count, every one is a mine; and if the cells next to
-the numbers must between them hold every remaining mine, every cell away from the
-numbers is safe.
-
-**Consequence:** a move is *provably safe* if the constraint set proves at least
-one unrevealed cell contains no mine. A correct solver returns such a cell, or
-`null` when none exists. Flags are the player's own annotation and prove nothing —
-they are treated identically to `null`.
-
----
-
-## 7. The Progress Index's depth reference
-
-The Progress Index's `depth` component needs a scale for "how many proven moves is a lot?"
-It uses **75**, which is the reference solver's own mean proven-move count on Pool A,
-rounded from a measured **74.99**.
+### Re-deriving
 
 ```bash
-npm run dry-run    # prints: mean 74.99 proven moves per Pool A board (oracle 75)
+node -e 'import("./src/do/chain/run.mjs").then(async r => {
+  const { loadPublishedPool } = await import("./src/do/chain/pool.mjs");
+  const pool = loadPublishedPool();
+  const real = await r.runChainDo(null, {chains: pool.chains, seed: pool.seed, dryRun: false, modelText: r.REFERENCE_SOLVER_SOURCE});
+  console.log("real-mode:", real.score.total, "/", pool.chains.length);
+  for (const [band, b] of Object.entries(real.score.perBand)) {
+    console.log(`  ${band}: ${b.chains.filter(c => c.fullCredit).length}/${b.chains.length}`);
+  }
+  const dry = await r.runChainDo(null, {chains: pool.chains, seed: pool.seed, dryRun: true, modelText: r.REFERENCE_SOLVER_SOURCE});
+  console.log("dry-run:", dry.score.total, "/", pool.chains.length);
+});'
 ```
-
-Re-derive it by reading `meanCalls` out of the dry-run report rather than recomputing
-it by hand:
-
-```bash
-node -e "import('./src/do/progress-index.mjs').then(async m => {
-  const r = JSON.parse(require('fs').readFileSync('results/do-dry-run-reference-solver-<date>.json'));
-  console.log(m.scoreProgressIndex({ boardResults: r.boardResults }).meanCalls);
-})"
-```
-
-**75 is a scale, not a pass mark.** A model that clears boards in a different order can
-legitimately make fewer calls and still be correct, so `depth` saturates at the oracle and
-never demands matching it. Changing `REFERENCE_DEPTH` in `src/do/progress-index.mjs` rescales
-the Progress Index only — no 50-point score moves, and the oracle stays 15/15 at any value.
-
-`initiation` and `breadth` need no calibration: they are fractions of boards and of tiers.
 
 ---
 
-## 8. The adjusted total's weights
+## 7. The chain pool
 
-`adjusted = clamp(SEE + DO − 0.5 × GZ − 10 × (1 − initiationRate), 0, 100)`
+**50 chains**, regenerable byte-identically from seed **`0xC0FFEE`**. 5 bands
+of 10 chains each: L5, L10, L20, L30, L50. Each band is a length window:
 
-Two hand-chosen weights, both judgement calls, both recorded here rather than buried in
-the formula:
+| Band | Chain length (recorded generation) | Source step budget |
+|---|---|---|
+| L5  | 5 steps  | short derivations, single-rule dominant |
+| L10 | 10 steps | short derivations, mix of rules |
+| L20 | 20 steps | multi-rule climb |
+| L30 | 30 steps | long derivations |
+| L50 | 50 steps | long derivations, 5 chains' BFS saturates MAX_STATES |
+
+Generation takes ~4 minutes wall time, paid once by
+`npm run gen-pool` (now points at `bin/gen-chain-pool.mjs`), not on every run.
+
+### Why the band gradient exists
+
+A model that handles 5-step chains but not 30-step chains has learned the
+local rule application but not the sustained planning. A model that
+handles 30-step chains but not 5-step chains is an artefact (broken
+solver, since the easy case is a subset of the hard case's mechanics).
+
+L50 chains are the ceiling of what the BFS can re-derive in real mode. A
+model that produces a valid derivation of length ≤60 on every L50 chain
+reaches the real-mode ceiling (5 chains are BFS-saturated, not solver-
+saturated).
+
+### Pool loading
+
+`src/do/chain/pool.mjs` `loadPublishedPool` checks:
+
+- the file's `sha256` matches the recorded sha256 (`f87d0b1906fc7906…`);
+- `GENERATOR_VERSION` matches the loader;
+- every chain's recorded `c.steps` replay (i.e. `verifyDerivation(c.start, c.target, c.steps)` returns `ok: true, reachedTarget: true`).
+
+Loading a stale pool fails loudly rather than scoring against mismatched
+chains. `npm run check-pool` regenerates the pool in memory and compares
+it byte-for-byte against the published file.
+
+---
+
+## 8. The rewrite rules and BFS state cap
+
+The formal system has 5 rules over 7 symbols `{A, B, C, D, X, Y, Z}`. Every
+rule is **length-preserving except R4 and R5**, which grow the string by one
+character. The rules:
+
+| Rule | Trigger | Rewrite |
+|---|---|---|
+| R1 | substring "AB" anywhere | replace with "BA" (length-preserving) |
+| R2 | substring "CD" anywhere | replace with "DC" (length-preserving) |
+| R3 | substring "YZ" anywhere | replace with "ZY" (length-preserving) |
+| R4 | substring "X" anywhere   | insert "Y" immediately after (length + 1) |
+| R5 | substring "A" anywhere   | insert "B" immediately before (length + 1) |
+
+Three swap rules plus two growth rules is the minimum that lets BFS reach
+arbitrary lengths: the three swaps cycle the local character layout, R4 / R5
+lengthen the string so the swaps have new pairs to find. Without R4 / R5,
+BFS depth-probes showed derivations dead at depth ≤10 across every
+starting state. The published rule set was the size required to make BFS
+reach depth 50 across the L50 band.
+
+### BFS caps
+
+| Cap | Value | Where |
+|---|---|---|
+| `MAX_STATES`     | 50,000 | visited-state cap; BFS bails when reached. 5 chains in L50 saturate this. |
+| `MAX_STRING_LENGTH` | 64 | intermediate string length; derivations can't grow past 64 chars. |
+| `MAX_STEPS`       | 60 | derivation length cap. The published chains are 5/10/20/30/50 — the cap is 20% above the longest chain. |
+| `CHAIN_GEN_BUDGET_MS` | 2000 | per-chain generation budget in milliseconds. |
+
+The 5/50 gap between the dry-run 50/50 and real-mode 45/50 comes from the 5
+chains in L50 whose shortest derivation requires more than 50,000 visited
+states to find. Measured: with `MAX_STATES=10000` (Amendment A's original
+value), 5 chains' BFS can't find the shortest derivation. With 50,000 it
+can for all but 5 chains. The `MAX_STATES` raise from 10000 to 50000 was
+deliberate (recorded as Amendment A in `docs/pivot-plan.md`).
+
+---
+
+## 9. The adjusted total's weights
+
+`adjusted = clamp(SEE + DO − 0.5 × GZ_mean − 10 × (1 − chainEngagementRate), 0, 100)`
+
+Two hand-chosen weights, both judgement calls, both recorded here rather than
+buried in the formula:
 
 | Weight | Value | Why | Where it comes from |
 |---|---|---|---|
-| `GENERALIZATION_WEIGHT` | 0.5 | A high Generalization Index means held-out points were collected without generalization. Removing them outright would erase a model's real ability; removing half treats surface fit as roughly half a real point. | Judgement. No derivation. |
-| `NO_CONFIDENT_ERROR_POINTS` | 10 | The exact size of the DO component the clawback corrects. | Not a choice — it is `poolANoDetonation`'s maximum in `src/do/score.mjs`. If that component is ever reweighted, this must follow it. |
+| `GENERALIZATION_WEIGHT` | 0.5 | A high `gzMean` means held-out points were collected without generalization. Removing them outright would erase a model's real ability; removing half treats surface fit as roughly half a real point. | Judgement. No derivation. |
+| `NO_CONFIDENT_ERROR_POINTS` | 10 | The exact size of the chain-engagement clawback the adjusted formula applies. | Not a choice — it is the magnitude of the do-nothing-submission penalty. The self-test pins a chain-naive (empty) submission at `0/50` DO with `chainEngagementRate = 0`, which means the clawback fires and the adjusted total floors at 0. |
 
-**The clamp is load-bearing.** A perfect run must read exactly 100, or the adjusted figure
-cannot coexist with the oracle's calibration. `npm run self-test` asserts this directly
-("a perfect run still scores 100/100 adjusted"), along with the floor at 0 and the cap at
-100. If a weight change ever breaks it, the self-test blocks scoring.
+The clamp is load-bearing. A perfect run must read exactly 100, or the
+adjusted figure cannot coexist with the oracle's calibration. `npm run
+self-test` asserts this directly (`synthetic round-trip (SEE 50, DO 50,
+gzMean 0, engagement 1) → 100/100 adjusted`), plus:
 
-**Neither adjustment touches a 50-point score.** `SEE`, `DO`, `GZ` and the Progress Index are
-all reported unchanged; the adjusted total is a reporting layer only. That is why its
-weights are not frozen at a suite version the way the 50-point weights are — nothing
-recorded before this existed is invalidated by changing them.
+```
+(a perfect run still scores 100/100 adjusted)
+(the reference solver is not penalised by the chain-engagement clawback)
+(a perfect run with no engagement supplied is not penalised either)
+(a surface-fitter floors at 0 rather than going negative)
+(the total is clamped at 100 even if a base ever exceeded it)
+```
+
+and the three edge-case pins the user named in the Phase 5 spec:
+
+```
+all-engaged: chainEngagementRate=1 → no clawback, unearnedPenalty=0
+never-engaged: chainEngagementRate=0 → full claw, unearnedPenalty=10
+partially-engaged: chainEngagementRate=0.5 → linear half-claw, unearnedPenalty=5
+```
+
+Neither adjustment touches a 50-point score. `SEE`, `DO`, `gzMean` and
+`chainEngagementRate` are reported unchanged; the adjusted total is a
+reporting layer only.
 
 To see the effect on a real cohort:
 
@@ -337,165 +405,71 @@ To see the effect on a real cohort:
 node bin/chart.mjs docs/cohort-1-local-small.json
 ```
 
----
-
-## 9. DO: Pool A bands (Phase 1)
-
-Pool A's 30 points used to be a coin flip — every model that won one board won
-30, and every model that lost one won 0. Bands split that into a ladder so a
-model that can do easy logic but not hard logic gets partial credit.
-
-### The classification
-
-Each Pool A board is replayed with the oracle in instrumented mode. The
-worst rule the replay needs decides the band:
-
-- **Band 1 (easy)** — every safe move derivable by Rule 2 alone: saturated
-  sets, no subset elimination, no search.
-- **Band 2 (chained)** — Rule 3 (subset elimination) or Rule 5 (global mine
-  count) needed at least once, but never the search.
-- **Band 3 (wall)** — the exact search ran at some point in the replay. These
-  are the positions where propagation stalls and only a consistency check
-  proves the next move.
-
-### Measured histogram
-
-`npm run dry-run -- --bands` runs the classification on every Pool A board:
-
-```
-  BAND HISTOGRAM (Pool A, dry-run measurement)
-    poolA-large    total 100  1 (easy)       0   2 (chained)    94   3 (wall)   6
-    poolA-medium   total 100  1 (easy)       0   2 (chained)    87   3 (wall)  13
-    poolA-small    total 100  1 (easy)       0   2 (chained)    94   3 (wall)   6
-    TOTAL                 300  1 (easy)       0   2 (chained)   275   3 (wall)  25
-```
-
-Band 1 is empty on every shape. The pool's openings are large enough that
-propagation almost always needs subset elimination at some point in the
-replay. Re-generating the pool with sparser openings would give Band 1 boards,
-but that breaks the byte-identical promise for a cosmetic rung.
-
-### The two-band ladder (Amendment A)
-
-Pool A's 30 points split **10 (Band 2, chained) / 20 (Band 3, wall)**, since
-Band 1 has none. A board is `won` with every move proven, as before. Each
-band's contribution is `boards-won-in-band / boards-assigned-to-band × weight`:
-
-- Band 2: 10 × (won / assigned) → 10/10 max
-- Band 3: 20 × (won / assigned) → 20/20 max
-
-The report field is `poolABands: { chained, wall }`. There is no dead `easy`
-key. The empty-band contract is pinned in the self-test.
-
-### Median initial-revealed per band
-
-The histogram also prints the median number of cells the opening reveal
-exposes, per band:
-
-| Band | Median `initialRevealed` |
-|---|---|
-| Band 2 (chained) | 53 cells |
-| Band 3 (wall)    | 27 cells |
-
-Smaller openings land on Band 3 more often — that is the published
-correlation, not a causal one. The "Band 1 is empty because the openings
-are large" story remains a hypothesis; the data above is the measurement.
-
-### Re-deriving
-
-```bash
-npm run dry-run -- --bands    # 450 boards, instrumented replay, ~30s
-```
-
-The histogram is recomputed on every dry run with `--bands`. The self-test
-pins the totals (0 / 275 / 25) so the bands cannot drift without
-self-test failing.
+(Chart-cost x-axis requires a `pricing` field on the combined report;
+the v1.0.0 cohort pipeline updates that on every `npm run all`.)
 
 ---
 
-## 10. DO: Pool B verdict pool (Phase 2)
+## 10. The retired Minesweeper scaffolding (DO pre-1.0.0)
 
-Pool B's 10 points split 4 (stop discipline) + 6 (verdict discipline), so a
-model that stops correctly but cannot reason about stuck positions gets
-partial credit, and a model that reasons correctly but does not stop gets
-penalised.
+Retired with suite 1.0.0. Documented here because the **non-comparability
+note** in `README.md` references these numbers, and a future reader will
+want to know what they were.
 
-### The verdict function
+### The Minesweeper DO (suite 0.1.0 → 0.3.0)
 
-The model writes a second function in the same response as the solver:
+Pool A (300 boards, 3 tiers, deterministic from seed `0x5EED`) + Pool B
+(150 boards, endgame-guess-laying). Per-board classification:
+`won`, `premature_surrender`, `detonation`, `unproven_move`,
+`surrender`, `protocol_violation`. The 50-point score decomposed as:
 
-```js
-verdict(position, claims, mines)
-//   claims: [{ id, row, col }]
-// returns { "<claimId>": "PROVEN_TRUE" | "PROVEN_FALSE" | "CANNOT_TELL" }
+```
+40 × poolA_correctStop + 10 × poolBCorrectStop
++ 0.5 × generalization + 10 × (1 − initiationRate)
 ```
 
-`position` is the canonical stuck board view — the position after the oracle
-plays all proven moves, deterministic per board, independent of the model's
-play. A claim of PROVEN_TRUE asserts the cell is provably a mine.
-PROVEN_FALSE asserts provably safe. CANNOT_TELL admits the position does
-not decide it.
+with the progress index (depth + breadth + initiation) as a separate
+**reported**, never-scored, 15-point axis.
 
-### How claims are sampled
+### Why retired
 
-Three claims per board, sampled from the canonical stuck position with the
-sampler doing a mixed-first pass and then filling with the remaining
-statuses. Two consecutive calls with the same inputs return identical
-cells — the sampler is a pure function of the board.
+The Minesweeper 90-100 score range became a measure of textbook
+constraint-propagation recall, not sustained deduction. The system
+prompt's rules were a single-source-of-truth description of the same
+constraint propagation algorithm — recall of the textbook IS a
+component, but the eval measured only that component.
 
-The published pool's stuck positions are 86% provably_mine, 14% mixed,
-and 0 provably_safe (out of 5393 classified cells across all 150 Pool B
-boards). The mixed-first bias is what makes every board's sample
-include at least one mixed claim; without it, 99/150 boards would have
-all-provably_mine samples and a blanket PROVEN_TRUE would score the
-verdict pool.
+### Numbers preserved for the non-comparability note
 
-### Scoring
-
-A board is `clean` if every response to a decidable claim is
-truth-consistent and no mixed claim was asserted; CANNOT_TELL on
-anything is always sound. A board is `sharp` if, in addition to clean,
-every provable claim was asserted in the right direction and every
-mixed claim was abstained.
-
-| Component | Weight | Formula |
-|---|---|---|
-| Stop discipline | 4 pts | 4 × (correct stops / 150) |
-| Verdict sound   | 4 pts | 4 × (clean boards / 150) |
-| Verdict sharp   | 2 pts | 2 × (sharp boards / 150) |
-
-A model that abstains everywhere (CANNOT_TELL on every claim) loses the
-2 sharp but keeps the 4 sound: 4/6 on the verdict pool. A model that
-asserts PROVEN_TRUE on every claim scores 0/6, because every Pool B
-board has at least one mixed cell and PROVEN_TRUE on a mixed claim is
-unsound.
-
-### Re-deriving
-
-```bash
-npm run self-test   # 149/149; pins the 4/6 abstainer, 0/6 assert-everything
-npm run dry-run    # the reference solver hits 6/6 on a full pool
-```
+- The Minesweeper "Drift / depth / breadth / initiation" axes are gone.
+- The "Pool A / random / effort-cap" properties are gone (Minesweeper
+  boards were 1-shot, not chain-derived).
+- The Minesweeper digests (`b7a62fe68203…` for suite 0.3.0,
+  `f2f520b6f296…` for suite 0.2.0, `69200346a3f1…` for suite 0.1.0)
+  appear nowhere in `src/prompt-digests.mjs` pins — only as a one-line
+  note describing the retired digests. Any score recorded under those
+  digests describes a different experiment and is not comparable to
+  anything at suite 1.0.0.
 
 ---
 
 ## 11. Changing any of this
 
 The rule is that **the pool and the harness must never be able to drift apart.**
-`capForTier` is the single source of the cap, and `do/run.mjs` calls it rather
-than recomputing anything — if the harness carried its own copy of the formula, a
-future change to `CELLS_PER_CALL` would silently produce pools full of boards the
-oracle can win but the model is never allowed to finish.
+`capForTier` (Minesweeper-era) and `MAX_STATES` (chain) are the shared caps
+between pool generation and the scoring harness. The harness carries its own
+copy of the cap rather than recomputing it — if the harness carried a
+separate `MAX_STATES=10000`, the existing pool's BFS-saturated chains
+would silently produce 0-score runs.
 
 | If you change | Then |
 |---|---|
 | A held-out set | Re-run `npm run self-test`. The naive band and shown-example checks will catch a regression. |
-| The oracle or pool classification | Bump `GENERATOR_VERSION` in `pool.mjs`, run `npm run gen-pool`, then `npm run check-pool`. |
-| The effort cap | Re-derive the cells/call table above. Treat per-tier acceptance rates as provisional until re-measured. |
+| A chain pool | Bump `GENERATOR_VERSION` in `src/do/chain/pool.mjs`, run `npm run gen-pool`, then `npm run check-pool`. |
+| The chain BFS cap (`MAX_STATES`, `MAX_STRING_LENGTH`, `MAX_STEPS`, `CHAIN_GEN_BUDGET_MS`) | Re-derive the dry-run / real-mode gap. Phase 7 measured 45/50 with `MAX_STATES=50000`; lowering the cap is fine for the dry-run gate (still 50/50) but raises the real-mode ceiling — see the per-band table above. |
 | A prompt | Update `src/prompt-digests.mjs` and bump the suite version. Any score recorded under the old digest is a different experiment. |
-| `REFERENCE_DEPTH` | Nothing else moves. The oracle stays 15/15 at any value; re-run `npm run self-test` to confirm. |
-| The adjusted weights | Nothing recorded moves either. Update the table in section 8 and re-run the self-test, which pins the oracle at 100. |
+| The adjusted weights | Nothing recorded moves either. Update the table in section 9 and re-run the self-test, which pins the oracle at 100 and the empty-solver adjusted total at 0. |
 
-`npm run check-pool` regenerates the whole pool in memory and compares it byte
-for byte against the published file. It is the check that makes a submitted
-score verifiable.
+`npm run check-pool` regenerates the whole pool in memory and compares it
+byte for byte against the published file. It is the check that makes a
+submitted score verifiable.
