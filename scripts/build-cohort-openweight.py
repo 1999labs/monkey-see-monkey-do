@@ -174,9 +174,23 @@ def summarize(spec: dict) -> dict:
         "seeMax": see.get("max"),
         "do": do.get("total"),
         "doMax": do.get("max"),
+        # Suite 1.2.0 headline is chains SOLVED; the 1.1.0 step-legality ratio
+        # rides alongside so a reader can see why the number moved. DO is not
+        # comparable across the 1.1 -> 1.2 boundary.
+        "do_1_1_0": do.get("total_1_1_0"),
+        "stepLegalityRatio": do.get("stepLegalityRatio"),
+        "doFullCreditChains": do.get("fullCreditChains"),
         # True when the DO call never returned: `do` is a route-failure zero,
-        # not a model score, and `adjusted` is derived from that zero.
+        # not a model score, and `adjusted` is derived from that zero. The
+        # published table prints "DO: no result" for these, never "0/50", so a
+        # reader cannot mistake a dead call for a model that scored nothing.
         "doRouteFailed": doFailed,
+        "doDisplay": "no result" if doFailed else f"{do.get('total')}/50",
+        "doNote": (
+            "no solver emitted within budget; the model reasoned indefinitely "
+            "and produced zero content at every cap tested"
+            if doFailed else None
+        ),
         "doFailureReason": ((r.get("callFailure") or {}).get("do") or {}).get("reason") if doFailed else None,
         "doFullCreditChains": sum(
             (b.get("fullCreditChains") or 0) for b in (do.get("perBand") or {}).values()
@@ -191,6 +205,13 @@ def summarize(spec: dict) -> dict:
         "adjusted_1_0_0": adj.get("total"),
         # An adjusted figure built on a route-failed DO is not a model reading.
         "adjustedComparable": not doFailed,
+        # The per-run DO totals, so a model whose published DO is one sample
+        # from a range shows the range beside it (qwen: [0, 50, 50]).
+        "doRunSpread": {
+            "totals_1_1_0": stability.get("doTotals"),
+            "doCallFailures": stability.get("doCallFailures"),
+            "answeredDoRuns": stability.get("answeredDoRuns"),
+        },
         "stability": {
             "runs": stability.get("runs"),
             "seeSpread": stability.get("seeSpread"),
@@ -232,6 +253,7 @@ def main() -> None:
         "yAxis": "adjusted",
         "runs": 3,
         "temperature": 0,
+        "suiteVersion": "1.2.0",
         "methodology": (
             "Each model scored -r 3 at pinned temperature 0 with "
             "--only-provider <its host> --no-fallback (every model here is "
@@ -253,7 +275,8 @@ def main() -> None:
             f"the 420000ms HTTP budget on every run ({', '.join(doFailed) or 'none'}), "
             f"so their `do` value is a route-failure zero and their `adjusted` is "
             f"derived from it. Only {', '.join(doMeasured) or 'none'} produced a DO "
-            f"score. A failed-call zero is not a model score (AGENTS.md); see "
+            f"score. The published table prints \"DO: no result\" for these, never "
+            f"a number. A failed-call zero is not a model score (AGENTS.md); see "
             f"`doRouteFailed` and `adjustedComparable` on each point."
         ),
         "points": points,

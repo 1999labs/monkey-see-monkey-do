@@ -627,34 +627,155 @@ sound: the verdict compares the model's response text per task across runs,
 while the scored totals can move because a few held-out cases are scored against
 a sandbox that can throw (the robustness term).
 
-**But the verdict is not sound, and that was found while writing this section.**
-`runLevel`'s USABLE return path does not set a `response` field (only its
-failure paths do). `run-all.mjs` builds the SEE prints from
-`run.out.response`, so every usable call hashes the string `"undefined"` — the
-constant `c21f6150`. Every usable call therefore produces the same fingerprint,
-and `reproducibility()` can only ever return REPRODUCIBLE when the calls
-succeed. Verified directly: a dry-run SEE run yields 3 distinct real
-fingerprints under `out.responseFingerprint`, but 1 distinct value under
-`out.response`.
+**This was a real defect and it is now FIXED (suite 1.2.0).** `runLevel`'s
+USABLE return path did not set a `response` field (only its failure paths did).
+`run-all.mjs` builds the SEE prints from `run.out.response`, so every usable
+call hashed the string `"undefined"` — the constant `c21f6150`. Every usable
+call therefore produced the same fingerprint and `reproducibility()` could only
+ever return REPRODUCIBLE when the calls succeeded. Verified directly: a dry-run
+SEE run yields 3 distinct real fingerprints under `out.responseFingerprint`, but
+1 distinct value under `out.response`.
 
-Consequence: **SEE's REPRODUCIBLE verdict is not evidence of anything.** It
-cannot distinguish a deterministic model from a highly variable one. It is
-reported per model in Cohort 1's stability block and must not be quoted as a
-determinism claim until this is fixed. The fix is one line (hash
-`out.responseFingerprint`, which is already computed, or set `response` on the
-usable path), but it changes what a verdict means, so it is left to the user's
-explicit go-ahead rather than bundled into a docs pass.
+Two things were wrong, and both are fixed:
 
-The DO verdict is unaffected: it hashes `doOut.responseFingerprint`, a real
+1. **The usable path never carried the response.** Fixed in
+   `src/see/run-levels.mjs`.
+2. **The prints were grouped by `taskId` alone.** Each task is asked FOUR
+   different questions (one per sample level), so pooling by task compared
+   level 2's answer against level 16's. With the response now carried, that
+   grouping would have reported every deterministic model as
+   NOT_REPRODUCIBLE — wrong in the opposite direction. The key is now
+   `(task, level)`, in both callers.
+
+A test pins it: a dry-run whose responses are varied must yield
+NOT_REPRODUCIBLE, and it fails against the pre-fix code.
+
+**THE `seeVerdict` FIELD IN THE FIVE COMMITTED PHASE 9 REPORTS IS VOID.** The
+code could not have said anything else, so REPRODUCIBLE there is not evidence
+of determinism and must not be quoted. The SEE SCORES are unaffected — they
+derive from held-out pass rates, not from the fingerprint — so the score
+columns stand. No SEE run is being re-run to backfill the verdicts; the void
+field is recorded as a limitation instead.
+
+The DO verdict was never affected: it hashes `doOut.responseFingerprint`, a real
 value, which is why it reports NOT_REPRODUCIBLE for hy3 and qwen3.8-27b.
+
+## 9.7 Suite 1.2.0: the DO headline is chains solved
+
+### What changed, and why
+
+The 1.1.0 DO headline was the **step-legality ratio**: mean over chains of
+`correctSteps / submittedSteps`, times the band weight. A submission containing
+ONE legal step on a chain and nothing else scored that chain as if it were
+solved, so a model that emitted a legal prefix and stopped could reach 50/50
+without deriving anything. The clearest case in the published data is
+gpt-6-luna's earlier smoke: 40.35/50 on the ratio, but only **17 of 50 chains**
+actually reached their target.
+
+1.2.0 makes the headline the **fullCredit fraction**:
+
+    do_total = sum over bands of (fullCreditChains / chainCount) * 10      (max 50)
+
+The legality ratio is kept as a SECONDARY metric (`do.stepLegalityRatio`), so
+the two can be read side by side: the ratio says "how much legal output did it
+emit", the headline says "how many chains did it solve".
+
+**DO scores are NOT comparable across the 1.1 -> 1.2 boundary.** Every report
+carries both readings (`do.total` = 1.2.0, `do.total_1_1_0` = 1.1.0).
+
+### The engagement clawback input moved too
+
+`chainEngagementRate` was "the fraction of chains on which the submission made
+at least one legal step", which any prefix satisfied. It is now the **fullCredit
+fraction** (chains solved / 50). The clawback itself is UNCHANGED: adjusted
+still subtracts `10 * (1 - chainEngagementRate)`, flat. Only the input
+definition moved, which is why one model's clawback went from 9.6 to 10.
+
+### The adjusted formula did NOT change
+
+`GENERALIZATION_WEIGHT`, the earned-fraction GZ scaling, and the flat
+engagement clawback are exactly as in 1.1.0. 1.2.0 changed only the DO score
+definition and the engagement input, so two models' adjusted figures moved and
+the rest did not:
+
+| report | DO 1.1.0 | DO 1.2.0 | adjusted 1.1.0 | adjusted 1.2.0 |
+|---|---|---|---|---|
+| gpt-6-luna (smoke) | 40.35 | **17.00** | 61 | **36** |
+| ollama qwen2.5-coder:7b | 0.54 | **0.00** | 8 | **7** |
+| all ten others | unchanged | unchanged | unchanged | unchanged |
+
+Luna moved because both its DO headline and its engagement fell (17/50 solved,
+so engagement 0.34 rather than 0.92). qwen2.5-coder moved because its 0.54
+legality ratio came from partial steps that never solved a chain, so its
+engagement fell to 0 and it takes the full clawback.
+
+### The DO output cap (runaway guard, not a scoring parameter)
+
+The chat adapter sent NO `max_tokens`, so the DO call was bounded only by the
+420000ms wall clock. That is the configuration where "slow" and "runaway" are
+indistinguishable, and a timeout keeps no partial text. Cohort 1 sets
+`maxTokens: 65536`:
+
+**THE CAP MUST EXCEED THE LARGEST OBSERVED SUCCESSFUL SOLVER'S COMPLETION
+TOKENS.** hy3's successful solver used 37285, so 65536 clears it with margin. A
+cap below that silently truncates a working model, which is the worst failure
+mode available because it looks like a model that cannot solve. Raise the number
+if a future model emits a larger solver; never lower it below the largest
+successful one.
+
+This is a GUARD for future runs. The five committed Cohort 1 DO results predate
+it and were produced without a cap.
+
+### Why a cap cannot fix the Cohort 1 timeouts
+
+Three of five Cohort 1 models timed out on DO. A cap was tested (item 2a) and
+does not help: MiMo returned `finish_reason: "length"` with reasoning tokens
+equal to the cap (16003/16000, 32004/32000) and **zero characters of content**
+at both 16000 and 32000. The hidden trace is 58028 chars of coherent,
+non-repeating analysis — not a loop — cut off mid-sentence. The model is not
+slow and not looping; it never reaches the code-writing step. Only a prompt
+change can address that, and prompts are digest-pinned, so it is a separate
+deliberate decision.
+
+### Item 2c: identical requests, 240x apart
+
+The same prompt and the same 16000 cap took 410889ms through the repo's DO path
+and 1757ms via a direct probe. Diffing the two requests, the differences are
+narrow: the adapter adds `HTTP-Referer` and `X-Title` headers, uses
+`temperature: 0` (the probe did too), and pins the provider identically. The
+wall-clock difference is therefore not explained by the request shape; the same
+prompt re-sent later through the same direct path was itself slow. That points
+at provider-side queueing/variance on the Xiaomi endpoint rather than a
+path artifact, which means a larger timeout would still be a coin flip. No
+change is made on the basis of this finding.
+
+---
 
 ## 10. Suite history at a glance
 
 Suite 1.0.0 replaced DO's original task design with the chain eval; suite
 1.1.0 rescaled the adjusted total's GZ penalty to the earned-fraction form
-(section 9). The full decision trail, including the reasons each change was
-made, lives in `docs/pivot-plan.md` (Amendments A through E). This file
-records only what the current numbers mean; history lives there.
+(section 9); suite 1.2.0 made the DO headline the fullCredit fraction (chains
+solved) instead of the step-legality ratio, redefined chainEngagementRate as
+that same fraction, and fixed the SEE reproducibility verdict (section 9.6,
+9.7). The adjusted FORMULA is unchanged across 1.1 → 1.2. The full decision
+trail lives in `docs/pivot-plan.md` (Amendments A through E). This file records
+only what the current numbers mean; history lives there.
+
+### Comparability across the boundary
+
+| reading | comparable from | to |
+|---|---|---|
+| SEE score | 1.0.0 | 1.2.0 (unchanged) |
+| SEE `seeVerdict` | — | void before 1.2.0 (section 9.6) |
+| DO score | 1.2.0 | 1.2.0 — NOT comparable with any 1.1.0 or earlier DO |
+| adjusted | 1.1.0 | 1.2.0, but its DO input moved, so figures differ where DO did |
+| temperature | any | any, within the same sampling regime |
+
+Every combined report carries both DO readings (`do.total` = 1.2.0,
+`do.total_1_1_0` = 1.1.0) and both adjusted readings
+(`adjusted.total_1_2_0`, `adjusted.total_1_1_0`), so a reader can reconstruct
+either.
 
 ---
 

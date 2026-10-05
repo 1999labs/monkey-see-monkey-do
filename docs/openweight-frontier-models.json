@@ -1,13 +1,13 @@
 {
   "cohort": "Cohort 1 \u2014 open-weight frontier models (OpenRouter)",
-  "suiteVersion": "1.1.0",
+  "suiteVersion": "1.2.0",
   "date": "2026-10-05",
   "xAxis": "costUsd",
   "yAxis": "adjusted",
   "runs": 3,
   "temperature": 0,
   "methodology": "Each model scored -r 3 at pinned temperature 0 with --only-provider <its host> --no-fallback (every model here is multi-endpoint on OpenRouter, so an unpinned run would mix quantizations). Cost is dollars per run under the pinned host, at the pinned-endpoint rates in config/openrouter-rates.json (NOT the model-level list rate); where a DO call never returned, its half of the cost is unmeasured and `costComplete` is false. A per-model reasoning-effort rung is recorded beside each score: effort is a confound on the order of temperature, the ladders differ per model, and an unset effort means the parameter was omitted and the provider default applied.",
-  "doMeasurementCaveat": "3 of 5 models had their DO call time out at the 420000ms HTTP budget on every run (DeepSeek V4.1 Flash, MiMo V2.6 Pro, GLM 5.3), so their `do` value is a route-failure zero and their `adjusted` is derived from it. Only Qwen 3.8 27B, Hy3 produced a DO score. A failed-call zero is not a model score (AGENTS.md); see `doRouteFailed` and `adjustedComparable` on each point.",
+  "doMeasurementCaveat": "3 of 5 models had their DO call time out at the 420000ms HTTP budget on every run (DeepSeek V4.1 Flash, MiMo V2.6 Pro, GLM 5.3), so their `do` value is a route-failure zero and their `adjusted` is derived from it. Only Qwen 3.8 27B, Hy3 produced a DO score. The published table prints \"DO: no result\" for these, never a number. A failed-call zero is not a model score (AGENTS.md); see `doRouteFailed` and `adjustedComparable` on each point.",
   "points": [
     {
       "model": "openrouter/deepseek/deepseek-v4.1-flash",
@@ -28,18 +28,35 @@
       "seeMax": 50,
       "do": 0,
       "doMax": 50,
-      "doRouteFailed": true,
-      "doFailureReason": "timeout",
+      "do_1_1_0": null,
+      "stepLegalityRatio": null,
       "doFullCreditChains": null,
+      "doRouteFailed": true,
+      "doDisplay": "no result",
+      "doNote": "no solver emitted within budget; the model reasoned indefinitely and produced zero content at every cap tested",
+      "doFailureReason": "timeout",
       "chainEngagementRate": 0,
       "gzMean": 18,
       "base": 39,
       "gzMeanPenalty": 3.51,
       "unearnedPenalty": 10,
       "adjusted": 25,
-      "adjusted_1_1_0": null,
+      "adjusted_1_1_0": 25,
       "adjusted_1_0_0": 25,
       "adjustedComparable": false,
+      "doRunSpread": {
+        "totals_1_1_0": [
+          0,
+          0,
+          0
+        ],
+        "doCallFailures": [
+          true,
+          true,
+          true
+        ],
+        "answeredDoRuns": 0
+      },
       "stability": {
         "runs": 3,
         "seeSpread": 0,
@@ -118,18 +135,35 @@
       "seeMax": 50,
       "do": 0,
       "doMax": 50,
-      "doRouteFailed": true,
-      "doFailureReason": "timeout",
+      "do_1_1_0": null,
+      "stepLegalityRatio": null,
       "doFullCreditChains": null,
+      "doRouteFailed": true,
+      "doDisplay": "no result",
+      "doNote": "no solver emitted within budget; the model reasoned indefinitely and produced zero content at every cap tested",
+      "doFailureReason": "timeout",
       "chainEngagementRate": 0,
       "gzMean": 19.25,
       "base": 36,
       "gzMeanPenalty": 3.46,
       "unearnedPenalty": 10,
       "adjusted": 23,
-      "adjusted_1_1_0": null,
+      "adjusted_1_1_0": 23,
       "adjusted_1_0_0": 23,
       "adjustedComparable": false,
+      "doRunSpread": {
+        "totals_1_1_0": [
+          0,
+          0,
+          0
+        ],
+        "doCallFailures": [
+          true,
+          true,
+          true
+        ],
+        "answeredDoRuns": 0
+      },
       "stability": {
         "runs": 3,
         "seeSpread": 3,
@@ -212,18 +246,35 @@
       "seeMax": 50,
       "do": 0,
       "doMax": 50,
-      "doRouteFailed": true,
-      "doFailureReason": "timeout",
+      "do_1_1_0": null,
+      "stepLegalityRatio": null,
       "doFullCreditChains": null,
+      "doRouteFailed": true,
+      "doDisplay": "no result",
+      "doNote": "no solver emitted within budget; the model reasoned indefinitely and produced zero content at every cap tested",
+      "doFailureReason": "timeout",
       "chainEngagementRate": 0,
       "gzMean": 21.67,
       "base": 38,
       "gzMeanPenalty": 4.12,
       "unearnedPenalty": 10,
       "adjusted": 24,
-      "adjusted_1_1_0": null,
+      "adjusted_1_1_0": 24,
       "adjusted_1_0_0": 24,
       "adjustedComparable": false,
+      "doRunSpread": {
+        "totals_1_1_0": [
+          0,
+          0,
+          0
+        ],
+        "doCallFailures": [
+          true,
+          true,
+          true
+        ],
+        "answeredDoRuns": 0
+      },
       "stability": {
         "runs": 3,
         "seeSpread": 7,
@@ -302,20 +353,37 @@
       ],
       "see": 39,
       "seeMax": 50,
-      "do": 50,
+      "do": 50.0,
       "doMax": 50,
-      "doRouteFailed": false,
-      "doFailureReason": null,
+      "do_1_1_0": 50,
+      "stepLegalityRatio": 1.0,
       "doFullCreditChains": 50,
-      "chainEngagementRate": 1,
+      "doRouteFailed": false,
+      "doDisplay": "50.0/50",
+      "doNote": null,
+      "doFailureReason": null,
+      "chainEngagementRate": 1.0,
       "gzMean": 18.83,
       "base": 89,
       "gzMeanPenalty": 8.38,
       "unearnedPenalty": 0,
       "adjusted": 81,
-      "adjusted_1_1_0": null,
+      "adjusted_1_1_0": 81,
       "adjusted_1_0_0": 81,
       "adjustedComparable": true,
+      "doRunSpread": {
+        "totals_1_1_0": [
+          0,
+          50,
+          50
+        ],
+        "doCallFailures": [
+          false,
+          false,
+          false
+        ],
+        "answeredDoRuns": 3
+      },
       "stability": {
         "runs": 3,
         "seeSpread": 0,
@@ -410,20 +478,37 @@
       ],
       "see": 38,
       "seeMax": 50,
-      "do": 50,
+      "do": 50.0,
       "doMax": 50,
-      "doRouteFailed": false,
-      "doFailureReason": null,
+      "do_1_1_0": 50,
+      "stepLegalityRatio": 1.0,
       "doFullCreditChains": 50,
-      "chainEngagementRate": 1,
+      "doRouteFailed": false,
+      "doDisplay": "50.0/50",
+      "doNote": null,
+      "doFailureReason": null,
+      "chainEngagementRate": 1.0,
       "gzMean": 20.17,
       "base": 88,
       "gzMeanPenalty": 8.87,
       "unearnedPenalty": 0,
       "adjusted": 79,
-      "adjusted_1_1_0": null,
+      "adjusted_1_1_0": 79,
       "adjusted_1_0_0": 79,
       "adjustedComparable": true,
+      "doRunSpread": {
+        "totals_1_1_0": [
+          0,
+          50,
+          50
+        ],
+        "doCallFailures": [
+          true,
+          false,
+          false
+        ],
+        "answeredDoRuns": 2
+      },
       "stability": {
         "runs": 3,
         "seeSpread": 2,

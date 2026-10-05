@@ -94,7 +94,7 @@
     }
   },
   "do": {
-    "total": 1,
+    "total": 0.0,
     "max": 50,
     "usable": true,
     "compileError": null,
@@ -140,24 +140,44 @@
         "partialChains": 0
       }
     },
-    "chainEngagementRate": 0.04,
+    "chainEngagementRate": 0.0,
     "poolSha256": "dc98e89e5541b9d83ad22663940a62fe8ade3020975b6071319ae41069b08113",
-    "fullPool": true
+    "fullPool": true,
+    "suite_1_1_0": {
+      "total": 1,
+      "chainEngagementRate": 0.04,
+      "note": "pre-1.2.0: total was the step-legality ratio; engagement was 'made at least one legal step'."
+    },
+    "total_1_1_0": 0.54,
+    "stepLegalityRatio": 0.0108,
+    "fullCreditChains": 0,
+    "doRouteFailed": false
   },
   "combined": {
-    "total": 19.54,
+    "total": 19.0,
     "max": 100,
     "reading": [
-      "MONKEY SEE         14.07/45   weighted: A=34.0%  B=36.0%  C=23.8%",
-      "GZ (per level): L2=26.7%  L4=21.7%  L8=8.7%  L16=29.6%  GZ_mean=21.65%",
-      "MONKEY DO (v2)    0.54/50   0/50 chains full credit, 2 partial",
-      "SEE 14/45 + DO 0.54/50 = combined 14.61/95"
+      "  MONKEY SEE         19.00/50   weighted: A=34.0%  B=36.0%  C=23.8%",
+      "    task points 14.07/45 + robustness 4.93/5",
+      "    GZ (per level): L2=26.7%  L4=21.7%  L8=8.7%  L16=29.6%  GZ_mean=21.65%",
+      "  MONKEY DO          0.0/50   0/50 chains full credit, 0 partial",
+      "  SEE 19/50 + DO 0.0/50 = combined 19/100"
     ],
     "perRunTotals": [
       19.54,
       19.54,
       19.54
-    ]
+    ],
+    "reading_revision": {
+      "revised": "2026-10-05",
+      "reason": "The reading understated SEE by omitting the robustness points (it summed only the 45 task points) and printed a combined denominator of 95 while combined.max is 100. SEE is out of 50 (45 task + 5 robustness); the combined total is out of 100. The stale '(v2)' label was also dropped.",
+      "before": [
+        "MONKEY SEE         14.07/45   weighted: A=34.0%  B=36.0%  C=23.8%",
+        "GZ (per level): L2=26.7%  L4=21.7%  L8=8.7%  L16=29.6%  GZ_mean=21.65%",
+        "MONKEY DO (v2)    0.54/50   0/50 chains full credit, 2 partial",
+        "SEE 14/45 + DO 0.54/50 = combined 14.61/95"
+      ]
+    }
   },
   "cost": {
     "see": {
@@ -178,7 +198,7 @@
     }
   },
   "adjusted": {
-    "total": 0,
+    "total": 7,
     "max": 100,
     "base": 19.54,
     "generalizationIndexPenalty": 10.82,
@@ -205,7 +225,18 @@
       "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
       "formulaVersion": "1.1.0"
     },
-    "formulaVersion_1_1_0": "1.1.0"
+    "formulaVersion_1_1_0": "1.1.0",
+    "total_1_2_0": 7,
+    "total_1_2_0_components": {
+      "base": 19,
+      "gzMeanPenalty": 2.06,
+      "unearnedPenalty": 10,
+      "earnedFraction": 0.19,
+      "chainEngagementRate": 0,
+      "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+      "formulaVersion": "1.2.0",
+      "note": "formula unchanged from 1.1.0; the DO score and the engagement input are 1.2.0 definitions."
+    }
   },
   "stability": {
     "runs": 3,

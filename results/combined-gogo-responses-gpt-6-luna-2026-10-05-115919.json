@@ -99,20 +99,40 @@
     "perBand": {},
     "chainEngagementRate": 0,
     "poolSha256": "dc98e89e5541b9d83ad22663940a62fe8ade3020975b6071319ae41069b08113",
-    "fullPool": true
+    "fullPool": true,
+    "suite_1_1_0": {
+      "total": 0,
+      "chainEngagementRate": 0,
+      "note": "pre-1.2.0: total was the step-legality ratio; engagement was 'made at least one legal step'."
+    },
+    "total_1_1_0": null,
+    "stepLegalityRatio": null,
+    "fullCreditChains": null,
+    "doRouteFailed": true
   },
   "combined": {
     "total": 0,
     "max": 100,
     "reading": [
-      "MONKEY SEE         0.00/45   weighted: A=0.0%  B=0.0%  C=0.0%",
-      "GZ (per level): L2=0.0%  L4=0.0%  L8=0.0%  L16=0.0%  GZ_mean=0.00%",
-      "MONKEY DO (v2)    0/50   0/50 chains full credit, 0 partial",
-      "SEE 0/45 + DO 0/50 = combined 0/95"
+      "  MONKEY SEE         0.00/50   weighted: A=0.0%  B=0.0%  C=0.0%",
+      "    task points 0.00/45 + robustness 0.00/5",
+      "    GZ (per level): L2=n/a  L4=n/a  L8=n/a  L16=n/a  GZ_mean=0.00%",
+      "  MONKEY DO          0/50   0/50 chains full credit, 0 partial",
+      "  SEE 0/50 + DO 0/50 = combined 0/100"
     ],
     "perRunTotals": [
       0
-    ]
+    ],
+    "reading_revision": {
+      "revised": "2026-10-05",
+      "reason": "The reading understated SEE by omitting the robustness points (it summed only the 45 task points) and printed a combined denominator of 95 while combined.max is 100. SEE is out of 50 (45 task + 5 robustness); the combined total is out of 100. The stale '(v2)' label was also dropped.",
+      "before": [
+        "MONKEY SEE         0.00/45   weighted: A=0.0%  B=0.0%  C=0.0%",
+        "GZ (per level): L2=0.0%  L4=0.0%  L8=0.0%  L16=0.0%  GZ_mean=0.00%",
+        "MONKEY DO (v2)    0/50   0/50 chains full credit, 0 partial",
+        "SEE 0/45 + DO 0/50 = combined 0/95"
+      ]
+    }
   },
   "cost": {
     "see": {
@@ -158,7 +178,18 @@
       "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
       "formulaVersion": "1.1.0"
     },
-    "formulaVersion_1_1_0": "1.1.0"
+    "formulaVersion_1_1_0": "1.1.0",
+    "total_1_2_0": 0,
+    "total_1_2_0_components": {
+      "base": 0,
+      "gzMeanPenalty": 0.0,
+      "unearnedPenalty": 10,
+      "earnedFraction": 0,
+      "chainEngagementRate": 0,
+      "formula": "clamp(see + do - 0.5*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
+      "formulaVersion": "1.2.0",
+      "note": "formula unchanged from 1.1.0; the DO score and the engagement input are 1.2.0 definitions."
+    }
   },
   "stability": null,
   "reports": {

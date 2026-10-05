@@ -70,8 +70,8 @@ See [`docs/scoring-models.md`](docs/scoring-models.md) for the report formats.
 Each eval is out of 50. Each also reports a second, unscored axis that catches the
 same cheat from the opposite direction: Monkey See reports the **Generalization
 Index** (did performance carry from shown examples to held-out inputs?), Monkey Do
-the **chain-engagement rate** (did the solver make at least one legal step per
-chain?). An **adjusted** total (out of 100) folds both into one number to plot,
+the **chain-engagement rate** (what fraction of chains did the solver actually
+solve?). An **adjusted** total (out of 100) folds both into one number to plot,
 never overwriting the raw scores:
 
 ```
@@ -84,6 +84,13 @@ adjusted = clamp( SEE + DO  −  0.5 × GZ_mean × ((SEE + DO) / 100)
   actually earned.
 - The engagement term claws back the points a do-nothing submission would
   otherwise collect for free; it is deliberately unscaled.
+- **DO counts chains solved.** A chain scores 1.0 only when the submission
+  reaches its target by legal moves; the fraction of such chains, times each
+  band's weight, is the DO total. The older reading (the ratio of legal steps to
+  submitted steps) is kept beside it as `stepLegalityRatio`, because it
+  distinguishes "emitted a legal prefix" from "emitted nothing" — but a
+  one-legal-step submission scored 50/50 on it, which is why it is no longer the
+  headline.
 
 The full machinery - SEE's sample-efficiency weights, DO's chain pool and scoring
 contract, the random-walk baseline, the reference solver's two modes, worked
@@ -94,6 +101,11 @@ recorded with its re-derivation command in
 
 ## Results
 
+**All scores are suite 1.2.0.** Every asserted number, and how it was measured,
+lives in [`docs/calibration.md`](docs/calibration.md). DO scores are **not**
+comparable across the 1.1 → 1.2 boundary: 1.2.0 changed the DO headline from the
+step-legality ratio to the fraction of chains actually solved.
+
 ### Cohort 1
 
 Open-weight frontier models on OpenRouter, one per family: Qwen/Qwen3.8-27B,
@@ -103,44 +115,46 @@ per-model reasoning-effort rung recorded beside its score; cost is dollars per
 run under the pinned host. Methodology in
 [`docs/openweight-frontier-models.json`](docs/openweight-frontier-models.json).
 
-> **The DO column is not a model measurement for most of this cohort.** Three of
-> the five models had their DO call time out at the 420-second HTTP budget on
-> every run, so their DO figure is a **route-failure zero** and their adjusted
-> figure is derived from it. Read those two columns against the DO row below,
-> never on their own. A failed-call zero is not a score.
+| model | host | effort | SEE | DO | fullCredit | stepLegality | GZ | engagement | adjusted | cost/run |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `qwen/qwen3.8-27b` | Alibaba | medium | 39 | **50** ‡ | 50/50 | 50.0 | 18.8 | 1.00 | **81** | $0.060 |
+| `tencent/hy3` | Tencent | high | 38 | **50** | 50/50 | 50.0 | 20.2 | 1.00 | **79** | $0.076 |
+| `z-ai/glm-5.3` | Z.AI | high | 38 | no result † | — | — | 21.7 | — | withheld | $0.035 |
+| `xiaomi/mimo-v2.6-pro` | Xiaomi | unset | 36 | no result † | — | — | 19.3 | — | withheld | $0.018 |
+| `deepseek/deepseek-v4.1-flash` | DeepInfra | high | 39 | no result † | — | — | 18.0 | — | withheld | $0.015 |
 
-| model | host | effort | SEE | DO | fullCredit | adjusted | cost/run |
-|---|---|---|---|---|---|---|---|
-| `qwen/qwen3.8-27b` | Alibaba | medium | 39 | **50** | 50/50 | **81** | $0.060 |
-| `tencent/hy3` | Tencent | high | 38 | **50** | 50/50 | **79** | $0.076 |
-| `z-ai/glm-5.3` | Z.AI | high | 38 | 0 † | — | 24 † | $0.035 |
-| `xiaomi/mimo-v2.6-pro` | Xiaomi | unset | 36 | 0 † | — | 23 † | $0.018 |
-| `deepseek/deepseek-v4.1-flash` | DeepInfra | high | 39 | 0 † | — | 25 † | $0.015 |
+† **No DO result — not a zero.** The DO call timed out at the 420000 ms budget on
+all three runs (`callFailure.do.reason: "timeout"`): *no solver was emitted
+within budget; the model reasoned indefinitely and produced zero content at
+every cap tested.* The adjusted figure is derived from that dead call, so it is
+**withheld** rather than printed beside Hy3's and Qwen's. The cohort JSON marks
+each with `doRouteFailed: true` and `adjustedComparable: false`.
 
-† **DO route failure, not a model score.** The DO call timed out at 420000 ms on
-all three runs (`callFailure.do.reason: "timeout"`), so the zero says nothing
-about the model and the adjusted figure inherits it. The cohort JSON marks each
-with `doRouteFailed: true` and `adjustedComparable: false`.
+‡ **Qwen 3.8 27B's DO is one sample from a range.** Its three DO runs scored
+`[0, 50, 50]` — three different solvers, one of which failed outright — so the
+published 50 is a median-of-answered, not a stable measurement. Spread 50.
+
+The DO column is the eval's intended signal: it separates models that **emit a
+solver** from models that **will not**. Two of five emitted one; three did not,
+and that is a result about the models, not a missing number.
 
 ![Cohort 1 chart](docs/openweight-frontier-models.svg)
 
 *Adjusted score against dollars per run for five open-weight models, pinned to
-one host each, temperature 0, -r 3 under suite 1.1.0. Three points sit at the
+one host each, temperature 0, -r 3 under suite 1.2.0. Three points sit at the
 floor only because their DO call never returned; the two that produced a DO
 score (Qwen 3.8 27B, Hy3) are the only comparable readings.*
 
-**Stability.** SEE was REPRODUCIBLE for four of five (spreads 0, 0, 2, 3, 7);
-GLM's SEE spread was 7. DO was NOT_REPRODUCIBLE where it was measurable at all:
-Qwen 3.8 27B answered all three runs with three *different* solvers scoring
-0, 50, 50; Hy3 answered twice with different code that both scored 50/50. The
-three timed-out models have no DO verdict (`NO_VERDICT`, 0 answered runs).
+**Stability.** DO was NOT_REPRODUCIBLE wherever it was measurable: Qwen 3.8 27B
+answered all three runs with three *different* solvers; Hy3 answered twice with
+different code that both scored 50/50. The three timed-out models have no DO
+verdict (`NO_VERDICT`, 0 answered runs). SEE's per-model `seeVerdict` field in
+these reports is **void** — the code could not have said anything but
+REPRODUCIBLE (see calibration §9.6) — so it is not quoted here.
 
-**What this cohort actually measured.** SEE discriminated cleanly and
-reproducibly across the cohort (36-39 of 50, spread ≤ 7). DO did not: only two
-of five models returned a solver inside the call budget, and one of those two
-changed its solver between runs. The honest reading is that at these reasoning
-efforts, this harness's DO call is measuring the 420-second timeout more than it
-is measuring the models.
+**What this cohort actually measured.** SEE discriminated cleanly across the
+cohort (36-39 of 50). DO did not: only two of five models returned a solver
+inside the call budget, and one of those two changed its solver between runs.
 
 Re-derive from a fresh clone (no model calls; reads the committed reports):
 
@@ -150,24 +164,29 @@ python3 scripts/build-cohort-openweight.py && node bin/chart.mjs docs/openweight
 
 ### Cohort 2
 
-Five small local Ollama models, each scored `-r 3` at temperature 0 (spreads 0,
-REPRODUCIBLE on both evals; methodology in
+Five small local Ollama models, each scored `-r 3` at temperature 0 (spreads 0
+on both evals; methodology in
 [`docs/ollama-local-models.json`](docs/ollama-local-models.json)). The **adjusted**
 column is the one used in the Pareto chart; the **penalties** column shows both formula
 components so a reader sees why each figure is what it is.
 
+Numbers below are the suite **1.2.0** readings. Only `qwen2.5-coder:7b` moved from
+1.1.0 (adjusted 8 → 7): its 1.1.0 DO of 0.54 came from partial steps that never
+solved a chain, so under the 1.2.0 fullCredit definition its DO and engagement
+both fell to 0 and it takes the full clawback. The other four were already 0.
+
 | model | paramsB | SEE | DO | gzMean | engagement | **adjusted** | penalties |
 |---|---|---|---|---|---|---|---|
-| `deepseek-coder:6.7b` | 6.7 | 20 | 0 | 16.9 | 0    | **8** | −1.69 GZ, −10 claw |
-| `qwen2.5-coder:7b`    | 7.6 | 19 | 1 | 21.65 | 0.04 | **8** | −2.16 GZ, −9.6 claw |
-| `mistral:7b-instruct` | 7.0 | 13 | 0 |  7.06 | 0    | **3** | −0.46 GZ, −10 claw |
-| `llama3.2:3b`         | 3.2 | 18 | 0 | 24.9 | 0    | **6** | −2.24 GZ, −10 claw |
-| `gemma2:2b`           | 2.0 | 14 | 0 | 20.12 | 0    | **3** | −1.41 GZ, −10 claw |
+| `deepseek-coder:6.7b` | 6.7 | 20 | 0 | 16.9 | 0 | **8** | −1.69 GZ, −10 claw |
+| `qwen2.5-coder:7b`    | 7.6 | 19 | 0 | 21.65 | 0 | **7** | −2.06 GZ, −10 claw |
+| `mistral:7b-instruct` | 7.0 | 13 | 0 |  7.06 | 0 | **3** | −0.46 GZ, −10 claw |
+| `llama3.2:3b`         | 3.2 | 18 | 0 | 24.9 | 0 | **6** | −2.24 GZ, −10 claw |
+| `gemma2:2b`           | 2.0 | 14 | 0 | 20.12 | 0 | **3** | −1.41 GZ, −10 claw |
 
 ![Cohort chart](docs/ollama-local-models.svg)
 
 *Adjusted score against parameter count (billions) for five local Ollama models
-under 8B, scored -r 3 at temperature 0 under suite 1.1.0. The reference solver sits
+under 8B, scored -r 3 at temperature 0 under suite 1.2.0. The reference solver sits
 at 100, far above every model.*
 
 Every model's DO score is near zero, and that is the finding, not a defect: none of
