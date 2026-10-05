@@ -96,7 +96,7 @@ recorded with its re-derivation command in
 
 ### Cohort 1
 
-Open-weight frontier models on OpenRouter, one per family: Qwen/Qwen3.8-2.4T-A95B,
+Open-weight frontier models on OpenRouter, one per family: Qwen/Qwen3.8-27B,
 deepseek-ai/DeepSeek-V4.1-Flash, zai-org/GLM-5.3, XiaomiMiMo/MiMo-V2.6-Pro,
 tencent/Hy3.
 

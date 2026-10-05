@@ -452,7 +452,7 @@ test("rateFor resolves an OpenRouter slug from the committed table and misses cl
   assert.equal(hit.outputPer1M, 4.4);
   // Every cohort member must resolve, or a run would stamp unpriced.
   for (const id of [
-    "qwen/qwen3.8-2.4t-a95b",
+    "qwen/qwen3.8-27b",
     "deepseek/deepseek-v4.1-flash",
     "z-ai/glm-5.3",
     "xiaomi/mimo-v2.6-pro",
@@ -572,7 +572,7 @@ test("the OpenRouter rate table carries the PINNED-endpoint rates, with the host
   const expect = {
     "z-ai/glm-5.3": { provider: "Z.AI", in: 1.4, out: 4.4 },
     "deepseek/deepseek-v4.1-flash": { provider: "DeepInfra", in: 0.14, out: 0.42 },
-    "qwen/qwen3.8-2.4t-a95b": { provider: "Alibaba", in: 2.0, out: 6.0 },
+    "qwen/qwen3.8-27b": { provider: "Alibaba", in: 0.425, out: 2.55 },
     "xiaomi/mimo-v2.6-pro": { provider: "Xiaomi", in: 0.435, out: 0.87 },
     "tencent/hy3": { provider: "Tencent", in: 0.132, out: 0.528 },
   };

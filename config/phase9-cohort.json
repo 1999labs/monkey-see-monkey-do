@@ -21,20 +21,13 @@
     "--no-fallback or the score mixes quantizations.",
     "",
     "Rates live in config/openrouter-rates.json (dated); this file does not carry them.",
-    "deepseek/deepseek-v4.1-flash is pinned to DeepInfra, not DeepSeek: the first-party endpoint is excluded by this account's privacy setting. Pass --only-provider DeepInfra for that row."
+    "deepseek/deepseek-v4.1-flash is pinned to DeepInfra, not DeepSeek: the first-party endpoint is excluded by this account's privacy setting. Pass --only-provider DeepInfra for that row.",
+    "qwen/qwen3.8-27b replaced qwen/qwen3.8-2.4t-a95b by user decision before its run; same effort ladder (xhigh/medium/low), pinned to Alibaba at 0.425/2.55."
   ],
   "cohort": "Cohort 1 \u2014 open-weight frontier models (OpenRouter)",
   "_asOf": "2026-10-05",
   "_source": "https://openrouter.ai/api/v1/models",
   "models": {
-    "openrouter/qwen/qwen3.8-2.4t-a95b": {
-      "adapter": "openai",
-      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
-      "model": "qwen/qwen3.8-2.4t-a95b",
-      "apiKeyEnv": "OPENROUTER_API_KEY",
-      "supportsTemperatureZero": null,
-      "reasoningEffort": "medium"
-    },
     "openrouter/deepseek/deepseek-v4.1-flash": {
       "adapter": "openai",
       "endpoint": "https://openrouter.ai/api/v1/chat/completions",
@@ -65,6 +58,14 @@
       "apiKeyEnv": "OPENROUTER_API_KEY",
       "supportsTemperatureZero": null,
       "reasoningEffort": "high"
+    },
+    "openrouter/qwen/qwen3.8-27b": {
+      "adapter": "openai",
+      "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+      "model": "qwen/qwen3.8-27b",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "supportsTemperatureZero": null,
+      "reasoningEffort": "medium"
     }
   }
 }

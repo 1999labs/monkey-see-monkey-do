@@ -29,8 +29,8 @@ OUT = REPO / "docs" / "openweight-frontier-models.json"
 # omitted (the provider default applied) — it is NOT the level "none".
 COHORT = [
     {
-        "model": "openrouter/qwen/qwen3.8-2.4t-a95b",
-        "label": "Qwen 3.8 2.4T A95B",
+        "model": "openrouter/qwen/qwen3.8-27b",
+        "label": "Qwen 3.8 27B",
         "provider": "Alibaba",
         "color": "#7c3aed",
         "effort": "medium",
@@ -72,7 +72,7 @@ COHORT = [
 
 # Label placement so the dots do not collide on a log-ish cost axis.
 LABEL_PLACEMENT = {
-    "openrouter/qwen/qwen3.8-2.4t-a95b":       {"dx": 14, "dy": -8, "anchor": "start"},
+    "openrouter/qwen/qwen3.8-27b":             {"dx": 14, "dy": -8, "anchor": "start"},
     "openrouter/deepseek/deepseek-v4.1-flash": {"dx": 14, "dy": -8, "anchor": "start"},
     "openrouter/z-ai/glm-5.3":                 {"dx": -14, "dy": -8, "anchor": "end"},
     "openrouter/xiaomi/mimo-v2.6-pro":         {"dx": 14, "dy": 4, "anchor": "start"},
@@ -83,7 +83,7 @@ LABEL_PLACEMENT = {
 def report_slug(model: str) -> str:
     """Mirror src/report.mjs slug(): non [a-zA-Z0-9._-] runs become '-'.
 
-    'openrouter/qwen/qwen3.8-2.4t-a95b' -> 'openrouter-qwen-qwen3.8-2.4t-a95b',
+    'openrouter/qwen/qwen3.8-27b' -> 'openrouter-qwen-qwen3.8-27b',
     which is what the runner puts in the combined report's filename.
     """
     import re

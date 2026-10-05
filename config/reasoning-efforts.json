@@ -25,17 +25,29 @@
   "_source": "https://openrouter.ai/api/v1/models",
   "models": {
     "qwen/qwen3.8-2.4t-a95b": {
-      "supportedEfforts": ["xhigh", "medium", "low"],
+      "supportedEfforts": [
+        "xhigh",
+        "medium",
+        "low"
+      ],
       "defaultEffort": "xhigh",
       "mandatory": true
     },
     "deepseek/deepseek-v4.1-flash": {
-      "supportedEfforts": ["max", "high", "low"],
+      "supportedEfforts": [
+        "max",
+        "high",
+        "low"
+      ],
       "defaultEffort": "high",
       "mandatory": false
     },
     "z-ai/glm-5.3": {
-      "supportedEfforts": ["max", "high", "low"],
+      "supportedEfforts": [
+        "max",
+        "high",
+        "low"
+      ],
       "defaultEffort": "max",
       "mandatory": true
     },
@@ -45,9 +57,22 @@
       "mandatory": false
     },
     "tencent/hy3": {
-      "supportedEfforts": ["high", "low", "none"],
+      "supportedEfforts": [
+        "high",
+        "low",
+        "none"
+      ],
       "defaultEffort": "high",
       "mandatory": false
+    },
+    "qwen/qwen3.8-27b": {
+      "supportedEfforts": [
+        "xhigh",
+        "medium",
+        "low"
+      ],
+      "defaultEffort": "xhigh",
+      "mandatory": true
     }
   }
 }

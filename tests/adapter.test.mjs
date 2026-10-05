@@ -1354,7 +1354,7 @@ test("pre-flight accepts every pinned rung in the Phase 9 cohort and refuses an 
   // pinned rung is on that model's ladder. A rung the model does not list is
   // refused, because an unlisted level is often rendered as the default.
   const cohort = [
-    ["openrouter/qwen/qwen3.8-2.4t-a95b", "medium"],
+    ["openrouter/qwen/qwen3.8-27b", "medium"],
     ["openrouter/deepseek/deepseek-v4.1-flash", "high"],
     ["openrouter/z-ai/glm-5.3", "high"],
     ["openrouter/xiaomi/mimo-v2.6-pro", undefined],
@@ -1366,7 +1366,7 @@ test("pre-flight accepts every pinned rung in the Phase 9 cohort and refuses an 
     assertEffortSupported(cfg); // must not throw
   }
   // qwen lists xhigh/medium/low, not "max".
-  const qwen = resolveModel("openrouter/qwen/qwen3.8-2.4t-a95b", { configPath: "config/phase9-cohort.json" });
+  const qwen = resolveModel("openrouter/qwen/qwen3.8-27b", { configPath: "config/phase9-cohort.json" });
   assert.throws(() => assertEffortSupported({ ...qwen, reasoningEffort: "max" }), /does not list reasoning effort "max"/);
   // MiMo lists no rungs at all: any pinned effort is refused.
   const mimo = resolveModel("openrouter/xiaomi/mimo-v2.6-pro", { configPath: "config/phase9-cohort.json" });

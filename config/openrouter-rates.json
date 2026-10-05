@@ -13,34 +13,54 @@
   "_asOf": "2026-10-05",
   "_source": "https://openrouter.ai/api/v1/models/<id>/endpoints",
   "models": {
-    "qwen/qwen3.8-2.4t-a95b": {
-      "provider": "Alibaba",
-      "tiers": [
-        { "maxPromptTokens": null, "inputPer1M": 2.00, "outputPer1M": 6.00 }
-      ]
-    },
     "deepseek/deepseek-v4.1-flash": {
       "provider": "DeepInfra",
       "tiers": [
-        { "maxPromptTokens": null, "inputPer1M": 0.14, "outputPer1M": 0.42 }
+        {
+          "maxPromptTokens": null,
+          "inputPer1M": 0.14,
+          "outputPer1M": 0.42
+        }
       ]
     },
     "z-ai/glm-5.3": {
       "provider": "Z.AI",
       "tiers": [
-        { "maxPromptTokens": null, "inputPer1M": 1.40, "outputPer1M": 4.40 }
+        {
+          "maxPromptTokens": null,
+          "inputPer1M": 1.4,
+          "outputPer1M": 4.4
+        }
       ]
     },
     "xiaomi/mimo-v2.6-pro": {
       "provider": "Xiaomi",
       "tiers": [
-        { "maxPromptTokens": null, "inputPer1M": 0.435, "outputPer1M": 0.87 }
+        {
+          "maxPromptTokens": null,
+          "inputPer1M": 0.435,
+          "outputPer1M": 0.87
+        }
       ]
     },
     "tencent/hy3": {
       "provider": "Tencent",
       "tiers": [
-        { "maxPromptTokens": null, "inputPer1M": 0.132, "outputPer1M": 0.528 }
+        {
+          "maxPromptTokens": null,
+          "inputPer1M": 0.132,
+          "outputPer1M": 0.528
+        }
+      ]
+    },
+    "qwen/qwen3.8-27b": {
+      "provider": "Alibaba",
+      "tiers": [
+        {
+          "maxPromptTokens": null,
+          "inputPer1M": 0.425,
+          "outputPer1M": 2.55
+        }
       ]
     }
   }

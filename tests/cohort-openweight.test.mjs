@@ -26,7 +26,7 @@ const runBuilder = () =>
 test("the open-weight builder fails loudly when the cohort's reports are absent", async () => {
   // Guard against a future state where a report happens to exist: only assert
   // the loud-failure path when the first model's report is genuinely missing.
-  const firstReport = join(ROOT, "results/combined-openrouter-qwen-qwen3.8-2.4t-a95b-2026-10-06-120000.json");
+  const firstReport = join(ROOT, "results/combined-openrouter-qwen-qwen3.8-27b-2026-10-06-120000.json");
   const hadOut = existsSync(OUT);
   const r = await runBuilder();
   if (existsSync(firstReport)) {
@@ -35,7 +35,7 @@ test("the open-weight builder fails loudly when the cohort's reports are absent"
     assert.ok(existsSync(OUT), "with reports present the builder must write the cohort");
   } else {
     assert.equal(r.code, 1, "absent reports must be a non-zero exit");
-    assert.match(r.stderr, /no combined@5 report for openrouter\/qwen\/qwen3\.8-2\.4t-a95b/);
+    assert.match(r.stderr, /no combined@5 report for openrouter\/qwen\/qwen3\.8-27b/);
     assert.match(r.stderr, /run the sweep first/, "the error must say how to produce the reports");
     if (!hadOut) {
       assert.ok(!existsSync(OUT), "nothing may be written when the reports are absent");

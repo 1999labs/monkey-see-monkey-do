@@ -522,7 +522,7 @@ figure on the published chart:
 
 | Model id | pinned host | $/1M in | $/1M out | list rate (for contrast) |
 |---|---|---|---|---|
-| `qwen/qwen3.8-2.4t-a95b` | Alibaba | 2.00 | 6.00 | same |
+| `qwen/qwen3.8-27b` | Alibaba | 0.425 | 2.55 | (2.4t-a95b lists 2.00/6.00) |
 | `deepseek/deepseek-v4.1-flash` | DeepSeek | 0.15 | 0.60 | 0.30 / 1.20 |
 | `z-ai/glm-5.3` | Z.AI | 1.40 | 4.40 | 0.05 / 7.00 |
 | `xiaomi/mimo-v2.6-pro` | Xiaomi | 0.435 | 0.87 | same |
@@ -560,7 +560,7 @@ The Phase 9 rungs, and the reason for each:
 | Model | pinned | ladder | note |
 |---|---|---|---|
 | `z-ai/glm-5.3` | high | max, high, low | mandatory; default is max |
-| `qwen/qwen3.8-2.4t-a95b` | medium | xhigh, medium, low | mandatory; default is xhigh |
+| `qwen/qwen3.8-27b` | medium | xhigh, medium, low | mandatory; default is xhigh |
 | `deepseek/deepseek-v4.1-flash` | high | max, high, low | optional; default is high |
 | `tencent/hy3` | high | high, low, none | optional; default is high |
 | `xiaomi/mimo-v2.6-pro` | unset | (none listed) | parameter omitted; provider default |
@@ -580,7 +580,7 @@ misdescribe the run as a pinned measurement.
 ### Provider pinning
 
 Every cohort member is multi-endpoint on OpenRouter: all five route to several
-providers (Qwen 7, DeepSeek 30, GLM 41, MiMo 4, Hy3 4), so **every** run needs
+providers (Qwen 18, DeepSeek 30, GLM 41, MiMo 4, Hy3 4), so **every** run needs
 `--only-provider --no-fallback`. An unpinned run mixes quantizations and the
 score stops describing one model. Use
 `npm run providers -- -m openrouter/<id>` to list the real provider slugs
