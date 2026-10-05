@@ -179,6 +179,10 @@ export const runLevel = async (config, { task, level, dryRun = false, modelText 
     heldOut: { correct: heldOut.correct, total: heldOut.total, threw: heldOut.threw },
     responseFingerprint: fingerprint(completion.text),
     callElapsedMs: Date.now() - startedAt,
+    // Token usage from the adapter, surfaced per-call so the combined
+    // report's per-level totals roll up cleanly. Null when the adapter
+    // didn't report it (e.g. dry-run path).
+    usage: completion.usage ?? null,
   };
 };
 
@@ -215,6 +219,15 @@ export const runAllLevels = async (config, { dryRun = false } = {}) => {
       perLevel[level].seen.total += seen.total;
       perLevel[level].heldOut.correct += held.correct;
       perLevel[level].heldOut.total += held.total;
+      // Roll per-call usage up to per-level (sum across the 3 tasks at
+      // this level) so the combined report's per-level usage rolls up
+      // cleanly. Token totals are summed; null fields stay null.
+      const u = out.usage;
+      if (u) {
+        const lvl = perLevel[level];
+        lvl.usageIn = (lvl.usageIn ?? 0) + (u.prompt_tokens ?? 0);
+        lvl.usageOut = (lvl.usageOut ?? 0) + (u.completion_tokens ?? 0);
+      }
     }
   }
   for (const id of Object.keys(perTask)) {
@@ -264,6 +277,12 @@ export const runAllLevels = async (config, { dryRun = false } = {}) => {
     crashed: totalThrows > 0,
   };
 
+  // Total usage across all 12 calls — sum of per-level rollups.
+  const usage = {
+    prompt_tokens: SAMPLE_LEVELS.reduce((s, l) => s + (perLevel[l].usageIn ?? 0), 0),
+    completion_tokens: SAMPLE_LEVELS.reduce((s, l) => s + (perLevel[l].usageOut ?? 0), 0),
+  };
+
   return {
     perTask,
     perLevel,
@@ -271,6 +290,7 @@ export const runAllLevels = async (config, { dryRun = false } = {}) => {
     runs,
     weights: SAMPLE_WEIGHTS,
     levels: SAMPLE_LEVELS,
+    usage,
   };
 };
 

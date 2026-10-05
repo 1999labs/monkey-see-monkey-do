@@ -115,6 +115,36 @@ export const median = (xs) => {
 };
 
 /**
+ * Compute the costUsd field for a model call given its usage.
+ *
+ * Three cases:
+ *   - adapter is "ollama" → pricing = "local", costUsd = null (no cost).
+ *   - config.price exists (USD per prompt/completion token, set in
+ *     config/models.json) → costUsd = usageIn × price.in + usageOut × price.out.
+ *   - otherwise → pricing = "unpriced", costUsd = null. The report
+ *     records the unpriced state explicitly so a reader knows cost is
+ *     available but unset, not missing.
+ *
+ * Token totals are summed from the per-level/per-run records; a null
+ * usage (e.g. dry-run) yields costUsd = null regardless.
+ */
+export const computeCost = (config, usage) => {
+  const adapter = config?.adapter ?? null;
+  if (adapter === "ollama") return { pricing: "local", costUsd: null };
+  if (!usage || (usage.prompt_tokens == null && usage.completion_tokens == null)) {
+    return { pricing: "unpriced", costUsd: null };
+  }
+  const inPrice = config?.model?.price?.inputPer1k ?? null;
+  const outPrice = config?.model?.price?.outputPer1k ?? null;
+  if (inPrice == null && outPrice == null) {
+    return { pricing: "unpriced", costUsd: null };
+  }
+  const cost = (usage.prompt_tokens ?? 0) * (inPrice ?? 0) / 1000
+             + (usage.completion_tokens ?? 0) * (outPrice ?? 0) / 1000;
+  return { pricing: "configured", costUsd: Number(cost.toFixed(6)) };
+};
+
+/**
  * SEE report (suite 1.0.0, sample-efficiency axis).
  *
  * The new report carries per-level seen / held-out / GZ so a reader can audit
@@ -128,6 +158,9 @@ export const buildSeeLevelsReport = ({ model, last, reproducibility, config, key
       seen: e.seen ? { correct: e.seen.correct, total: e.seen.total, rate: Number(e.seen.rate.toFixed(4)) } : null,
       heldOut: e.heldOut ? { correct: e.heldOut.correct, total: e.heldOut.total, rate: Number(e.heldOut.rate.toFixed(4)) } : null,
       gz: e.gz === null || e.gz === undefined ? null : Number(e.gz.toFixed(4)),
+      // Token usage rolled up across the 3 tasks at this level.
+      usageIn: e.usageIn ?? 0,
+      usageOut: e.usageOut ?? 0,
     };
   }
   const gzMean = Object.values(perLevel).reduce((s, e) => s + (e.gz ?? 0), 0) / Math.max(1, Object.keys(perLevel).length);
@@ -212,6 +245,11 @@ export const buildSeeLevelsReport = ({ model, last, reproducibility, config, key
           (last.robustness ? last.robustness.points : 0)
       ),
       maxTotal: 50,
+      // Per-level rolled-up token usage (Phase 7.5 plumbing). usageIn =
+      // prompt_tokens summed across the 3 tasks at that level; usageOut
+      // = completion_tokens likewise. Null when the adapter didn't
+      // report tokens (e.g. dry-run path).
+      usage: last.usage ?? null,
     },
 
     reproducibility: reproducibility
@@ -354,6 +392,10 @@ export const buildChainDoReport = ({ model, result, config, keySource, pool, rep
       callTimeoutMs: result.callTimeoutMs ?? null,
       // The canary strings the prompt asked the model to echo verbatim.
       canary: result.canary ?? null,
+      // Token usage from the adapter (Phase 7.5 plumbing). DO v2 is
+      // one model call per run; usageIn/usageOut live on `solver` so
+      // they survive if any future variant moves to per-chain calls.
+      usage: result.usage ?? null,
     },
 
     limitations: LIMITATIONS,
@@ -520,6 +562,17 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
       // Per-run totals, exposed so a reader can reconstruct the
       // median from this file alone.
       perRunTotals: combinedTotals,
+    },
+
+    // Phase 7.5 cost axis. Surfaces usage tokens per eval (sum of the
+    // 12 SEE calls + the 1 DO call) and the model's pricing state.
+    // costUsd is null whenever no price is set in the registry; for Ollama
+    // it is explicitly null with pricing='local'. For other adapters
+    // it is null with pricing='unpriced' unless the operator has set
+    // model.price.{input,output}Per1k in config/models.json.
+    cost: {
+      see: { usage: see.usage ?? null, ...computeCost(config, see.usage) },
+      do:  { usage: doo.usage ?? null, ...computeCost(config, doo.usage) },
     },
 
     // REPORTING ONLY — see src/adjusted.mjs. `combined.total` above is

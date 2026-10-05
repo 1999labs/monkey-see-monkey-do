@@ -214,7 +214,7 @@ const main = async () => {
       seeTotal: Math.round(last.seeTotal),
       doTotal: last.doTotal,
       gzMean,
-      chainEngagementRate,
+      chainEngagementRate: engagement,
     });
     console.log(`\n  ADJUSTED (see + do, less GZ_mean and unearned clawback)`);
     console.log(`    ${adj.base}  -  ${adj.gzMeanPenalty} (gz_mean)  -  ${adj.unearnedPenalty} (unearned)  =  \x1b[1m${adj.total}/100\x1b[0m`);
