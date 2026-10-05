@@ -732,22 +732,47 @@ Three of five Cohort 1 models timed out on DO. A cap was tested (item 2a) and
 does not help: MiMo returned `finish_reason: "length"` with reasoning tokens
 equal to the cap (16003/16000, 32004/32000) and **zero characters of content**
 at both 16000 and 32000. The hidden trace is 58028 chars of coherent,
-non-repeating analysis — not a loop — cut off mid-sentence. The model is not
-slow and not looping; it never reaches the code-writing step. Only a prompt
-change can address that, and prompts are digest-pinned, so it is a separate
-deliberate decision.
+non-repeating analysis — not a loop — cut off mid-sentence. The model never
+reaches the code-writing step at any cap, so a larger cap buys more trace, not
+an answer. Only a prompt change can address that, and prompts are digest-pinned,
+so it is a separate deliberate decision.
 
-### Item 2c: identical requests, 240x apart
+The cap and the timeout are separate levers, and the A/B below shows the timeout
+is not the binding one either: even with no budget at all the same work took
+619s. A cap bounds the OUTPUT; it does not bound the wall time when the model
+fills it with reasoning.
 
-The same prompt and the same 16000 cap took 410889ms through the repo's DO path
-and 1757ms via a direct probe. Diffing the two requests, the differences are
-narrow: the adapter adds `HTTP-Referer` and `X-Title` headers, uses
-`temperature: 0` (the probe did too), and pins the provider identically. The
-wall-clock difference is therefore not explained by the request shape; the same
-prompt re-sent later through the same direct path was itself slow. That points
-at provider-side queueing/variance on the Xiaomi endpoint rather than a
-path artifact, which means a larger timeout would still be a coin flip. No
-change is made on the basis of this finding.
+### Item 2c: the request paths are equivalent; the VARIANCE is the story
+
+A single early probe of this prompt returned in 1757ms, against 410889ms for the
+same prompt through the repo's DO path, which looked like a 240x path artifact.
+An alternating A/B (same prompt, same 16000 cap, direct fetch vs the adapter,
+run back to back) shows it was not:
+
+| run | path | elapsed | outcome |
+|---|---|---|---|
+| 1 | direct | 619,160 ms | completed |
+| 1 | adapter | 420,004 ms | **aborted by the 420000ms harness budget** |
+| 2 | direct | 387,766 ms | completed |
+| 2 | adapter | 350,457 ms | completed |
+
+The direct path was SLOWER than the adapter in both pairs, and one direct call
+ran 199 seconds past the harness budget the adapter is held to. Diffing the
+requests, the only differences are the two headers the adapter adds
+(`HTTP-Referer`, `X-Title`); endpoint, provider pin, temperature and body shape
+are identical. **The request paths are equivalent.** The 1757ms probe was an
+outlier at the fast end of a distribution that spans roughly 1.8s to 620s.
+
+Two consequences:
+
+1. **The 420000ms budget is not the cause of the Cohort 1 timeouts.** A direct
+   call with no budget at all took 619s for the same work, so a larger timeout
+   would convert some timeouts into completions but would not make this model
+   fast, and it would leave the wall time unpredictable.
+2. **Any DO wall-time figure for this model is a sample from a very wide
+   distribution**, so a single fast or slow run says nothing about the model's
+   speed. This is recorded, not acted on: no budget change is made on the basis
+   of it.
 
 ---
 
