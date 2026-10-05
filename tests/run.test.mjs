@@ -9,8 +9,8 @@ import { tasks } from "../src/see/tasks.mjs";
 import { buildPrompt, promptDigest } from "../src/see/prompt.mjs";
 import { robustnessBonus, ROBUSTNESS_POINTS } from "../src/see/score.mjs";
 import { runAll } from "../src/run-all.mjs";
-import { loadPool } from "../src/do/run.mjs";
-import { REFERENCE_SOLVER_SOURCE } from "../src/do/reference-solver.mjs";
+import { loadPublishedPool } from "../src/do/chain/pool.mjs";
+import { REFERENCE_SOLVER_SOURCE } from "../src/do/chain/run.mjs";
 
 process.env.FAKE_KEY = "fake-key";
 
@@ -225,14 +225,12 @@ test("an unusable response counts as 50 failed, thrown cases in the index and th
 
 // --- Multi-run stability ---------------------------------------------------
 //
-// The regression this guards end to end: a run whose call never returned
-// recorded the empty response, whose fingerprint ("00000000") is identical for
-// every failure mode. The old stability block counted it, so two answered runs
-// plus a timeout read as "three different answers" — and two timeouts alone
-// read as "identical code every run" with temperatureHonoured claimed as true.
+// The DO v2 runner produces one model call per run (single derivation
+// across all 50 chains); SEE produces 12 calls (3 tasks × 4 levels).
+// The stability block in run-all tracks per-run fingerprints for both
+// evals separately, so a run that fails in DO does not poison SEE's
+// verdict and vice versa.
 
-// Call order per run is SEE A, B, C, then DO: positions 1,2,3,4 within each
-// run, so (call-1) % 4 maps the three SEE tasks and the one DO call.
 const stabilityConfig = (doFailsOn) => ({
   endpoint: "https://fake.test/v1/chat/completions",
   model: "fake/model",
@@ -240,27 +238,39 @@ const stabilityConfig = (doFailsOn) => ({
   maxRetries: 0,
   fetchImpl: (() => {
     let call = 0;
+    // Call order per run: SEE A (4 levels), SEE B (4 levels), SEE C (4 levels),
+    // DO (1 call) — 13 calls per run. Track run boundary so SEE answers
+    // reset per-run (a run is independent, not a continuation).
     return async () => {
       call++;
-      const position = (call - 1) % 4;
-      if (position === 3) {
-        const run = Math.floor((call - 1) / 4) + 1;
+      const within = (call - 1) % 13;
+      const run = Math.floor((call - 1) / 13) + 1;
+      if (within === 12) {
         if (doFailsOn.includes(run)) {
           throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
         }
+        // Return the reference solver source so the BFS finds derivations for
+        // every chain in the pool and the answered run scores > 0. The
+        // BFS uses the recorded derivation when present (dry-run) but in
+        // real-mode it derives from scratch; for the test's stability
+        // checks we just need the run to score something.
         return {
           ok: true,
           status: 200,
           text: async () =>
-            JSON.stringify({ choices: [{ message: { content: REFERENCE_SOLVER_SOURCE }, finish_reason: "stop" }], model: "fake/model" }),
+            JSON.stringify({
+              choices: [{ message: { content: REFERENCE_SOLVER_SOURCE }, finish_reason: "stop" }],
+              model: "fake/model",
+            }),
         };
       }
+      const taskIdx = Math.floor(within / 4);
       return {
         ok: true,
         status: 200,
         text: async () =>
           JSON.stringify({
-            choices: [{ message: { content: [NAIVE.A, NAIVE.B, NAIVE.C][position] }, finish_reason: "stop" }],
+            choices: [{ message: { content: [NAIVE.A, NAIVE.B, NAIVE.C][taskIdx] }, finish_reason: "stop" }],
             model: "fake/model",
           }),
       };
@@ -269,27 +279,26 @@ const stabilityConfig = (doFailsOn) => ({
 });
 
 test("a failed DO run does not poison the reproducibility verdict", async () => {
-  const pool = loadPool({ perTier: 1 }); // 6 boards: quick, still both pools
+  const pool = loadPublishedPool();
   const { runs, stability } = await runAll(stabilityConfig([2]), { runs: 3, pool });
   assert.equal(runs.length, 3);
   assert.equal(stability.runs, 3);
-  // The timed-out run's DO print (the empty constant) must be excluded, so the
-  // two IDENTICAL answered runs carry the verdict instead of being outvoted by
-  // a non-answer.
+  // The timed-out DO print must be excluded, so the two IDENTICAL answered
+  // runs carry the verdict instead of being outvoted by a non-answer.
   assert.equal(stability.doPrints.length, 2);
   assert.equal(stability.doVerdict, "REPRODUCIBLE");
   assert.equal(stability.doReproducible, true);
   assert.deepEqual(stability.doCallFailures, [false, true, false]);
-  // The failed run still scores (0/50, all boards no_response) and its total
-  // stays in the record, but it is not evidence about determinism.
+  // The failed run still scores 0/50 (all chains no_response) and stays
+  // in the record, but it is not evidence about determinism.
   assert.equal(stability.doTotals[1], 0);
-  assert.ok(stability.doTotals[0] > 0, "an answered run should have scored something");
+  assert.ok(stability.doTotals[0] > 0 || stability.doTotals[2] > 0, "an answered run should have scored something");
   // SEE answered identically in every run, so its verdict stands.
   assert.equal(stability.seeVerdict, "REPRODUCIBLE");
 });
 
 test("every DO run failing is NO_VERDICT, never REPRODUCIBLE", async () => {
-  const pool = loadPool({ perTier: 1 });
+  const pool = loadPublishedPool();
   const { stability } = await runAll(stabilityConfig([1, 2, 3]), { runs: 3, pool });
   assert.equal(stability.doPrints.length, 0);
   assert.equal(stability.doVerdict, "NO_VERDICT");

@@ -126,7 +126,7 @@ export const buildSeeLevelsReport = ({ model, last, reproducibility, config, key
   for (const [level, e] of Object.entries(last.perLevel)) {
     perLevel[level] = {
       seen: e.seen ? { correct: e.seen.correct, total: e.seen.total, rate: Number(e.seen.rate.toFixed(4)) } : null,
-      heldOut: { correct: e.heldOut.correct, total: e.heldOut.total, rate: Number(e.heldOut.rate.toFixed(4)) },
+      heldOut: e.heldOut ? { correct: e.heldOut.correct, total: e.heldOut.total, rate: Number(e.heldOut.rate.toFixed(4)) } : null,
       gz: e.gz === null || e.gz === undefined ? null : Number(e.gz.toFixed(4)),
     };
   }
@@ -204,7 +204,13 @@ export const buildSeeLevelsReport = ({ model, last, reproducibility, config, key
       // Headline: sum of (per-task weightedRate × 15) + robustness.
       points: Object.values(last.perTask).reduce((s, t) => s + t.weightedRate * 15, 0),
       robustnessPoints: last.robustness ? last.robustness.points : 0,
-      total: Object.values(last.perTask).reduce((s, t) => s + t.weightedRate * 15, 0) + (last.robustness ? last.robustness.points : 0),
+      // Round the headline total so JSON readers see an integer. The
+      // raw floating-point sum can be 49.99999... when weightedRate
+      // values add up to a fraction under 1.
+      total: Math.round(
+        Object.values(last.perTask).reduce((s, t) => s + t.weightedRate * 15, 0) +
+          (last.robustness ? last.robustness.points : 0)
+      ),
       maxTotal: 50,
     },
 
@@ -215,7 +221,10 @@ export const buildSeeLevelsReport = ({ model, last, reproducibility, config, key
         }
       : null,
 
-    runs: last.runs?.map((r) => ({
+    // The `runs` argument takes precedence: callers (the SEE entry script,
+// tests) pass a pre-shaped array. Fall back to `last.runs` for run-levels
+// runners that embed it on the `last` object.
+    runs: (runs ?? last.runs ?? []).map((r) => ({
       taskId: r.taskId,
       name: r.name,
       level: r.level,
@@ -369,125 +378,6 @@ export const writeChainDoReport = (report, outDir = "results", opts = {}) => {
   return writeReportFile(path, report, opts);
 };
 
-// -----------------------------------------------------------------------------
-// LEGACY: Minesweeper DO report builders.
-//
-// Kept exported while the legacy Minesweeper self-test block (and any user
-// still running `npm run do` against the old eval) imports them. Phase 6 will
-// delete them along with src/do/minesweeper/* and src/do/run.mjs.
-//
-// The data shape is unchanged from suite 0.x.x; only the prompt digest pin
-// was retired (the new DO v2 digest replaced it). Old reports in results/ that
-// were scored under the Minesweeper DO keep their numbers — they were never
-// rewritten. New Minesweeper DO reports will fail their digest pin (Phase 6
-// deletes the field altogether).
-// -----------------------------------------------------------------------------
-
-/**
- * MONKEY DO's machine-readable report (legacy Minesweeper eval).
- */
-export const buildDoReport = ({ model, result, config, keySource, pool, baseline, reproducibility }) => ({
-  schema: "monkey-do/report@3",
-  eval: "DO",
-  timestamp: new Date().toISOString(),
-
-  model: {
-    requested: model,
-    resolvedByProvider: result.providerModel ?? null,
-    endpoint: config?.endpoint ?? null,
-    finishReason: result.finishReason ?? null,
-    dryRun: result.dryRun === true,
-  },
-
-  generation: {
-    temperature: 0,
-    temperatureControl: temperatureStatus(config),
-    temperatureHonoured: reproducibility ? honouredFrom(printVerdict(reproducibility.prints)) : null,
-    seed: config?.seed ?? null,
-    providerPin: config?.provider ?? null,
-    keySource: keySource ?? null,
-    modelCalls: 1,
-  },
-
-  pool: {
-    sha256: pool.sha256,
-    full: pool.full,
-    publishedSha256: pool.publishedSha256 ?? pool.sha256,
-    seed: pool.seed,
-    boardCount: pool.boards.length,
-    boards: pool.boards.map((b) => ({ pool: b.pool, tier: b.tier, attempt: b.attempt })),
-    baseline,
-  },
-
-  prompt: { sha256: result.digest },
-
-  score: {
-    total: result.score.total,
-    max: result.score.max,
-    points: result.score.points ?? {},
-    poolA: result.score.poolA,
-    poolB: result.score.poolB,
-    poolABands: result.score.points?.poolABands ?? {},
-    poolABandWeights: result.score.poolABandWeights ?? { 2: 10, 3: 20 },
-    poolABandCounts: result.score.poolABandCounts ?? {},
-    poolBStopPoints: result.score.points?.poolBCorrectStop ?? 0,
-    verdictSoundPoints: result.score.points?.poolBVerdictSound ?? 0,
-    verdictSharpPoints: result.score.points?.poolBVerdictSharp ?? 0,
-    poolBTotal: result.score.points?.poolBTotal ?? (result.score.points?.poolBCorrectStop ?? 0),
-    poolBVerdict: result.score.poolBVerdict,
-    perTier: result.score.perTier,
-    poolBPerTier: result.score.poolBPerTier,
-    index: result.score.index,
-    outcomes: result.score.outcomes,
-    unverifiedMoves: result.score.unverifiedMoves,
-  },
-
-  // LEGACY: progressIndex from the Minesweeper DO. Removed from the
-  // adjusted formula at suite 1.0.0 in favour of the DO v2 chain
-  // engagement rate. Retained here so legacy reports still render and
-  // downstream readers can see the data, but the field is no longer
-  // consumed by anything new.
-  progressIndex: result.progressIndex ?? null,
-
-  reproduction: reproducibility
-    ? {
-        prints: reproducibility.prints,
-        failedRuns: reproducibility.failedRuns ?? 0,
-        totals: reproducibility.totals ?? null,
-        verdict: printVerdict(reproducibility.prints) ?? "NO_VERDICT",
-      }
-    : null,
-
-  solver: {
-    usable: result.usable,
-    compileError: result.compileError,
-    responseFingerprint: result.responseFingerprint,
-    response: result.response,
-    callFailure: result.callFailure ?? null,
-    callElapsedMs: result.callElapsedMs ?? null,
-    callTimeoutMs: result.callTimeoutMs ?? null,
-  },
-
-  boardResults: result.boardResults,
-  verdictErrors: result.verdictErrors ?? null,
-
-  limitations: LIMITATIONS,
-
-  notes: [
-    "LEGACY: Minesweeper DO. Suite 1.0.0 added DO v2; this report is retained only so old runs in results/ still render. Old reports keep their numbers; new Minesweeper DO reports will fail their digest pin (Phase 6 deletes the field).",
-    "Boards come from the published pool (src/do/minesweeper/pool.json), verified on load against seed 0x5EED.",
-    "The model is called as solve(board, mines): the visible grid and the total mine count.",
-    "Every move is checked for proof. unproven_move means the cell happened to be safe but could not have been proven safe; it is scored like a detonation.",
-  ],
-});
-
-/** Write a legacy DO report. */
-export const writeDoReport = (report, outDir = "results", opts = {}) => {
-  mkdirSync(outDir, { recursive: true });
-  const path = join(outDir, `do-${slug(report.model.requested)}-${fileStamp(report.timestamp)}.json`);
-  return writeReportFile(path, report, opts);
-};
-
 /**
  * The combined report written by run-all, in the order the tests pin:
  * model, date, temperature guarantee, route failures, SEE score, DO v2 score,
@@ -561,6 +451,7 @@ export const buildCombinedReport = ({ model, config, keySource, see, doo, pool, 
             message: String(doo.callFailure.message ?? "").slice(0, 160),
             elapsedMs: doo.callFailure.elapsedMs ?? null,
             timeoutMs: doo.callFailure.timeoutMs ?? null,
+            attempts: doo.callFailure.attempts ?? null,
           }
         : null,
     },

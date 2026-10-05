@@ -13,7 +13,7 @@ import { scoreTask, scoreSeen, generalizationIndex, readIndex, robustnessBonus, 
 import { compileCandidate, runCandidate } from "../sandbox.mjs";
 import { describeCallFailure } from "../call-failure.mjs";
 import { reproducibility } from "../fingerprint.mjs";
-import { buildReport, writeReport, LIMITATIONS } from "../report.mjs";
+import { buildSeeLevelsReport, writeSeeLevelsReport, LIMITATIONS } from "../report.mjs";
 import { parseArgs, prepareModel, selfTestGate, temperatureNotice, printLimitations } from "../cli.mjs";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
@@ -171,6 +171,58 @@ export const runSee = async (config, { onProgress } = {}) => {
   };
 };
 
+/**
+ * Adapt a legacy level-8 `runSee` result into the perLevel/perTask shape
+ * that buildSeeLevelsReport expects. Used by the SEE entry point when
+ * `npm run see` is invoked: it still does one call per task (level 8),
+ * and the report carries the level-8 numbers under the L2/L8 slot.
+ */
+const adaptLegacyRun = (run) => {
+  const perTask = {};
+  for (const t of run.taskRuns) {
+    perTask[t.taskId] = {
+      taskId: t.taskId,
+      name: t.taskId,
+      weightedRate: t.result ? t.result.rate : 0,
+      gzMean: 0,
+      levels: {
+        8: t.result
+          ? {
+              seen: t.result.seen ?? { correct: 0, total: 0 },
+              heldOut: { correct: t.result.correct, total: t.result.total, rate: t.result.rate },
+            }
+          : null,
+      },
+    };
+  }
+  // Pool perLevel across all tasks at level 8.
+  let correct = 0;
+  let total = 0;
+  let heldCorrect = 0;
+  for (const t of run.taskRuns) {
+    if (!t.result) continue;
+    if (t.result.seen) { correct += t.result.seen.correct; total += t.result.seen.total; }
+    heldCorrect += t.result.correct;
+  }
+  const heldOut = {
+    correct: heldCorrect,
+    total,
+    rate: total > 0 ? heldCorrect / total : 0,
+  };
+  return {
+    taskRuns: run.taskRuns,
+    perTask,
+    perLevel: {
+      8: {
+        seen: { correct, total, rate: total > 0 ? correct / total : 0 },
+        heldOut,
+        gz: total > 0 ? (correct / total) - (heldOut.rate ?? 0) : 0,
+      },
+    },
+    robustness: run.robustness,
+  };
+};
+
 const bar = (rate, width = 20) => {
   const filled = Math.round(rate * width);
   return "[" + "█".repeat(filled) + "░".repeat(width - filled) + "]";
@@ -294,17 +346,20 @@ const main = async () => {
 
   // Persist every run, reproducible or not. A NOT_REPRODUCIBLE result is
   // especially worth keeping: it is the evidence for that verdict.
-  const report = buildReport({
+  const last = runs[runs.length - 1];
+  // The legacy single-shot runSee returns the level-8 shape (taskRuns, points,
+  // noCrash, robustness, index). buildSeeLevelsReport wants perLevel/perTask
+  // — adapt it on the fly so this entry point still emits the new schema.
+  const adapted = adaptLegacyRun(last);
+  const report = buildSeeLevelsReport({
     model: args.model,
-    indices: runs.map((r) => Math.round(r.index.index * 100)),
-    last: runs[runs.length - 1],
-    taskRuns: runs[runs.length - 1].taskRuns,
+    last: adapted,
+    runs: adapted.taskRuns,
     reproducibility: rep,
     config,
     keySource,
-    startedAt,
   });
-  const path = writeReport(report, args.out);
+  const path = writeSeeLevelsReport(report, args.out);
   printLimitations(LIMITATIONS);
   console.log(`\n  Saved results to ${path}`);
 

@@ -12,8 +12,10 @@
 
 import { loadPublishedPool, POOL_FILE } from "./pool.mjs";
 import { runChainDo, REFERENCE_SOLVER_SOURCE } from "./run.mjs";
+import { buildChainDoReport, writeChainDoReport } from "../../report.mjs";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 
 /**
  * Verdict for the dry-run gate: PASS iff the run scored 50/50 AND every
@@ -51,6 +53,11 @@ const isMain = (() => {
 
 if (isMain) {
   (async () => {
+    // Honour --out (same arg the model-path runner takes) so the gate
+    // can write its report to a temporary directory under test.
+    const outArgIdx = process.argv.indexOf("--out");
+    const outDir = outArgIdx > -1 ? process.argv[outArgIdx + 1] : "results";
+
     console.log(`\nMONKEY DO v2 · chain dry-run`);
     let pool;
     try {
@@ -71,6 +78,20 @@ if (isMain) {
       dryRun: true,
       modelText: REFERENCE_SOLVER_SOURCE,
     });
+
+    // Always write a report, even on FAIL — it's the only evidence a
+    // reader gets about what the dry-run saw.
+    mkdirSync(outDir, { recursive: true });
+    const report = buildChainDoReport({
+      model: "dry-run",
+      result: out,
+      config: null,
+      keySource: "none (dry run)",
+      pool,
+      reproducibility: null,
+    });
+    const reportPath = writeChainDoReport(report, outDir);
+    console.log(`  saved dry-run report to ${reportPath}`);
 
     const verdict = dryRunVerdict(out);
     if (verdict.ok) {

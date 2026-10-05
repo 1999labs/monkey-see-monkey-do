@@ -2,11 +2,7 @@
 //
 //   node src/run-all.mjs --model openrouter/dots-3-note-preview:free
 //
-// Suite 1.0.0: this runner executes the new DO v2 chain eval, not the
-// legacy Minesweeper DO. The Minesweeper DO is still callable on its own
-// (src/do/run.mjs, `npm run do`) but is no longer part of the combined
-// run — its progressIndex is gone with the pivot, replaced by the chain
-// engagement rate that drives the new adjusted formula.
+// Suite 1.0.0: this runner executes the DO v2 chain eval.
 //
 // WHY THIS EXISTS RATHER THAN TWO SEPARATE RUNS.
 //
@@ -26,9 +22,10 @@
 import { runAllLevels, printLevelsRun } from "./see/run-levels.mjs";
 import { runChainDo, REFERENCE_SOLVER_SOURCE } from "./do/chain/run.mjs";
 import { chainEngagementRate } from "./do/chain/score.mjs";
-import { reproducibility, printVerdict } from "./fingerprint.mjs";
+import { reproducibility, printVerdict, fingerprint } from "./fingerprint.mjs";
 import { loadPublishedPool } from "./do/chain/pool.mjs";
 import { adjustedTotal } from "./adjusted.mjs";
+import { describeCallFailure } from "./call-failure.mjs";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import {
@@ -110,7 +107,31 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
     onProgress(`run ${i + 1}/${runs}: SEE levels (12 calls)...`);
     const seeOut = await runAllLevels(config, {});
     onProgress(`run ${i + 1}/${runs}: DO v2 (1 call, ${pool.chains.length} chains)...`);
-    const doOut = await runChainDo(config, { chains: pool.chains, seed: pool.seed });
+    // The DO call can fail (network, timeout, refusal). Record it as a
+    // route failure with doTotal: 0 — the same shape a Minesweeper-era
+    // run would produce, and what runDo did to keep reproducibility
+    // stats honest. Two answered runs must still get a verdict.
+    let doOut;
+    try {
+      doOut = await runChainDo(config, { chains: pool.chains, seed: pool.seed });
+    } catch (err) {
+      const callFailure = describeCallFailure(err, { timeoutMs: config?.timeoutMs ?? null });
+      doOut = {
+        score: { total: 0, max: 50, perBand: {}, perChain: [] },
+        usable: false,
+        compileError: null,
+        callFailure,
+        callElapsedMs: 0,
+        callTimeoutMs: config?.timeoutMs ?? null,
+        response: "",
+        providerModel: null,
+        finishReason: null,
+        responseFingerprint: fingerprint(""),
+        digest: null,
+        canary: false,
+        dryRun: false,
+      };
+    }
     // SEE total = sum of weighted rates × 15; DO total = chain score total.
     const seeTotal = Object.values(seeOut.perTask).reduce((s, t) => s + t.weightedRate * 15, 0) + seeOut.robustness.points;
     out.push({ seeOut, doOut, seeTotal: Math.round(seeTotal), doTotal: doOut.score.total });
@@ -121,13 +142,14 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
     const seeTotals = out.map((r) => r.seeTotal);
     const doTotals = out.map((r) => r.doTotal);
     const combinedTotals = out.map((r) => r.seeTotal + r.doTotal);
-    // Per-run route failures: a run whose model call failed cannot be
-    // compared. The fingerprints of ANSWERED runs are the only evidence
-    // of determinism.
-    const seePrints = out
-      .filter((r) => !r.seeOut.callFailure)
-      .flatMap((r) => r.seeOut.runs.filter((run) => run.usable).map((run) => run.responseFingerprint));
+    // Per-run route failures, so a spread can be explained from this file alone.
+    const seePrints = out.flatMap((r) =>
+      (r.seeOut.runs ?? [])
+        .filter((run) => run.out?.usable)
+        .map((run) => ({ taskId: run.out.taskId, response: run.out.response, failed: Boolean(run.out.callFailure) }))
+    );
     const doPrints = out.filter((r) => r.doOut.usable).map((r) => r.doOut.responseFingerprint);
+    const seeRep = reproducibility(seePrints);
     stability = {
       runs,
       seeTotals,
@@ -136,8 +158,8 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
       seeSpread: spread(seeTotals),
       doSpread: spread(doTotals),
       withinTwoPoints: spread(seeTotals) <= 2 && spread(doTotals) <= 2,
-      seeReproducible: seePrints.length >= 2 && new Set(seePrints).size === 1,
-      seeVerdict: printVerdict(seePrints) ?? "NO_VERDICT",
+      seeReproducible: seeRep.reproducible,
+      seeVerdict: seeRep.verdict ?? "NO_VERDICT",
       seePrints,
       doReproducible: doPrints.length >= 2 && new Set(doPrints).size === 1,
       doVerdict: printVerdict(doPrints) ?? "NO_VERDICT",
@@ -180,14 +202,14 @@ const main = async () => {
   }
 
   console.log(`\n\n=== COMBINED ===`);
-  const reading = summarise(last.seeOut, last.doo);
+  const reading = summarise(last.seeOut, last.doOut);
   console.log(reading);
 
   {
     // SEE gzMean = unweighted mean of per-level GZ (each is seen - heldOut).
     const perLevel = last.seeOut.perLevel;
     const gzMean = Object.values(perLevel).reduce((s, e) => s + (e.gz ?? 0) * 100, 0) / Math.max(1, Object.keys(perLevel).length);
-    const chainEngagementRate = chainEngagementRate(last.doOut.score.perChain);
+    const engagement = chainEngagementRate(last.doOut.score.perChain);
     const adj = adjustedTotal({
       seeTotal: Math.round(last.seeTotal),
       doTotal: last.doTotal,
@@ -220,7 +242,7 @@ const main = async () => {
       reproducibility: stability ? { seePrints: stability.seePrints, seeReproducible: stability.seeReproducibility, seeVerdict: stability.seeVerdict } : null,
       config,
       keySource,
-      runs,
+      runs: last.seeOut.runs ?? [],
     }),
     args.out
   );

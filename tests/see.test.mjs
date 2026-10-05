@@ -15,8 +15,8 @@ test("held-out sets are 50 cases each, split 20/15/15", () => {
   }
 });
 
-test("each task shows exactly 8 examples", () => {
-  for (const task of tasks) assert.equal(task.shown.length, 8);
+test("each task ships 16 shown examples (Phase 4 raised the ceiling from 8)", () => {
+  for (const task of tasks) assert.equal(task.shown.length, 16);
 });
 
 test("references are perfect on their own held-out sets", () => {

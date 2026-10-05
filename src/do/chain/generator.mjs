@@ -27,7 +27,7 @@ import { SYMBOLS, allApplicable, isValidString } from "./rules.mjs";
 import { MAX_STATES, MAX_STEPS, MAX_STRING_LENGTH, solveChain, verifyDerivation } from "./reference.mjs";
 
 /**
- * Mulberry32 PRNG (same shape as src/do/minesweeper/board.mjs uses). Each
+ * Mulberry32 PRNG (same shape the mine-pool-builder used). Each
  * seed → deterministic stream. Used here and only here; the published
  * pool's reproducibility depends on it.
  */

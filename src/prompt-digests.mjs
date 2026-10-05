@@ -8,18 +8,12 @@
 // here, bump the suite version, and treat every score recorded under the old digest
 // as a different experiment. Every report embeds the digests it actually used.
 //
-// DO history: the first DO prompt (digest 69200346a3f1…) called solve(board)
-// with no mine count and no stated indexing. It was replaced before any model
-// was scored; see src/do/prompt.mjs.
+// DO history: the first three DO digests (69200346…, f2f520b6…, b7a62fe6…)
+// described the Minesweeper eval and were retired with suite 1.0.0. They no
+// longer appear in RECORDED_DIGESTS; old reports under those digests describe
+// a different experiment and are not comparable to anything in this version.
 //
-// Second digest f2f520b6f296… defined the current solve contract (mine count,
-// zero-based indexing) and scored the Cohort 1 reports under suite 0.2.0.
-//
-// Third digest b7a62fe68203… (suite 0.3.0) adds the verdict protocol: a second
-// function, verdict(position, claims, mines), scored on Pool B. Scores recorded
-// under either earlier digest describe a different DO and are not comparable.
-//
-// Fourth digest d46e8e3f082d… (suite 1.0.0) is the DO v2 pivot: the prompt
+// Current DO digest d46e8e3f082d… (suite 1.0.0) is the DO v2 pivot: the prompt
 // describes the string-rewrite formal system (5 rules, 7 symbols) and asks
 // for a single solve(start, target) function. The Minesweeper pool and the
 // DO v2 pool are non-comparable — a clean break, marked by the suite
@@ -30,7 +24,7 @@
 // prompt (level 8). The level-8 digests A=043dd2b7…, B=4f200996…,
 // C=2e2bcf34… are what old Cohort 1 reports were scored under.
 //
-// Fifth: suite 1.0.0 also adds the SEE sample-efficiency axis. Each task
+// Suite 1.0.0 also adds the SEE sample-efficiency axis. Each task
 // now ships 16 shown examples (was 8); the SEE runner loops over sample
 // levels 2, 4, 8, 16 and the per-task score is a weighted average. Levels
 // 2, 4 and 16 are NEW prompt slots — their digests are recorded below so a
@@ -80,9 +74,9 @@ export const SEE_LEVEL_DIGESTS = {
  *   0.3.0           verdict pool split (Pool B = stop + sound + sharp)
  *   1.0.0           DO v2 pivot (string-rewrite formal system, new pool,
  *                   new prompt, new scorer) AND SEE sample efficiency
- *                   (levels 2, 4, 8, 16). Minesweeper scores under 1.0.0
- *                   are NOT comparable to scores under any 0.x.x. Old
- *                   SEE scores under level 8 remain comparable because
- *                   the level-8 prompt is byte-identical.
+ *                   (levels 2, 4, 8, 16). Minesweeper digests retired:
+ *                   any report under 0.x.x is not comparable to anything
+ *                   recorded at 1.0.0. Old SEE scores under level 8 remain
+ *                   comparable because the level-8 prompt is byte-identical.
  */
 export const SUITE_VERSION = "1.0.0";

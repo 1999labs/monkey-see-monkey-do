@@ -9,7 +9,7 @@
 
 import { appendFileSync } from "node:fs";
 
-import { REFERENCE_SOLVER_SOURCE } from "../../src/do/reference-solver.mjs";
+import { REFERENCE_SOLVER_SOURCE } from "../../src/do/chain/run.mjs";
 
 const ANSWERS = {
   "f(n)": "```javascript\nfunction f(n) { return n <= 10 ? n * n : n * n - 100; }\n```",
@@ -31,18 +31,22 @@ console.log(f([1, 2, 3]));
 \`\`\``,
 };
 
-// A model whose id contains "weak" answers like a mimic: naive SEE rules and a
-// DO solver that clicks the first hidden cell. Used by the acceptance-gate test.
+// A model whose id contains "weak" answers like a mimic: naive SEE rules and
+// a chain solver that emits an empty derivation on every chain. Used by the
+// acceptance-gate test.
 const WEAK = {
   "f(n)": "function f(n) { return n * n; }",
   "f(s)": "function f(s) { return s.charAt(0).toUpperCase() + s.slice(1); }",
   "f(arr)": "function f(arr) { return arr.slice().sort((a, b) => b - a)[arr.length - 2]; }",
-  DO: "function solve(board) { for (let r = 0; r < board.length; r++) for (let c = 0; c < board[r].length; c++) if (board[r][c] === null) return { row: r, col: c }; return null; }",
+  DO: "function solve(start, target) { return []; }",
 };
+
+const isChainDoPrompt = (prompt) =>
+  prompt.includes("solve(start, target)") || prompt.includes("monkey-do-chain@1.0.0");
 
 const answerFor = (prompt, model = "") => {
   const weak = /weak/.test(model);
-  if (prompt.includes("Minesweeper")) return weak ? WEAK.DO : REFERENCE_SOLVER_SOURCE;
+  if (isChainDoPrompt(prompt)) return weak ? WEAK.DO : REFERENCE_SOLVER_SOURCE;
   if (weak) {
     for (const hint of Object.keys(ANSWERS)) {
       if (prompt.includes(`argument: ${hint}`) || prompt.includes(`integers: ${hint}`)) return WEAK[hint];

@@ -1,18 +1,18 @@
 // Prints the exact prompt text and SHA-256 for every prompt: the three SEE
-// tasks and the DO solver prompt. Compare against src/prompt-digests.mjs.
+// tasks and the DO v2 chain prompt. Compare against src/prompt-digests.mjs.
 //
 // Exits 1 when any digest does not match, so the check is usable as a gate by
 // anything that reads exit codes; a mismatch used to be a printed line and a
 // 0, indistinguishable from a match to any script. The runtime self-test
 // enforces the same comparison before any model runs.
 import { allPromptDigests } from "../src/see/prompt.mjs";
-import { allPromptDigests as doPromptDigests } from "../src/do/prompt.mjs";
+import { allPromptDigests as doPromptDigests, POOL_SEED_HEX } from "../src/do/chain/prompt.mjs";
 import { RECORDED_DIGESTS } from "../src/prompt-digests.mjs";
 
 let mismatches = 0;
 const all = [...allPromptDigests(), ...doPromptDigests()];
 for (const { taskId, prompt, digest } of all) {
-  console.log(`=== ${taskId === "DO" ? "MONKEY DO" : `TASK ${taskId}`} ===`);
+  console.log(`=== ${taskId === "DO" ? "MONKEY DO (chain eval)" : `TASK ${taskId}`} ===`);
   console.log(prompt);
   const ok = RECORDED_DIGESTS[taskId] === digest;
   if (!ok) mismatches++;
@@ -20,4 +20,5 @@ for (const { taskId, prompt, digest } of all) {
   console.log();
 }
 console.log(`${all.length - mismatches}/${all.length} digests match src/prompt-digests.mjs`);
+console.log(`(suite seed 0x${POOL_SEED_HEX.toUpperCase()}; suite version 1.0.0)`);
 if (mismatches > 0) process.exit(1);

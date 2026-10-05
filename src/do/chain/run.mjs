@@ -357,6 +357,7 @@ const isMain = (() => {
 })();
 
 if (isMain) {
+  (async () => {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || (!args.model && !args.dryRun)) {
     console.log(HELP);
@@ -386,6 +387,14 @@ if (isMain) {
   console.log(`\n  full credit chains: ${out.score.perChain.filter((c) => c.fullCredit).length}/${pool.chains.length}`);
   console.log(`  partial chains:     ${out.score.perChain.filter((c) => c.partial).length}/${pool.chains.length}`);
   console.log(`  protocol_violation: ${out.score.perChain.filter((c) => c.outcome === "protocol_violation").length}`);
-  console.log(`\n  Saved results to (TODO Phase 5 writes the JSON report; for now the score is printed only).`);
+  // Persist every run, dry or real. The report carries the chain pool's
+  // fingerprint so a reader can verify the run is from this pool version.
+  const { buildChainDoReport, writeChainDoReport } = await import("../../report.mjs");
+  const report = buildChainDoReport({
+    model, result: out, config, keySource, pool, reproducibility: null,
+  });
+  const reportPath = writeChainDoReport(report, args.out);
+  console.log(`\n  Saved results to ${reportPath}`);
   if (args.dryRun && out.score.total !== 50) process.exit(1);
+  })();
 }
