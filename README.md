@@ -1,10 +1,17 @@
 ## Monkey See 🙉 Monkey Do 🙊
 
-Two automated model evals that probe two narrow skills: **induction**, generalising a
-rule from examples instead of copying their surface; and **deduction**, writing a
-chain of moves in a novel formal system where every step in the chain is
-provably legal and the chain reaches the target.
+Two automated model evals that probe two narrow skills: **induction**, inferring
+a rule from a handful of examples instead of copying their surface; and
+**sustained deduction**, writing a chain of moves in a novel formal system where
+every step is provably legal and the chain ends on the target.
 No human scoring, no LLM judges, no runtime dependencies.
+
+Monkey See and Monkey Do are useful for model selection because they catch complementary failures.
+A model can score well on a single-shot benchmark and still lose points here on
+exactly the two axes that matter at deployment: it copies examples instead of
+inferring the rule (See's surface-fit axis), or it writes code that stays correct
+for five steps and breaks at thirty (Do's chain-length gradient). The score is
+mechanical, and the workload fixed and bounded. The adjusted score is an auditable capability number, and every run is both comparable to every other run and cheap enough to repeat.
 
 | Eval | Question | Score |
 |---|---|---|
