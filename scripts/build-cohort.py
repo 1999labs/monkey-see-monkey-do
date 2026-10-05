@@ -5,7 +5,7 @@ from pathlib import Path
 
 REPO = Path("/Users/noahmclaughlin/Code/monkey-see-monkey-do")
 RESULTS = REPO / "results"
-COHORT = REPO / "docs" / "cohort-1-local-small-postpivot.json"
+COHORT = REPO / "docs" / "ollama-local-models.json"
 
 # Order by paramsB ascending (matches the original cohort sort order).
 MODEL_ORDER = [

@@ -429,8 +429,8 @@ components it came from.
 ## Results
 
 A committed post-pivot cohort lives at
-`docs/cohort-1-local-small-postpivot.json` (chart:
-`docs/cohort-1-local-small-postpivot.svg`); five small local Ollama
+`docs/ollama-local-models.json` (chart:
+`docs/ollama-local-models.svg`); five small local Ollama
 models, each scored -r 3 at temperature 0 with the corrected
 `CALL_TIMEOUT_MS = 10000` (Phase 8 Stage 1.5). The cohort reports
 **both adjusted readings side by side** — `adjusted_1_0_0` is the
@@ -460,7 +460,7 @@ both evals, REPRODUCIBLE on both evals. `CALL_TIMEOUT_MS = 10000`
 (Phase 8 Stage 1.5). All five runs are local Ollama (pricing: `'local'`,
 `costUsd: null`).
 
-![Cohort chart](docs/cohort-1-local-small-postpivot.svg)
+![Cohort chart](docs/ollama-local-models.svg)
 
 *Chart alt text:* adjusted score against parameter count (billions)
 for five local Ollama models under 8B parameters, scored -r 3 at
@@ -468,13 +468,13 @@ temperature 0 under suite 1.1.0. The reference solver sits at the
 100 mark on the y-axis, far above every model — these are real-model
 DO scores, not BFS reference scores. Each model's dot is a real
 combined report (sources on the `source` field of
-`docs/cohort-1-local-small-postpivot.json`).
+`docs/ollama-local-models.json`).
 
 Re-derive from a fresh clone:
 
 ```bash
-python3 scripts/build-cohort.py              # assembles docs/cohort-1-local-small-postpivot.json
-node bin/chart.mjs docs/cohort-1-local-small-postpivot.json docs/cohort-1-local-small-postpivot.svg
+python3 scripts/build-cohort.py              # assembles docs/ollama-local-models.json
+node bin/chart.mjs docs/ollama-local-models.json docs/ollama-local-models.svg
 ```
 
 To run the publication gate before committing any cohort evidence:

@@ -22,7 +22,7 @@ const run = (args) =>
 
 test("the committed cohort chart regenerates cleanly", async () => {
   const out = join(tmpdir(), `md-chart-${Date.now()}.svg`);
-  const r = await run([join(ROOT, "docs/cohort-1-local-small.json"), out]);
+  const r = await run([join(ROOT, "docs/ollama-local-models.json"), out]);
   assert.equal(r.code, 0, r.stderr);
   const svg = readFileSync(out, "utf8");
   assert.match(svg, /<svg/);

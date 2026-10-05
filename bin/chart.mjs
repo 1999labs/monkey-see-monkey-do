@@ -4,7 +4,7 @@
 // JSON reports carry, so a re-run of the eval updates the picture by
 // regenerating it, and a chart cannot silently drift from results/.
 //
-// Usage:  node bin/chart.mjs docs/cohort-1-local-small.json [out.svg]
+// Usage:  node bin/chart.mjs docs/ollama-local-models.json [out.svg]
 //
 // No dependencies, no build step: this emits SVG text directly so the file
 // renders in a browser, in GitHub, and in any Markdown viewer without a
@@ -174,7 +174,7 @@ const validate = (data, input) => {
 
 const [, , input, outputArg] = process.argv;
 if (!input) {
-  console.error("usage: node bin/chart.mjs docs/cohort-1-local-small.json [out.svg]");
+  console.error("usage: node bin/chart.mjs docs/ollama-local-models.json [out.svg]");
   process.exit(1);
 }
 const data = JSON.parse(readFileSync(input, "utf8"));

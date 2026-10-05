@@ -482,7 +482,7 @@ reporting layer only.
 To see the effect on a real cohort:
 
 ```bash
-node bin/chart.mjs docs/cohort-1-local-small.json
+node bin/chart.mjs docs/ollama-local-models.json
 ```
 
 (Chart-cost x-axis requires a `pricing` field on the combined report;
