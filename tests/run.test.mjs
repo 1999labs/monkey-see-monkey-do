@@ -8,7 +8,7 @@ import { runSee } from "../src/see/run.mjs";
 import { tasks } from "../src/see/tasks.mjs";
 import { buildPrompt, promptDigest } from "../src/see/prompt.mjs";
 import { robustnessBonus, ROBUSTNESS_POINTS } from "../src/see/score.mjs";
-import { runAll } from "../src/run-all.mjs";
+import { runAll, summarise } from "../src/run-all.mjs";
 import { loadPublishedPool } from "../src/do/chain/pool.mjs";
 import { REFERENCE_SOLVER_SOURCE } from "../src/do/chain/run.mjs";
 
@@ -322,4 +322,38 @@ test("every DO run failing is NO_VERDICT, never REPRODUCIBLE", async () => {
   assert.equal(stability.answeredDoRuns, 0);
   assert.equal(stability.doSpread, 0);
   assert.equal(stability.doVerdict, "NO_VERDICT");
+});
+
+test("summarise folds robustness into the SEE total and uses /50 and /100", () => {
+  // The reading array is committed evidence and it used to understate SEE by
+  // up to 5 points (it summed only the 45 task points) and print a combined
+  // denominator of 95 while combined.max said 100. SEE is out of 50: the task
+  // arms carry 45 and robustness carries the last 5. This pin exists because
+  // the wrong string was published in five Phase 9 reports.
+  const seeOut = {
+    perTask: {
+      A: { weightedRate: 0.5 },
+      B: { weightedRate: 0.5 },
+      C: { weightedRate: 0.5 },
+    },
+    perLevel: { 2: { gz: 0.1 }, 4: { gz: 0.2 }, 8: { gz: 0.3 }, 16: { gz: 0.4 } },
+    robustness: { points: 4.9667, max: 5, threw: 1, total: 150, rate: 0.9933, crashed: true },
+  };
+  const doOut = {
+    score: {
+      total: 50,
+      perChain: [
+        { fullCredit: true, partial: false },
+        { fullCredit: false, partial: true },
+      ],
+    },
+  };
+  const text = summarise(seeOut, doOut);
+
+  // task points = 0.5 * 15 * 3 = 22.5, + robustness 4.9667 = 27.4667 -> 27.47/50
+  assert.match(text, /MONKEY SEE\s+27\.47\/50/, "SEE total must be task points + robustness, out of 50");
+  assert.match(text, /task points 22\.50\/45 \+ robustness 4\.97\/5/, "the split must be shown");
+  assert.match(text, /SEE 27\/50 \+ DO 50\/50 = combined 77\/100/, "combined is out of 100");
+  assert.ok(!text.includes("/95"), "no /95 denominator anywhere");
+  assert.ok(!text.includes("(v2)"), "the stale (v2) label is gone");
 });

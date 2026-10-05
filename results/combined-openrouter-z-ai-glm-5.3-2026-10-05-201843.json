@@ -114,16 +114,27 @@
     "total": 38,
     "max": 100,
     "reading": [
-      "MONKEY SEE         33.03/45   weighted: A=48.4%  B=99.4%  C=72.4%",
-      "GZ (per level): L2=42.0%  L4=22.0%  L8=9.3%  L16=13.3%  GZ_mean=21.67%",
-      "MONKEY DO (v2)    0/50   0/50 chains full credit, 0 partial",
-      "SEE 33/45 + DO 0/50 = combined 33.03/95"
+      "  MONKEY SEE         38.00/50   weighted: A=48.4%  B=99.4%  C=72.4%",
+      "    task points 33.03/45 + robustness 4.97/5",
+      "    GZ (per level): L2=42.0%  L4=22.0%  L8=9.3%  L16=13.3%  GZ_mean=21.67%",
+      "  MONKEY DO          0/50   0/50 chains full credit, 0 partial",
+      "  SEE 38/50 + DO 0/50 = combined 38/100"
     ],
     "perRunTotals": [
       32,
       39,
       38
-    ]
+    ],
+    "reading_revision": {
+      "revised": "2026-10-05",
+      "reason": "The reading understated SEE by omitting the robustness points (it summed only the 45 task points) and printed a combined denominator of 95 while combined.max is 100. SEE is out of 50 (45 task + 5 robustness); the combined total is out of 100. The stale '(v2)' label was also dropped.",
+      "before": [
+        "MONKEY SEE         33.03/45   weighted: A=48.4%  B=99.4%  C=72.4%",
+        "GZ (per level): L2=42.0%  L4=22.0%  L8=9.3%  L16=13.3%  GZ_mean=21.67%",
+        "MONKEY DO (v2)    0/50   0/50 chains full credit, 0 partial",
+        "SEE 33/45 + DO 0/50 = combined 33.03/95"
+      ]
+    }
   },
   "cost": {
     "see": {
@@ -197,7 +208,7 @@
   },
   "limitations": [
     "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and chain-rewrite derivation (DO), not software engineering.",
-    "DO scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
+    "DO scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO score describes the code it emitted \u2014 not deduction performed at inference time. A correct solver may be recalled rather than derived.",
     "A low Generalization Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
     "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
     "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",

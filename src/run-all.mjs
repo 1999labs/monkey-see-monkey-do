@@ -74,20 +74,37 @@ MONKEY SEE and MONKEY DO (suite 1.0.0 — DO chain eval)
 /**
  * Combined SEE + DO summary.
  *
- * Computes the per-task weighted scores (Phase 4) and the chain
- * engagement rate (Phase 5). The text returned is a flat summary, not
+ * Computes the per-task weighted scores (Phase 4), the robustness points, and
+ * the chain engagement rate (Phase 5). The text returned is a flat summary, not
  * a README — it's printed to the terminal after every run.
+ *
+ * THE TOTAL MUST MATCH THE REPORT. SEE is out of 50, not 45: the three task
+ * arms carry 45 points and `robustness.points` carries the last 5
+ * (src/report.mjs computes seeTotal the same way). An earlier version of this
+ * function summed only the task arms and printed "/45", so every `reading`
+ * array understated SEE by up to 5 points and the combined denominator said 95
+ * while `combined.max` said 100. The two must agree, so the reading now shows
+ * the task points and the robustness points separately AND the full /50 total,
+ * and the combined line reads /100.
  */
 export const summarise = (seeOut, doOut) => {
   // Per-task weighted rate as a percentage.
   const perTaskRate = (id) => seeOut.perTask[id].weightedRate;
-  const total = perTaskRate("A") * 15 + perTaskRate("B") * 15 + perTaskRate("C") * 15;
+  const taskPoints = perTaskRate("A") * 15 + perTaskRate("B") * 15 + perTaskRate("C") * 15;
+  const robustness = seeOut.robustness?.points ?? 0;
+  const seeTotal = taskPoints + robustness;
+  const doTotal = doOut.score.total;
 
   const lines = [];
-  lines.push(`  MONKEY SEE         ${total.toFixed(2)}/45   weighted: A=${(perTaskRate("A") * 100).toFixed(1)}%  B=${(perTaskRate("B") * 100).toFixed(1)}%  C=${(perTaskRate("C") * 100).toFixed(1)}%`);
+  lines.push(
+    `  MONKEY SEE         ${seeTotal.toFixed(2)}/50   weighted: A=${(perTaskRate("A") * 100).toFixed(1)}%  B=${(perTaskRate("B") * 100).toFixed(1)}%  C=${(perTaskRate("C") * 100).toFixed(1)}%`
+  );
+  lines.push(
+    `    task points ${taskPoints.toFixed(2)}/45 + robustness ${robustness.toFixed(2)}/5`
+  );
   lines.push(`    GZ (per level): ${Object.entries(seeOut.perLevel).map(([l, e]) => `L${l}=${(e.gz * 100).toFixed(1)}%`).join("  ")}  GZ_mean=${((Object.values(seeOut.perLevel).reduce((s, e) => s + e.gz, 0) / Object.keys(seeOut.perLevel).length) * 100).toFixed(2)}%`);
-  lines.push(`  MONKEY DO (v2)    ${doOut.score.total}/50   ${doOut.score.perChain.filter((c) => c.fullCredit).length}/${poolChainsCount(doOut)} chains full credit, ${doOut.score.perChain.filter((c) => c.partial).length} partial`);
-  lines.push(`  SEE ${total.toFixed(0)}/45 + DO ${doOut.score.total}/50 = combined ${total + doOut.score.total}/95`);
+  lines.push(`  MONKEY DO          ${doTotal}/50   ${doOut.score.perChain.filter((c) => c.fullCredit).length}/${poolChainsCount(doOut)} chains full credit, ${doOut.score.perChain.filter((c) => c.partial).length} partial`);
+  lines.push(`  SEE ${seeTotal.toFixed(0)}/50 + DO ${doTotal}/50 = combined ${(seeTotal + doTotal).toFixed(0)}/100`);
   return lines.join("\n");
 };
 
@@ -174,6 +191,14 @@ export const runAll = async (config, { runs = 1, pool, onProgress = () => {} } =
       seeVerdict: seeRep.verdict ?? "NO_VERDICT",
       seePrints,
       doReproducible: doPrints.length >= 2 && new Set(doPrints).size === 1,
+      // NOTE: doSpread 0 together with doVerdict NOT_REPRODUCIBLE is NOT a
+      // contradiction. The spread is a SCORE difference; the verdict is a CODE
+      // identity check over response fingerprints. Two different solvers that
+      // both happen to score 50/50 give spread 0 and NOT_REPRODUCIBLE at once,
+      // and both are right. Likewise withinTwoPoints can be false while the
+      // verdict is REPRODUCIBLE: the spread answers "did the score move", the
+      // verdict answers "was the code the same", and they are different
+      // questions. Do not "reconcile" them.
       doVerdict: printVerdict(doPrints) ?? "NO_VERDICT",
       doPrints,
       // Per-run route failures, so a spread can be explained from this file alone.
@@ -190,7 +215,7 @@ const main = async () => {
     process.exit(args.help ? 0 : 1);
   }
 
-  console.log(`\nMONKEY SEE / MONKEY DO (v2) · ${args.model}`);
+  console.log(`\nMONKEY SEE / MONKEY DO · ${args.model}`);
   await selfTestGate();
   const { config, keySource } = await prepareModel(args);
 
@@ -209,7 +234,7 @@ const main = async () => {
   for (const [i, r] of runs.entries()) {
     console.log(`\n\n=== MONKEY SEE (levels) ===`);
     printLevelsRun(args.model + (runs.length > 1 ? ` (run ${i + 1}/${runs.length})` : ""), r.seeOut);
-    console.log(`\n\n=== MONKEY DO (v2) ===`);
+    console.log(`\n\n=== MONKEY DO ===`);
     console.log(`  ${r.doOut.score.total}/50 across ${pool.chains.length} chains (fullCredit=${r.doOut.score.perChain.filter((c) => c.fullCredit).length}, partial=${r.doOut.score.perChain.filter((c) => c.partial).length})`);
   }
 
