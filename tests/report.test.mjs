@@ -421,10 +421,11 @@ test("computeCost emits pay-per-token for an OpenRouter run with usage and a rat
   };
   const usage = { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 };
   const r = computeCost(config, usage);
-  // $0.05/1M prompt + $7.00/1M completion = 0.05 + 7.00 = 7.05
+  // Pinned to Z.AI: $1.40/1M prompt + $4.40/1M completion = 1.40 + 4.40 = 5.80
+  // (NOT the 0.05/7.00 model-level list rate, which is Wafer's).
   assert.equal(r.pricing, "pay-per-token");
   assert.notEqual(r.costUsd, null, "an OpenRouter run with usage + a table entry must price");
-  assert.equal(r.costUsd, 7.05, "1000000 * 0.05/1M + 1000000 * 7.00/1M = 7.05 USD");
+  assert.equal(r.costUsd, 5.8, "1000000 * 1.40/1M + 1000000 * 4.40/1M = 5.80 USD");
 });
 
 test("computeCost routes OpenRouter to pay-per-token, not subscription-estimate", () => {
@@ -447,8 +448,8 @@ test("computeCost routes OpenRouter to pay-per-token, not subscription-estimate"
 test("rateFor resolves an OpenRouter slug from the committed table and misses cleanly", () => {
   const hit = rateFor("z-ai/glm-5.3", { source: "openrouter" });
   assert.ok(hit, "the Phase 9 cohort's models must be in the committed table");
-  assert.equal(hit.inputPer1M, 0.05);
-  assert.equal(hit.outputPer1M, 7.0);
+  assert.equal(hit.inputPer1M, 1.4, "the pinned Z.AI rate, not the model-level list rate");
+  assert.equal(hit.outputPer1M, 4.4);
   // Every cohort member must resolve, or a run would stamp unpriced.
   for (const id of [
     "qwen/qwen3.8-2.4t-a95b",
@@ -467,7 +468,7 @@ test("the committed OpenRouter rates table carries its as-of date", () => {
   const t = ratesTable("openrouter");
   assert.ok(t._asOf, "the table must carry an as-of date");
   assert.match(t._asOf, /^\d{4}-\d{2}-\d{2}$/);
-  assert.equal(t._source, "https://openrouter.ai/api/v1/models");
+  assert.equal(t._source, "https://openrouter.ai/api/v1/models/<id>/endpoints");
 });
 
 test("computeCost emits pay-per-token when model.price is on the host", () => {
@@ -558,4 +559,31 @@ test("the combined report stamps reasoningEffort beside temperature", () => {
     keySource: "env",
   });
   assert.equal(unpinned.generation.reasoningEffort, null, "an unpinned run stamps null, never a default");
+});
+
+
+test("the OpenRouter rate table carries the PINNED-endpoint rates, with the host named", () => {
+  // The list rate is not the pinned rate. Every cohort run pins one provider,
+  // and the serving host sets the price, so a row must name the host it was
+  // priced for and carry that host's numbers. Two rows differ sharply from the
+  // model-level list rate; this pin exists because using the list rate would
+  // put a wrong dollar figure on the published chart.
+  const t = ratesTable("openrouter");
+  const expect = {
+    "z-ai/glm-5.3": { provider: "Z.AI", in: 1.4, out: 4.4 },
+    "deepseek/deepseek-v4.1-flash": { provider: "DeepSeek", in: 0.15, out: 0.6 },
+    "qwen/qwen3.8-2.4t-a95b": { provider: "Alibaba", in: 2.0, out: 6.0 },
+    "xiaomi/mimo-v2.6-pro": { provider: "Xiaomi", in: 0.435, out: 0.87 },
+    "tencent/hy3": { provider: "Tencent", in: 0.132, out: 0.528 },
+  };
+  for (const [id, want] of Object.entries(expect)) {
+    const row = t.models[id];
+    assert.ok(row, `${id} must be in the table`);
+    assert.equal(row.provider, want.provider, `${id} must name its pinned host`);
+    assert.equal(row.tiers[0].inputPer1M, want.in, `${id} input rate`);
+    assert.equal(row.tiers[0].outputPer1M, want.out, `${id} output rate`);
+  }
+  // The two that the list rate would have got wrong.
+  assert.notEqual(t.models["z-ai/glm-5.3"].tiers[0].inputPer1M, 0.05, "must not carry Wafer's list rate");
+  assert.notEqual(t.models["deepseek/deepseek-v4.1-flash"].tiers[0].outputPer1M, 1.2, "must not carry the list rate");
 });

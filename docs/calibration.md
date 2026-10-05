@@ -514,15 +514,24 @@ multiply by 1e6 for the per-1M figure the table stores).
 A per-model `model.price` in `config/models.json` still wins over either
 table — the committed tables are the fallback, not an override.
 
-The Phase 9 open-weight cohort's rates as of 2026-10-05:
+The Cohort 1 rates as of 2026-10-05 are the **pinned-endpoint** rates, not
+OpenRouter's model-level list rates. Every cohort run pins one provider, and
+the serving host sets the price, so each row names its host. Two differ
+sharply from the list rate, and using the list rate would put a wrong dollar
+figure on the published chart:
 
-| Model id | $/1M in | $/1M out |
-|---|---|---|
-| `qwen/qwen3.8-2.4t-a95b` | 2.00 | 6.00 |
-| `deepseek/deepseek-v4.1-flash` | 0.30 | 1.20 |
-| `z-ai/glm-5.3` | 0.05 | 7.00 |
-| `xiaomi/mimo-v2.6-pro` | 0.435 | 0.87 |
-| `tencent/hy3` | 0.132 | 0.528 |
+| Model id | pinned host | $/1M in | $/1M out | list rate (for contrast) |
+|---|---|---|---|---|
+| `qwen/qwen3.8-2.4t-a95b` | Alibaba | 2.00 | 6.00 | same |
+| `deepseek/deepseek-v4.1-flash` | DeepSeek | 0.15 | 0.60 | 0.30 / 1.20 |
+| `z-ai/glm-5.3` | Z.AI | 1.40 | 4.40 | 0.05 / 7.00 |
+| `xiaomi/mimo-v2.6-pro` | Xiaomi | 0.435 | 0.87 | same |
+| `tencent/hy3` | Tencent | 0.132 | 0.528 | same |
+
+Re-derive a row from `/api/v1/models/<id>/endpoints`: find the entry whose
+`provider_name` matches the pin and read its `pricing` block. The model-level
+`/api/v1/models` rate is the default route's price and is **not** what a
+pinned run pays.
 
 ### The chart's x-axis is declared, not inferred
 

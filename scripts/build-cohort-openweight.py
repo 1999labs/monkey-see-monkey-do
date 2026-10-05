@@ -31,6 +31,7 @@ COHORT = [
     {
         "model": "openrouter/qwen/qwen3.8-2.4t-a95b",
         "label": "Qwen 3.8 2.4T A95B",
+        "provider": "Alibaba",
         "color": "#7c3aed",
         "effort": "medium",
         "efforts": ["xhigh", "medium", "low"],
@@ -38,6 +39,7 @@ COHORT = [
     {
         "model": "openrouter/deepseek/deepseek-v4.1-flash",
         "label": "DeepSeek V4.1 Flash",
+        "provider": "DeepSeek",
         "color": "#0e7490",
         "effort": "high",
         "efforts": ["max", "high", "low"],
@@ -45,6 +47,7 @@ COHORT = [
     {
         "model": "openrouter/z-ai/glm-5.3",
         "label": "GLM 5.3",
+        "provider": "Z.AI",
         "color": "#b45309",
         "effort": "high",
         "efforts": ["max", "high", "low"],
@@ -52,6 +55,7 @@ COHORT = [
     {
         "model": "openrouter/xiaomi/mimo-v2.6-pro",
         "label": "MiMo V2.6 Pro",
+        "provider": "Xiaomi",
         "color": "#15803d",
         "effort": None,
         "efforts": [],
@@ -59,6 +63,7 @@ COHORT = [
     {
         "model": "openrouter/tencent/hy3",
         "label": "Hy3",
+        "provider": "Tencent",
         "color": "#be123c",
         "effort": "high",
         "efforts": ["high", "low", "none"],
@@ -85,8 +90,9 @@ def report_slug(model: str) -> str:
     return re.sub(r"[^a-zA-Z0-9._-]+", "-", model).strip("-")[:80]
 
 
-def find_report(model: str) -> Path:
+def find_report(spec: dict) -> Path:
     """The latest combined@5 report for this model, or a loud exit."""
+    model = spec["model"]
     pattern = f"combined-{report_slug(model)}-*.json"
     matches = sorted(RESULTS.glob(pattern))
     post_pivot = [
@@ -100,7 +106,8 @@ def find_report(model: str) -> Path:
             f"no combined@5 report for {model}\n"
             f"  looked for: results/{pattern}\n"
             f"  run the sweep first:  npm run all -- -m {model} -r 3 "
-            f"--only-provider --no-fallback --config config/phase9-cohort.json\n"
+            f"--only-provider {spec.get('provider', '<host>')} --no-fallback "
+            f"--config config/phase9-cohort.json\n"
             f"  recent combined reports on disk:\n{hint}"
         )
     return max(post_pivot, key=lambda p: p.stat().st_mtime)
@@ -123,7 +130,7 @@ def cost_usd(r: dict):
 
 def summarize(spec: dict) -> dict:
     model = spec["model"]
-    path = find_report(model)
+    path = find_report(spec)
     r = json.loads(path.read_text())
     adj = r.get("adjusted") or {}
     do = r.get("do") or {}
@@ -142,6 +149,7 @@ def summarize(spec: dict) -> dict:
     return {
         "model": model,
         "label": spec["label"],
+        "provider": spec["provider"],
         "costUsd": usd,
         "reasoningEffort": spec["effort"],
         "reasoningEfforts": spec["efforts"],
@@ -195,8 +203,11 @@ def main() -> None:
         "temperature": 0,
         "methodology": (
             "Each model scored -r 3 at pinned temperature 0 with "
-            "--only-provider --no-fallback (every model here is multi-endpoint on "
-            "OpenRouter, so an unpinned run would mix quantizations). The x-axis is "
+            "--only-provider <its host> --no-fallback (every model here is "
+            "multi-endpoint on OpenRouter, so an unpinned run would mix "
+            "quantizations). Cost is dollars per run under the pinned host, at the "
+            "pinned-endpoint rates in config/openrouter-rates.json (NOT the "
+            "model-level list rate). The x-axis is "
             "dollars per run, summed from the report's cost block at the rates in "
             "config/openrouter-rates.json (as of its _asOf date). A per-model "
             "reasoning-effort rung is recorded beside each score: effort is a "
