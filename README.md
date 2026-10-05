@@ -169,9 +169,9 @@ without them is misleading.
 
 ## Maintaining the suite
 
-The full command table (self-test, pool regeneration, the publication gate and its
-criteria, the committed-report rules, the repository layout) lives in
-[`docs/maintaining.md`](docs/maintaining.md). The short version:
+The full command table, the publication gate and its criteria, and the committed-report
+rules live in [`docs/maintaining.md`](docs/maintaining.md). The commands you'll use
+day to day:
 
 | Command | What it does |
 |---|---|
@@ -188,3 +188,54 @@ suite version deliberately; pool changes bump `GENERATOR_VERSION` and regenerate
 `npm run gen-pool`. Every asserted number lives in
 [`docs/calibration.md`](docs/calibration.md) — read it before changing a held-out
 set, the pool, the BFS caps, or the adjusted weights.
+
+## Repository layout
+
+Reference only. Nothing in here is needed to run the evals.
+
+```
+monkey-see-monkey-do/
+├── config/models.example.json   model registry template
+├── AGENTS.md                    working conventions for agent sessions
+├── docs/calibration.md          every asserted number, and how it was measured
+├── docs/scoring-detail.md       the full scoring machinery
+├── docs/scoring-models.md       providers, keys, custom registries, OpenRouter pinning
+├── docs/maintaining.md          command table, publication gate, committed-report rules
+├── results/combined-*.json      committed: the evidence for every published score
+├── docs/ollama-local-models.*   committed cohort JSON + chart, derived from results/
+├── src/
+│   ├── adapters/                openai.mjs, responses.mjs, anthropic.mjs, ollama.mjs, registry.mjs
+│   ├── sandbox.mjs              node:vm execution, per-call timeout, code extraction
+│   ├── cli.mjs                  shared runner plumbing, temperature rule, self-test gate
+│   ├── key.mjs                  API key resolution, shared by both evals
+│   ├── fingerprint.mjs          response hashing and reproducibility, shared by both evals
+│   ├── self-test.mjs            the checks that must pass before any score is recorded,
+│   │                            and the `npm run self-test` entry point
+│   ├── prompt-digests.mjs       recorded SHA-256 of every prompt
+│   ├── report.mjs               JSON reports and the limitations they carry
+│   ├── adjusted.mjs             the adjusted total: folds GZ_mean and chain-engagement rate into
+│   │                            one figure, reported beside SEE + DO and never inside them
+│   ├── run-all.mjs              both evals, one model, combined report
+│   ├── see/                     SEE only: reference.mjs (ground truth), tasks/*.json,
+│   │                            tasks.mjs, prompt, score, run-levels, run
+│   └── do/                      DO only — the chain eval files live entirely under chain/:
+│       └── chain/
+│           ├── rules.mjs        5 rewrite rules over 7 symbols {A,B,C,D,X,Y,Z}
+│           ├── reference.mjs    the BFS reference solver (dry-run 50/50,
+│           │                     real-mode 45/50 with MAX_STATES=50000)
+│           ├── generator.mjs    chain pool generator (seed 0xC0FFEE, 5 bands)
+│           ├── pool.mjs         chain pool loader / GENERATOR_VERSION stamp / sha256
+│           ├── pool.json        50 chains, sha256 f87d0b1906fc7906…, seed 0xC0FFEE
+│           ├── prompt.mjs       chain DO prompt + digest pin + canary
+│           ├── run.mjs          the chain DO model-path runner
+│           ├── score.mjs        per-chain full/partial/empty + chainEngagementRate
+│           └── dry-run.mjs      the chain DO dry-run entry point
+├── bin/                         command-line entry points, one per npm script:
+│                                gen-chain-pool, acceptance, diagnose, providers,
+│                                show-prompts, chart (cohort JSON → SVG)
+└── tests/                       node:test suites
+```
+
+`src/see/` and `src/do/` hold only what is private to their own eval. Anything both
+evals need (key resolution, response fingerprinting, the sandbox, reporting, the adjusted
+total) lives at the top of `src/`, so neither eval's folder reaches into the other's.
