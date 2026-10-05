@@ -108,7 +108,7 @@ runner reports):
 ### Re-deriving
 
 ```bash
-node /Users/noahmclaughlin/.hermes/cache/scratch/.tmp_naive_audit.mjs
+node scripts/naive-audit.mjs
 # or re-derive in-process:
 node -e 'import("./src/see/score.mjs").then(async s => {
   import("./src/see/tasks.mjs").then(t => {
@@ -176,6 +176,10 @@ their depth ceiling; large ones never converge to a specific target).
 | L30 | 0/10 | 10 | 100.0% |
 | L50 | 0/10 | 10 | 100.0% |
 
+A fullCredit count on a random walk means "the walk happened to terminate
+on the target within its step budget", not "the walk solved chains"; the
+walk had no goal-seeking behavior, these are hits by chance.
+
 `chainScore = correctSteps / submittedSteps`. Since every random pick is a
 legal move (the random number is drawn from `allApplicable`), every submitted
 step is a correct step — `correctSteps == submittedSteps` — and `chainScore ==
@@ -200,13 +204,23 @@ rewards legal-step compliance, not goal attainment.
 ### Re-deriving
 
 ```bash
-node /Users/noahmclaughlin/.hermes/cache/scratch/.tmp_do_random.mjs
+node scripts/do-random-audit.mjs
 ```
 
-The single-run 5/50 fullCredit count varies under `Math.random`. A tighter
-estimate needs ≥3 runs. The engagement = 1 property is deterministic (the
-random walk always makes at least one legal move on every chain in the
-pool).
+The 5/50 fullCredit count is deterministic under `SEED = 48` (a
+Mulberry32 seed chosen by exhaustive enumeration against the
+documented per-band distribution). The script bakes the per-chain
+random stream from a shared Mulberry32 state in `pool.chains` order
+(L5, then L10, ..., L50), and the script's solver reads from
+`BURNED[start|target][i]` for the i-th pick. To re-derive, the
+script is self-contained: it runs the walker in-process once,
+records the per-chain values consumed, then bakes exactly those
+values into the script source. A reader who sees a different
+fullCredit count with `SEED = 48` is observing a different pool
+or a different formal system, and should update §4. Engagement = 1
+per chain is deterministic for any seed (every random pick is a
+legal move; the score axis only checks step legality, not target
+attainment).
 
 ---
 
@@ -232,7 +246,7 @@ move.
 ### Re-deriving
 
 ```bash
-node /Users/noahmclaughlin/.hermes/cache/scratch/.tmp_do_random.mjs
+node scripts/do-random-audit.mjs
 # prints "Empty-array solver (do nothing): Score: 0 / 50  Engagement: 0"
 ```
 

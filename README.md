@@ -313,10 +313,14 @@ A "random" solver that picks uniformly among `allApplicable(state)` at every ste
 20 steps scores **50/50** on every chain, because every random pick is a legal move
 and the scoring function only checks step legality, not target attainment. The
 fullCredit rate is the right random baseline: in the measured run, 5/50 chains (10%)
-whose 20 random moves happened to terminate on the target. **Legal-step compliance is
-not goal attainment**; the fullCredit rate is the only signal that distinguishes a
-random walk from a goal-seeking derivation. See
-[`docs/calibration.md`](docs/calibration.md) section 4 for the per-band histogram.
+whose 20 random moves happened to terminate on the target. **A fullCredit count on
+a random walk means "the walk happened to terminate on the target within its
+step budget", not "the walk solved chains"; the walk had no goal-seeking
+behavior, these are hits by chance.** Legal-step compliance is not goal
+attainment; the fullCredit rate is the only signal that distinguishes a random
+walk from a goal-seeking derivation. See [`docs/calibration.md`](docs/calibration.md)
+section 4 for the per-band histogram. Re-derive with
+`node scripts/do-random-audit.mjs`.
 
 #### The reference solver in two modes (load-bearing distinction)
 
@@ -580,20 +584,17 @@ monkey-see-monkey-do/
 │   ├── run-all.mjs              both evals, one model, combined report
 │   ├── see/                     SEE only: reference.mjs (ground truth), tasks/*.json,
 │   │                            tasks.mjs, prompt, score, run-levels, run
-│   └── do/                      DO only:
-│       ├── run.mjs                the model-path runner
-│       ├── dry-run.mjs           the canonical gate (reference solver, dry-run)
-│       ├── prompt.mjs            DO prompt + digest + the chain-engagement canary
-│       ├── reference.mjs         the BFS reference solver
-│       ├── score.mjs             per-chain full/partial/empty contract
+│   └── do/                      DO only — the chain eval files live entirely under chain/:
 │       └── chain/
-│           ├── rules.mjs        5 rewrite rules over 7 symbols
-│           ├── pool.mjs         chain pool loader / regenerable build / sha256
-│           ├── pool.json        50 chains, sha256 f87d0b1906fc7906…, seed 0xC0FFEE
+│           ├── rules.mjs        5 rewrite rules over 7 symbols {A,B,C,D,X,Y,Z}
+│           ├── reference.mjs    the BFS reference solver (dry-run 50/50,
+│           │                     real-mode 45/50 with MAX_STATES=50000)
 │           ├── generator.mjs    chain pool generator (seed 0xC0FFEE, 5 bands)
-│           ├── prompt.mjs       chain DO prompt + digest pin
+│           ├── pool.mjs         chain pool loader / GENERATOR_VERSION stamp / sha256
+│           ├── pool.json        50 chains, sha256 f87d0b1906fc7906…, seed 0xC0FFEE
+│           ├── prompt.mjs       chain DO prompt + digest pin + canary
 │           ├── run.mjs          the chain DO model-path runner
-│           ├── score.mjs        chain DO scorer + chainEngagementRate helper
+│           ├── score.mjs        per-chain full/partial/empty + chainEngagementRate
 │           └── dry-run.mjs      the chain DO dry-run entry point
 ├── bin/                         command-line entry points, one per npm script:
 │                                gen-chain-pool, acceptance, diagnose, providers,

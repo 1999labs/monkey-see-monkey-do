@@ -20,5 +20,7 @@ for (const { taskId, prompt, digest } of all) {
   console.log();
 }
 console.log(`${all.length - mismatches}/${all.length} digests match src/prompt-digests.mjs`);
-console.log(`(suite seed 0x${POOL_SEED_HEX.toUpperCase()}; suite version 1.0.0)`);
+// POOL_SEED_HEX is the hex with a "0x" prefix (e.g. "0xC0FFEE"). Strip it
+// here so we don't double-prefix and print "0x0XC0FFEE".
+console.log(`(suite seed 0x${POOL_SEED_HEX.toUpperCase().replace(/^0X/, "")}; suite version 1.0.0)`);
 if (mismatches > 0) process.exit(1);
