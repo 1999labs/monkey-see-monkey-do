@@ -5,8 +5,8 @@ Sibling of scripts/build-cohort.py, which builds Cohort 2 (the local Ollama
 models). This one cannot reuse that script: the model ids, the report glob, the
 x-axis and the per-point cost all differ.
 
-The x-axis is costUsd, not paramsB — the frontier question is "what does a run
-cost", not "how big is the model" — so every point carries the run's dollars
+The x-axis is costUsd, not paramsB: the frontier question is "what does a run
+cost", not "how big is the model", so every point carries the run's dollars
 from its report's cost block. The chart already supports the costUsd axis
 (bin/chart.mjs, xAxis mode).
 
@@ -26,7 +26,7 @@ OUT = REPO / "docs" / "openweight-frontier-models.json"
 # `efforts` is the ladder the model lists; both are copied from
 # config/phase9-cohort.json and config/reasoning-efforts.json so the emitted
 # cohort is auditable on its own. `effort: None` means the parameter was
-# omitted (the provider default applied) — it is NOT the level "none".
+# omitted (the provider default applied); it is NOT the level "none".
 COHORT = [
     {
         "model": "openrouter/qwen/qwen3.8-27b",
@@ -121,7 +121,7 @@ def cost_usd(r: dict):
     half is known. Returning None for the whole run would discard a real
     number; summing a known half with a guessed one would invent one. So the
     priced halves are summed and `costComplete` records whether both were
-    priced — a caller must not treat a partial total as the full run cost.
+    priced, so a caller must not treat a partial total as the full run cost.
     """
     c = r.get("cost") or {}
     see, do = c.get("see") or {}, c.get("do") or {}
@@ -246,7 +246,7 @@ def main() -> None:
     doMeasured = [p["label"] for p in points if not p["doRouteFailed"]]
 
     out = {
-        "cohort": "Cohort 1 — open-weight frontier models (OpenRouter)",
+        "cohort": "Cohort 1: open-weight frontier models (OpenRouter)",
         "suiteVersion": "1.1.0",
         "date": "2026-10-05",
         "xAxis": "costUsd",

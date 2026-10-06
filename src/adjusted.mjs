@@ -86,8 +86,16 @@ export const GENERALIZATION_WEIGHT = 0.5;
 /** Maximum points the chain-engagement clawback can subtract. See the header. */
 export const NO_CONFIDENT_ERROR_POINTS = 10;
 
-/** Suite version stamped on every report. Bumped at deliberate changes. */
-export const SUITE_VERSION = "1.1.0";
+/**
+ * The ADJUSTED-FORMULA version stamped as `formulaVersion` on every report.
+ *
+ * This is NOT the suite version (that is SUITE_VERSION in prompt-digests.mjs).
+ * It is "1.1.0" while the suite is at 1.2.0 because 1.2.0 changed only the DO
+ * score definition, not this formula — a 1.2.0 report correctly carries
+ * formulaVersion "1.1.0". Renamed from SUITE_VERSION so the two cannot be
+ * confused: they shared a name and meant different things.
+ */
+export const FORMULA_VERSION = "1.1.0";
 
 /**
  * Fold the SEE Generalization Index (mean across sample levels) and the
@@ -180,7 +188,7 @@ export const adjustedTotal = ({
       noConfidentErrorPoints,
       formula:
         "clamp(see + do - GENERALIZATION_WEIGHT*GZ_mean*(see+do)/100 - 10*(1 - chainEngagementRate), 0, 100)",
-      formulaVersion: SUITE_VERSION,
+      formulaVersion: FORMULA_VERSION,
     },
   };
 };

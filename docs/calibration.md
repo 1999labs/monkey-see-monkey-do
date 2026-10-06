@@ -619,7 +619,7 @@ Four of five models saturate or exceed the budget. So:
 This is recorded here rather than fixed: changing `DEFAULT_TIMEOUT_MS` changes
 what the eval measures for every future run, and that is the user's call.
 
-### A note on SEE reproducibility vs SEE totals — and a defect found here
+### A note on SEE reproducibility vs SEE totals, and a defect found here
 
 SEE reported REPRODUCIBLE for every Cohort 1 model, including GLM with a
 per-run total spread of 7. Those are not contradictory *if* the verdict is
@@ -630,7 +630,7 @@ a sandbox that can throw (the robustness term).
 **This was a real defect and it is now FIXED (suite 1.2.0).** `runLevel`'s
 USABLE return path did not set a `response` field (only its failure paths did).
 `run-all.mjs` builds the SEE prints from `run.out.response`, so every usable
-call hashed the string `"undefined"` — the constant `c21f6150`. Every usable
+call hashed the string `"undefined"`, the constant `c21f6150`. Every usable
 call therefore produced the same fingerprint and `reproducibility()` could only
 ever return REPRODUCIBLE when the calls succeeded. Verified directly: a dry-run
 SEE run yields 3 distinct real fingerprints under `out.responseFingerprint`, but
@@ -644,7 +644,7 @@ Two things were wrong, and both are fixed:
    different questions (one per sample level), so pooling by task compared
    level 2's answer against level 16's. With the response now carried, that
    grouping would have reported every deterministic model as
-   NOT_REPRODUCIBLE — wrong in the opposite direction. The key is now
+   NOT_REPRODUCIBLE, wrong in the opposite direction. The key is now
    `(task, level)`, in both callers.
 
 A test pins it: a dry-run whose responses are varied must yield
@@ -652,8 +652,8 @@ NOT_REPRODUCIBLE, and it fails against the pre-fix code.
 
 **THE `seeVerdict` FIELD IN THE FIVE COMMITTED PHASE 9 REPORTS IS VOID.** The
 code could not have said anything else, so REPRODUCIBLE there is not evidence
-of determinism and must not be quoted. The SEE SCORES are unaffected — they
-derive from held-out pass rates, not from the fingerprint — so the score
+of determinism and must not be quoted. The SEE SCORES are unaffected: they
+derive from held-out pass rates, not from the fingerprint, so the score
 columns stand. No SEE run is being re-run to backfill the verdicts; the void
 field is recorded as a limitation instead.
 
@@ -732,7 +732,7 @@ Three of five Cohort 1 models timed out on DO. A cap was tested (item 2a) and
 does not help: MiMo returned `finish_reason: "length"` with reasoning tokens
 equal to the cap (16003/16000, 32004/32000) and **zero characters of content**
 at both 16000 and 32000. The hidden trace is 58028 chars of coherent,
-non-repeating analysis — not a loop — cut off mid-sentence. The model never
+non-repeating analysis (not a loop), cut off mid-sentence. The model never
 reaches the code-writing step at any cap, so a larger cap buys more trace, not
 an answer. Only a prompt change can address that, and prompts are digest-pinned,
 so it is a separate deliberate decision.

@@ -88,7 +88,7 @@ adjusted = clamp( SEE + DO  −  0.5 × GZ_mean × ((SEE + DO) / 100)
   reaches its target by legal moves; the fraction of such chains, times each
   band's weight, is the DO total. The older reading (the ratio of legal steps to
   submitted steps) is kept beside it as `stepLegalityRatio`, because it
-  distinguishes "emitted a legal prefix" from "emitted nothing" — but a
+  distinguishes "emitted a legal prefix" from "emitted nothing", but a
   one-legal-step submission scored 50/50 on it, which is why it is no longer the
   headline.
 
@@ -119,11 +119,11 @@ run under the pinned host. Methodology in
 |---|---|---|---|---|---|---|---|---|---|---|
 | `qwen/qwen3.8-27b` | Alibaba | medium | 39 | **50** ‡ | 50/50 | 50.0 | 18.8 | 1.00 | **81** | $0.060 |
 | `tencent/hy3` | Tencent | high | 38 | **50** | 50/50 | 50.0 | 20.2 | 1.00 | **79** | $0.076 |
-| `z-ai/glm-5.3` | Z.AI | high | 38 | no result † | — | — | 21.7 | — | withheld | $0.035 |
-| `xiaomi/mimo-v2.6-pro` | Xiaomi | unset | 36 | no result † | — | — | 19.3 | — | withheld | $0.018 |
-| `deepseek/deepseek-v4.1-flash` | DeepInfra | high | 39 | no result † | — | — | 18.0 | — | withheld | $0.015 |
+| `z-ai/glm-5.3` | Z.AI | high | 38 | no result † | - | - | 21.7 | - | withheld | $0.035 |
+| `xiaomi/mimo-v2.6-pro` | Xiaomi | unset | 36 | no result † | - | - | 19.3 | - | withheld | $0.018 |
+| `deepseek/deepseek-v4.1-flash` | DeepInfra | high | 39 | no result † | - | - | 18.0 | - | withheld | $0.015 |
 
-† **No DO result — not a zero.** The DO call timed out at the 420000 ms budget on
+† **No DO result, not a zero.** The DO call timed out at the 420000 ms budget on
 all three runs (`callFailure.do.reason: "timeout"`): *no solver was emitted
 within budget; the model reasoned indefinitely and produced zero content at
 every cap tested.* The adjusted figure is derived from that dead call, so it is
@@ -131,7 +131,7 @@ every cap tested.* The adjusted figure is derived from that dead call, so it is
 each with `doRouteFailed: true` and `adjustedComparable: false`.
 
 ‡ **Qwen 3.8 27B's DO is one sample from a range.** Its three DO runs scored
-`[0, 50, 50]` — three different solvers, one of which failed outright — so the
+`[0, 50, 50]`: three different solvers, one of which failed outright, so the
 published 50 is a median-of-answered, not a stable measurement. Spread 50.
 
 The DO column is the eval's intended signal: it separates models that **emit a
@@ -149,8 +149,8 @@ score (Qwen 3.8 27B, Hy3) are the only comparable readings.*
 answered all three runs with three *different* solvers; Hy3 answered twice with
 different code that both scored 50/50. The three timed-out models have no DO
 verdict (`NO_VERDICT`, 0 answered runs). SEE's per-model `seeVerdict` field in
-these reports is **void** — the code could not have said anything but
-REPRODUCIBLE (see calibration §9.6) — so it is not quoted here.
+these reports is **void**: the code could not have said anything but
+REPRODUCIBLE (see calibration §9.6), so it is not quoted here.
 
 **What this cohort actually measured.** SEE discriminated cleanly across the
 cohort (36-39 of 50). DO did not: only two of five models returned a solver
