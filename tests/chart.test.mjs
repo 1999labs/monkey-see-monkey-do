@@ -79,6 +79,17 @@ test("no score label is drawn beside a dot, and no two names overlap", async () 
       assert.ok(!overlap, `${a.n} and ${b.n} must not overlap`);
     }
   }
+
+  // Every name must sit INSIDE the plot rectangle. A name below the baseline is
+  // printed over the x-axis (mistral:7b-instruct did exactly this), and one
+  // above the top covers the reference caption.
+  const PLOT = { l: 76, r: 1140, t: 26, b: 406 };
+  for (const b of boxes) {
+    assert.ok(b.l >= PLOT.l + 1, `${b.n} must not run past the left of the plot`);
+    assert.ok(b.r <= PLOT.r - 1, `${b.n} must not run past the right of the plot`);
+    assert.ok(b.t >= PLOT.t + 1, `${b.n} must not sit above the plot`);
+    assert.ok(b.b <= PLOT.b - 1, `${b.n} must not be printed over the x-axis`);
+  }
 });
 
 test("an oversized point label is flipped inside the canvas, not clipped", async () => {

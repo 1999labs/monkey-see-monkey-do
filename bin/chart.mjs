@@ -177,21 +177,25 @@ const render = (data) => {
     return { l: left - pad, t: baseline - LABEL_FS - pad, r: left + w + pad, b: baseline + 4 + pad };
   };
 
-  // Positions to try, in order. Index 0 is the cohort's own hint.
+  // Positions to try, in order. Index 0 is the cohort's own hint. The list is
+  // ordered so the roomy positions are tried first and the tight ones (directly
+  // above the dot) last, which is what keeps the crowded right-hand cluster on
+  // the local chart clear of itself.
   const slots = (p) => [
     { anchor: p.anchor ?? "start", dx: p.dx ?? 13, dy: p.dy ?? 5 },
     { anchor: "start", dx: 14, dy: 5 },
     { anchor: "end", dx: -14, dy: 5 },
     { anchor: "start", dx: 14, dy: -13 },
     { anchor: "end", dx: -14, dy: -13 },
+    { anchor: "middle", dx: 0, dy: -15 },
+    { anchor: "middle", dx: 0, dy: -25 },
+    { anchor: "middle", dx: 0, dy: -35 },
+    { anchor: "middle", dx: 0, dy: -45 },
+    { anchor: "end", dx: -14, dy: -29 },
+    { anchor: "end", dx: -14, dy: -45 },
     { anchor: "start", dx: 14, dy: 21 },
     { anchor: "end", dx: -14, dy: 21 },
-    { anchor: "end", dx: -14, dy: -29 },
-    { anchor: "end", dx: -14, dy: 37 },
-    { anchor: "middle", dx: 0, dy: -15 },
     { anchor: "middle", dx: 0, dy: 25 },
-    { anchor: "middle", dx: 0, dy: -33 },
-    { anchor: "middle", dx: 0, dy: 43 },
   ];
 
   // Place the most constrained labels first: the rightmost points have the
@@ -204,7 +208,10 @@ const render = (data) => {
     const y = sy(p.adjusted);
     const label = String(p.label ?? p.model);
     const candidates = slots(p);
-    const inCanvas = (b) => b.l >= 2 && b.r <= W - 2 && b.t >= 1 && b.b <= H - 2;
+    // A label must sit INSIDE the plot rectangle, not merely on the canvas: a
+    // name placed below the baseline would be printed over the x-axis (and one
+    // above the top would cover the reference caption).
+    const inCanvas = (b) => b.l >= M.left + 2 && b.r <= M.left + plotW - 2 && b.t >= M.top + 2 && b.b <= sy(0) - 2;
     // Prefer a slot that is on-canvas AND collides with nothing; if none
     // exists, take the first that is merely on-canvas, so a label is never
     // clipped even when the plot is crowded.
