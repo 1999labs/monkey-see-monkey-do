@@ -30,6 +30,46 @@ test("the committed cohort chart regenerates cleanly", async () => {
   assert.equal((svg.match(/<circle/g) ?? []).length, 5, "all five models plotted");
 });
 
+test("the chart is white with no grid or score bands", async () => {
+  // Publication styling: a plain white background, the two axis lines, the
+  // dashed reference ceiling, and nothing else ruling the plot. Score bands and
+  // gridlines were removed because they competed with the points.
+  const out = join(tmpdir(), `md-chart-clean-${Date.now()}.svg`);
+  const r = await run([join(ROOT, "docs/ollama-local-models.json"), out]);
+  assert.equal(r.code, 0, r.stderr);
+  const svg = readFileSync(out, "utf8");
+  assert.match(svg, /<rect width="\d+" height="\d+" fill="#ffffff"\/>/, "white background");
+  // No shaded band rects (a band carried fill-opacity; the background does not).
+  assert.equal((svg.match(/<rect[^>]*fill-opacity/g) ?? []).length, 0, "no score bands");
+  // Only the x-axis, the y-axis, and the dashed ceiling: three <line> elements.
+  assert.equal((svg.match(/<line/g) ?? []).length, 3, "two axis lines plus the ceiling, no grid");
+  assert.ok(!svg.includes('stroke-opacity="0.14"'), "the old gridlines are gone");
+});
+
+test("an oversized point label is flipped inside the canvas, not clipped", async () => {
+  // A start-anchored label on the rightmost point used to run off the right
+  // edge at the larger font sizes. It must flip to the other side of its dot.
+  const dir = mkdtempSync(join(tmpdir(), "md-chart-label-"));
+  const f = join(dir, "label.json");
+  writeFileSync(
+    f,
+    JSON.stringify({
+      xAxis: "costUsd",
+      points: [
+        { model: "cheap", costUsd: 0.01, adjusted: 40, color: "#111" },
+        { model: "a-very-long-model-name-here", costUsd: 1.0, adjusted: 60, color: "#222" },
+      ],
+    })
+  );
+  const out = join(dir, "out.svg");
+  const r = await run([f, out]);
+  assert.equal(r.code, 0, r.stderr);
+  const svg = readFileSync(out, "utf8");
+  const m = svg.match(/<text[^>]*>a-very-long-model-name-here<\/text>/);
+  assert.ok(m, "the label is present");
+  assert.match(m[0], /text-anchor="end"/, "the overflowing label was flipped to the left of its dot");
+});
+
 test("an empty points array is an error, not an empty chart", async () => {
   const dir = mkdtempSync(join(tmpdir(), "md-chart-bad-"));
   const empty = join(dir, "empty.json");

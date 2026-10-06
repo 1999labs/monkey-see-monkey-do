@@ -28,24 +28,13 @@ const W = 1180;
 const H = 470;
 const M = { top: 26, right: 40, bottom: 64, left: 76 };
 
-// Every colour here is a shade of grey except the per-model dots. The bands
-// carry no meaning of their own — they are there to make the score readable at
-// a glance, not to grade it — so they stay neutral and the only saturated
-// colour on the chart is a model.
+// Colours: black ink on white, plus the per-model dots. There is no shading
+// and no grid: the only structure inside the plot is the two axis lines, the
+// dashed reference-solver ceiling, and the frontier staircase, so nothing
+// competes with the points for attention.
 const INK = "#000000";
 const AXIS = "#000000";
-const GRID_INK = 0.14; // gridlines: black, held back hard
-const BAND_INK = 0.045; // score bands: fainter still
 const FRONTIER = "#171717";
-
-// Score bands, lightest at the top. Mirrors the bands in the README rubric.
-const BANDS = [
-  { from: 0, to: 20, o: 0.070 },
-  { from: 20, to: 40, o: 0.055 },
-  { from: 40, to: 60, o: 0.040 },
-  { from: 60, to: 80, o: 0.028 },
-  { from: 80, to: 100, o: 0.016 },
-];
 
 const ORACLE_Y = 100;
 
@@ -129,31 +118,17 @@ const render = (data) => {
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif">`);
   out.push(`<rect width="${W}" height="${H}" fill="#ffffff"/>`);
 
-  // Score bands: grey, lightest at the top.
-  for (const b of BANDS) {
-    out.push(
-      `<rect x="${M.left}" y="${sy(b.to)}" width="${plotW}" height="${sy(b.from) - sy(b.to)}" fill="#000000" fill-opacity="${b.o}"/>`
-    );
-  }
-
-  // Faint black gridlines inside the plot.
-  for (let v = 0; v <= 100; v += 20) {
-    out.push(`<line x1="${M.left}" y1="${sy(v)}" x2="${M.left + plotW}" y2="${sy(v)}" stroke="#000000" stroke-opacity="${GRID_INK}" stroke-width="1"/>`);
-  }
-  for (const t of ticks) {
-    out.push(`<line x1="${sx(t)}" y1="${M.top}" x2="${sx(t)}" y2="${sy(0)}" stroke="#000000" stroke-opacity="${GRID_INK}" stroke-width="1"/>`);
-  }
-
-  // Axes: thick, solid black.
+  // Axes: thick, solid black. The only lines inside the plot besides the
+  // dashed ceiling and the frontier staircase.
   out.push(`<line x1="${M.left}" y1="${sy(0)}" x2="${M.left + plotW}" y2="${sy(0)}" stroke="${AXIS}" stroke-width="2.5"/>`);
   out.push(`<line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${sy(0)}" stroke="${AXIS}" stroke-width="2.5"/>`);
 
   // Tick labels, pure black.
   for (let v = 0; v <= 100; v += 20) {
-    out.push(`<text x="${M.left - 12}" y="${sy(v) + 4}" text-anchor="end" font-size="12" fill="${INK}">${v}</text>`);
+    out.push(`<text x="${M.left - 14}" y="${sy(v) + 6}" text-anchor="end" font-size="16" fill="${INK}">${v}</text>`);
   }
   for (const t of ticks) {
-    out.push(`<text x="${sx(t)}" y="${sy(0) + 22}" text-anchor="middle" font-size="12" fill="${INK}">${axis.format(t, step)}</text>`);
+    out.push(`<text x="${sx(t)}" y="${sy(0) + 26}" text-anchor="middle" font-size="16" fill="${INK}">${axis.format(t, step)}</text>`);
   }
 
   // The reference solver's ceiling, labelled in place so it needs no key.
@@ -161,7 +136,7 @@ const render = (data) => {
     `<line x1="${M.left}" y1="${sy(ORACLE_Y)}" x2="${M.left + plotW}" y2="${sy(ORACLE_Y)}" stroke="#000000" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="6 5"/>`
   );
   out.push(
-    `<text x="${M.left + plotW}" y="${sy(ORACLE_Y) - 8}" text-anchor="end" font-size="11" fill="#000000" fill-opacity="0.6">reference solver: 100</text>`
+    `<text x="${M.left + plotW}" y="${sy(ORACLE_Y) - 9}" text-anchor="end" font-size="14" fill="#000000" fill-opacity="0.6">reference solver: 100</text>`
   );
 
   // Frontier staircase through the non-dominated points.
@@ -174,23 +149,39 @@ const render = (data) => {
 
   // Points, each in its own colour, with the name alongside. The score sits
   // above the dot and the name beside it, so the plot needs no key at all.
+  //
+  // A start-anchored label on the rightmost point would run off the canvas at
+  // these font sizes, so a label that would overflow is flipped to the other
+  // side of its dot rather than clipped. The cohort's own dx/dy/anchor hints
+  // still win; the flip only applies when they would put text off the edge.
+  const LABEL_FS = 15.5;
+  const estLabelW = (s) => String(s).length * LABEL_FS * 0.58;
   for (const p of pts) {
     const x = sx(xOf(p));
     const y = sy(p.adjusted);
-    const dx = p.dx ?? 12;
+    let dx = p.dx ?? 12;
     const dy = p.dy ?? 4;
-    const anchor = p.anchor ?? "start";
+    let anchor = p.anchor ?? "start";
+    const label = String(p.label ?? p.model);
+    const w = estLabelW(label);
+    if (anchor === "start" && x + dx + w > W - 4) {
+      anchor = "end";
+      dx = -Math.abs(dx);
+    } else if (anchor === "end" && x + dx - w < 4) {
+      anchor = "start";
+      dx = Math.abs(dx);
+    }
     out.push(`<circle cx="${x}" cy="${y}" r="6" fill="${p.color}" stroke="#ffffff" stroke-width="1.5"/>`);
-    out.push(`<text x="${x}" y="${y - 13}" text-anchor="middle" font-size="11" font-weight="600" fill="${INK}">${p.adjusted}</text>`);
+    out.push(`<text x="${x}" y="${y - 15}" text-anchor="middle" font-size="15" font-weight="600" fill="${INK}">${p.adjusted}</text>`);
     out.push(
-      `<text x="${x + dx}" y="${y + dy}" text-anchor="${anchor}" font-size="11.5" font-weight="600" fill="${p.color}">${esc(p.label ?? p.model)}</text>`
+      `<text x="${x + dx}" y="${y + dy}" text-anchor="${anchor}" font-size="${LABEL_FS}" font-weight="600" fill="${p.color}">${esc(label)}</text>`
     );
   }
 
   // Axis titles, pure black.
-  out.push(`<text x="${M.left + plotW / 2}" y="${H - 16}" text-anchor="middle" font-size="12" fill="${INK}">${axis.title}</text>`);
+  out.push(`<text x="${M.left + plotW / 2}" y="${H - 14}" text-anchor="middle" font-size="17" fill="${INK}">${axis.title}</text>`);
   out.push(
-    `<text x="22" y="${M.top + plotH / 2}" text-anchor="middle" font-size="12" fill="${INK}" transform="rotate(-90 22 ${M.top + plotH / 2})">adjusted score (0-100)</text>`
+    `<text x="22" y="${M.top + plotH / 2}" text-anchor="middle" font-size="17" fill="${INK}" transform="rotate(-90 22 ${M.top + plotH / 2})">adjusted score (0-100)</text>`
   );
 
   out.push("</svg>");
