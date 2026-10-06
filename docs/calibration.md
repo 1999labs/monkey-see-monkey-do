@@ -327,7 +327,7 @@ saturated).
 
 `src/do/chain/pool.mjs` `loadPublishedPool` checks:
 
-- the file's `sha256` matches the recorded sha256 (`f87d0b1906fc7906…`);
+- the file's `sha256` matches the recorded sha256 (`dc98e89e5541b9d8…`);
 - `GENERATOR_VERSION` matches the loader;
 - every chain's recorded `c.steps` replay (i.e. `verifyDerivation(c.start, c.target, c.steps)` returns `ok: true, reachedTarget: true`).
 

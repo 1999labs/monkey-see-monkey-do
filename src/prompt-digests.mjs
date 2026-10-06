@@ -11,7 +11,7 @@
 // Current DO digest d46e8e3f082d… (since suite 1.0.0) is the chain eval: the
 // prompt describes the string-rewrite formal system (5 rules, 7 symbols) and
 // asks for a single solve(start, target) function. The chain pool is
-// sha256 f87d0b1906fc7906…, seed 0xC0FFEE.
+// sha256 dc98e89e5541b9d8…, seed 0xC0FFEE.
 //
 // SEE history: under suite 0.x.x, every SEE run used the 8-shown-example
 // prompt (level 8). The level-8 digests A=043dd2b7…, B=4f200996…,

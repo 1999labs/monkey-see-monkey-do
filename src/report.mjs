@@ -39,11 +39,11 @@ export const LIMITATIONS = [
   "Not a coding benchmark. Neither eval edits a repository, runs a test suite, or uses tools; they measure rule inference (SEE) and chain-rewrite derivation (DO), not software engineering.",
   "DO scores a program, not a chain of thought. The model writes solve(start, target) in a single call and never sees an individual chain, so a DO score describes the code it emitted — not deduction performed at inference time. A correct solver may be recalled rather than derived.",
   "A low Generalization Index is evidence of generalization, not proof of abstraction. It shows performance carried from shown to held-out inputs within one distribution; a heuristic fitted to that distribution would score the same. Separating the two needs a held-out task family the model provably could not have seen, which the suite does not have.",
-  "Neither eval controls for prior exposure. There is no canary and no novel-format control, so a high score cannot be attributed to reasoning over recall of the specific task or the textbook algorithm.",
+  "Prior exposure is only partly controlled. DO carries a canary (a version-and-seed string the model must echo) that flags a model retrained on this exact prompt, not one that recalls the solving algorithm; its formal system is novel. SEE has no canary, and neither eval has a novel-format control, so a high score cannot be fully attributed to reasoning over recall of the task or the textbook algorithm.",
   "SEE saturates. Frontier models reach high SEE scores and it stops discriminating at the top of the market; it is most informative for open-weight and mid-tier models.",
   "Not comparable to SWE-bench, HumanEval, or any external leaderboard. Different scale, different construction; never present these numbers alongside one.",
   "DO has residual contamination risk. The 5-rule / 7-symbol formal system is novel, but BFS on derivable search spaces is a textbook technique; a high DO score shows the model can produce a correct solver, not that it deduced one afresh.",
-  "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 1.1.0).",
+  "Two narrow tasks. This is not a general intelligence measure, and the 50-point weights are hand-chosen (frozen at suite version 1.2.0).",
  ];
 
 /** A filesystem-safe, readable filename for a model id. */

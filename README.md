@@ -270,6 +270,10 @@ suite version deliberately; pool changes bump `GENERATOR_VERSION` and regenerate
 [`docs/calibration.md`](docs/calibration.md) - read it before changing a held-out
 set, the pool, the BFS caps, or the adjusted weights.
 
+## License
+
+MIT. See [`LICENSE`](LICENSE).
+
 ## Repository layout
 
 Reference only. Nothing in here is needed to run the evals.
@@ -309,7 +313,7 @@ monkey-see-monkey-do/
 │           │                     real-mode 45/50 with MAX_STATES=50000)
 │           ├── generator.mjs    chain pool generator (seed 0xC0FFEE, 5 bands)
 │           ├── pool.mjs         chain pool loader / GENERATOR_VERSION stamp / sha256
-│           ├── pool.json        50 chains, sha256 f87d0b1906fc7906…, seed 0xC0FFEE
+│           ├── pool.json        50 chains, sha256 dc98e89e5541b9d8…, seed 0xC0FFEE
 │           ├── prompt.mjs       chain DO prompt + digest pin + canary
 │           ├── run.mjs          the chain DO model-path runner
 │           ├── score.mjs        per-chain full/partial/empty + chainEngagementRate
