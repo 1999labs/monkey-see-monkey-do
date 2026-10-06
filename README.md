@@ -125,7 +125,7 @@ recorded with its re-derivation command in
 ## Results
 
 **All scores are according to suite 1.2.0.** Every asserted number, and how it was measured,
-lives in [`docs/calibration.md`](docs/calibration.md). 
+lives in [`docs/calibration.md`](docs/calibration.md).
 
 ### Cohort 1
 
