@@ -12,7 +12,7 @@
     {
       "model": "openrouter/deepseek/deepseek-v4.1-flash",
       "label": "DeepSeek V4.1 Flash",
-      "provider": "DeepSeek",
+      "provider": "DeepInfra",
       "costUsd": 0.015344,
       "costComplete": false,
       "costMissing": [

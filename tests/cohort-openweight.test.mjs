@@ -98,3 +98,35 @@ test("the open-weight builder matches the checkout state, loudly in both directi
     "the caveat must count the route-failed models"
   );
 });
+
+
+test("each cohort point's host matches the committed rate table's row for that model", async () => {
+  // The defect this pins: the builder spec hardcoded "DeepSeek" for
+  // deepseek/deepseek-v4.1-flash while the rate table, the README table and the
+  // run's own generation.providerPin all said DeepInfra. The cohort's whole
+  // claim is "pinned to one host, so the number is a measurement", so a chart
+  // naming the host that served nothing cannot be audited.
+  //
+  // The invariant is checked against the RATE TABLE, not against a per-eval
+  // report: the per-eval reports are gitignored, so a test that read them would
+  // silently pass in a fresh clone. Both the cohort JSON and the rate table are
+  // committed, and they are the two places the host is named.
+  const cohortPath = join(ROOT, "docs/openweight-frontier-models.json");
+  const ratesPath = join(ROOT, "config/openrouter-rates.json");
+  if (!existsSync(cohortPath) || !existsSync(ratesPath)) return;
+  const cohort = JSON.parse(readFileSync(cohortPath, "utf8"));
+  const rates = JSON.parse(readFileSync(ratesPath, "utf8"));
+
+  for (const point of cohort.points) {
+    // The cohort stores the CLI id ("openrouter/vendor/slug"); the rate table is
+    // keyed by the bare model id ("vendor/slug").
+    const bare = point.model.replace(/^openrouter\//, "");
+    const row = rates.models[bare];
+    assert.ok(row, `${point.label}: no rate-table row for ${bare}`);
+    assert.equal(
+      point.provider,
+      row.provider,
+      `${point.label}: the cohort names host "${point.provider}" but the rate table (which priced the run) says "${row.provider}"`
+    );
+  }
+});

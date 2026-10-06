@@ -39,7 +39,13 @@ COHORT = [
     {
         "model": "openrouter/deepseek/deepseek-v4.1-flash",
         "label": "DeepSeek V4.1 Flash",
-        "provider": "DeepSeek",
+        # DeepInfra, NOT DeepSeek: the first-party DeepSeek endpoint is excluded
+        # by this account's OpenRouter privacy setting and returns HTTP 404
+        # "0 endpoints out of 1 requested" on a pinned request, so the run
+        # pinned DeepInfra instead. The rate row and the run's own
+        # generation.providerPin both say DeepInfra; this spec must agree with
+        # them, or the published chart names a host that served nothing.
+        "provider": "DeepInfra",
         "color": "#0e7490",
         "effort": "high",
         "efforts": ["max", "high", "low"],
