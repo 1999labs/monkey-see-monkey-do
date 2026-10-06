@@ -6,7 +6,7 @@ a rule from a handful of examples instead of copying their surface; and
 every step is provably legal and the chain ends on the target.
 No human scoring, no LLM judges, no runtime dependencies.
 
-They are useful for model selection because they catch complementary failures: a
+Useful for model selection because they catch complementary failures: a
 model that copies examples instead of inferring rules (See's surface-fit axis), or
 one whose code is correct for five steps but breaks at thirty (Do's chain-length
 gradient). The score is mechanical, the workload is fixed and bounded, and every
@@ -65,6 +65,29 @@ a sample, not a measurement.
 Only the combined report is committed: it is the evidence for every published number.
 See [`docs/scoring-models.md`](docs/scoring-models.md) for the report formats.
 
+## How the evals work
+
+**Monkey See** asks the model to infer an unknown function from examples. Three
+tasks (a numeric rule, a string rule, an array rule) are each run at four sample
+levels - 2, 4, 8 and 16 shown input/output examples - so twelve calls in all. The
+examples shown are the only ones the model ever sees: the rule is never stated, and
+the 50 inputs each task is scored on are held out and never appear in the prompt. A
+level isolates one variable, how many examples were enough, and the Generalization
+Index falls out of the comparison because the same held-out cases are scored at
+every level. The score is the weighted held-out pass rate (45 points across the
+three tasks) plus a robustness bonus (5 points) that shrinks proportionally when the
+submitted code throws on an input, rather than merely getting it wrong.
+
+**Monkey Do** asks the model to write a solver, once. The model is shown a five-rule
+string-rewrite system and asked for a single function `solve(start, target)` that
+returns a derivation, an array of legal moves, from any start to any target. It is
+called exactly once, and that one program is then replayed against all 50 chains by
+the harness. The model never sees an individual chain, so what is scored is the
+general solver it wrote, not fifty separate deductions. A chain scores only if the
+replayed derivation reaches its target by legal moves; the chains span 5 to 50
+steps, so the score falls off with length when a solver works for a few moves but
+not thirty.
+
 ## Scoring
 
 Each eval is out of 50. Each also reports a second, unscored axis that catches the
@@ -101,16 +124,12 @@ recorded with its re-derivation command in
 
 ## Results
 
-**All scores are suite 1.2.0.** Every asserted number, and how it was measured,
-lives in [`docs/calibration.md`](docs/calibration.md). DO scores are **not**
-comparable across the 1.1 → 1.2 boundary: 1.2.0 changed the DO headline from the
-step-legality ratio to the fraction of chains actually solved.
+**All scores are according to suite 1.2.0.** Every asserted number, and how it was measured,
+lives in [`docs/calibration.md`](docs/calibration.md). 
 
 ### Cohort 1
 
-Open-weight frontier models on OpenRouter, one per family: Qwen/Qwen3.8-27B,
-deepseek-ai/DeepSeek-V4.1-Flash, zai-org/GLM-5.3, XiaomiMiMo/MiMo-V2.6-Pro,
-tencent/Hy3. Each model is pinned to one provider, temperature 0, `-r 3`, with a
+Five open-weight frontier models on OpenRouter. Each model is pinned to one provider, temperature 0, `-r 3`, with a
 per-model reasoning-effort rung recorded beside its score; cost is dollars per
 run under the pinned host. Methodology in
 [`docs/openweight-frontier-models.json`](docs/openweight-frontier-models.json).
@@ -169,11 +188,6 @@ on both evals; methodology in
 [`docs/ollama-local-models.json`](docs/ollama-local-models.json)). The **adjusted**
 column is the one used in the Pareto chart; the **penalties** column shows both formula
 components so a reader sees why each figure is what it is.
-
-Numbers below are the suite **1.2.0** readings. Only `qwen2.5-coder:7b` moved from
-1.1.0 (adjusted 8 → 7): its 1.1.0 DO of 0.54 came from partial steps that never
-solved a chain, so under the 1.2.0 fullCredit definition its DO and engagement
-both fell to 0 and it takes the full clawback. The other four were already 0.
 
 | model | paramsB | SEE | DO | gzMean | engagement | **adjusted** | penalties |
 |---|---|---|---|---|---|---|---|
@@ -288,7 +302,7 @@ monkey-see-monkey-do/
 │   ├── run-all.mjs              both evals, one model, combined report
 │   ├── see/                     SEE only: reference.mjs (ground truth), tasks/*.json,
 │   │                            tasks.mjs, prompt, score, run-levels, run
-│   └── do/                      DO only — the chain eval files live entirely under chain/:
+│   └── do/                      DO only - the chain eval files live entirely under chain/:
 │       └── chain/
 │           ├── rules.mjs        5 rewrite rules over 7 symbols {A,B,C,D,X,Y,Z}
 │           ├── reference.mjs    the BFS reference solver (dry-run 50/50,
