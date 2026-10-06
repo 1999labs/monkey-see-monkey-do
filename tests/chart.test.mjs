@@ -46,6 +46,41 @@ test("the chart is white with no grid or score bands", async () => {
   assert.ok(!svg.includes('stroke-opacity="0.14"'), "the old gridlines are gone");
 });
 
+test("no score label is drawn beside a dot, and no two names overlap", async () => {
+  // The score lives in the cohort tables; repeating it beside each dot crowded
+  // the names. And names must be laid out so none is printed over another.
+  const out = join(tmpdir(), `md-chart-names-${Date.now()}.svg`);
+  const r = await run([join(ROOT, "docs/ollama-local-models.json"), out]);
+  assert.equal(r.code, 0, r.stderr);
+  const svg = readFileSync(out, "utf8");
+  // A bare integer in the plot area would be a score label; the only bare
+  // integers are the axis ticks (font-size 16), so font-size 15 must be absent.
+  assert.ok(!svg.includes('font-size="15"'), "no score label beside the dots");
+
+  // Every model name is present, and no two name boxes overlap.
+  const names = ["gemma2:2b", "llama3.2:3b", "deepseek-coder:6.7b", "mistral:7b-instruct", "qwen2.5-coder:7b"];
+  const boxes = [];
+  for (const n of names) {
+    const m = svg.match(new RegExp(`<text\\b([^>]*)>${n.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}</text>`));
+    assert.ok(m, `${n} is labelled`);
+    const attrs = m[1];
+    const x = Number(attrs.match(/x="([\d.]+)"/)[1]);
+    const y = Number(attrs.match(/y="([\d.]+)"/)[1]);
+    const fs = Number(attrs.match(/font-size="([\d.]+)"/)[1]);
+    const anchor = attrs.match(/text-anchor="(\w+)"/)[1];
+    const w = n.length * fs * 0.58;
+    const left = anchor === "end" ? x - w : anchor === "middle" ? x - w / 2 : x;
+    boxes.push({ n, l: left, r: left + w, t: y - fs, b: y });
+  }
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j];
+      const overlap = !(a.r < b.l || a.l > b.r || a.b < b.t || a.t > b.b);
+      assert.ok(!overlap, `${a.n} and ${b.n} must not overlap`);
+    }
+  }
+});
+
 test("an oversized point label is flipped inside the canvas, not clipped", async () => {
   // A start-anchored label on the rightmost point used to run off the right
   // edge at the larger font sizes. It must flip to the other side of its dot.

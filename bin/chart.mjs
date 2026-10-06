@@ -147,34 +147,81 @@ const render = (data) => {
     out.push(`<path d="${d}" fill="none" stroke="${FRONTIER}" stroke-width="1.75" stroke-dasharray="7 5" opacity="0.8"/>`);
   }
 
-  // Points, each in its own colour, with the name alongside. The score sits
-  // above the dot and the name beside it, so the plot needs no key at all.
+  // Points and their names. Each dot is drawn in the model's own colour and
+  // the name is placed beside it, so the plot needs no key. The score is NOT
+  // printed here: it is in the cohort tables, and repeating it crowded the
+  // labels.
   //
-  // A start-anchored label on the rightmost point would run off the canvas at
-  // these font sizes, so a label that would overflow is flipped to the other
-  // side of its dot rather than clipped. The cohort's own dx/dy/anchor hints
-  // still win; the flip only applies when they would put text off the edge.
+  // Name placement is a small greedy layout pass rather than a fixed offset.
+  // Every dot is an obstacle, and each name is tried in a list of positions
+  // around its dot until one fits inside the canvas and touches nothing
+  // already placed. Without this, two models close on both axes (paramsB 6.7
+  // and 7.6 on the local chart; the DeepSeek/GLM cluster on the frontier
+  // chart) had their names printed on top of each other. The cohort's own
+  // dx/dy/anchor hints are tried FIRST, so a hand-tuned label still wins when
+  // it does not collide.
   const LABEL_FS = 15.5;
-  const estLabelW = (s) => String(s).length * LABEL_FS * 0.58;
+  const labelW = (s) => String(s).length * LABEL_FS * 0.58;
+  const pad = 3;
+  const overlaps = (a, b) => !(a.r < b.l || a.l > b.r || a.b < b.t || a.t > b.b);
+
+  // Obstacles that are not names: every dot, and the reference caption.
+  const obstacles = pts.map((p) => ({ l: sx(xOf(p)) - 9, t: sy(p.adjusted) - 9, r: sx(xOf(p)) + 9, b: sy(p.adjusted) + 9 }));
+  obstacles.push({ l: M.left + plotW - labelW("reference solver: 100") * (14 / LABEL_FS) - pad, t: 1, r: M.left + plotW, b: 20 });
+
+  const boxFor = (label, x, y, c) => {
+    const w = labelW(label);
+    const cx = x + c.dx;
+    const baseline = y + c.dy;
+    const left = c.anchor === "end" ? cx - w : c.anchor === "middle" ? cx - w / 2 : cx;
+    return { l: left - pad, t: baseline - LABEL_FS - pad, r: left + w + pad, b: baseline + 4 + pad };
+  };
+
+  // Positions to try, in order. Index 0 is the cohort's own hint.
+  const slots = (p) => [
+    { anchor: p.anchor ?? "start", dx: p.dx ?? 13, dy: p.dy ?? 5 },
+    { anchor: "start", dx: 14, dy: 5 },
+    { anchor: "end", dx: -14, dy: 5 },
+    { anchor: "start", dx: 14, dy: -13 },
+    { anchor: "end", dx: -14, dy: -13 },
+    { anchor: "start", dx: 14, dy: 21 },
+    { anchor: "end", dx: -14, dy: 21 },
+    { anchor: "end", dx: -14, dy: -29 },
+    { anchor: "end", dx: -14, dy: 37 },
+    { anchor: "middle", dx: 0, dy: -15 },
+    { anchor: "middle", dx: 0, dy: 25 },
+    { anchor: "middle", dx: 0, dy: -33 },
+    { anchor: "middle", dx: 0, dy: 43 },
+  ];
+
+  // Place the most constrained labels first: the rightmost points have the
+  // least room, so they choose before the roomier left-hand ones fill the
+  // space around them. Drawing order is unaffected; this is placement only.
+  const placement = new Map();
+  const byRoom = [...pts].sort((a, b) => xOf(b) - xOf(a));
+  for (const p of byRoom) {
+    const x = sx(xOf(p));
+    const y = sy(p.adjusted);
+    const label = String(p.label ?? p.model);
+    const candidates = slots(p);
+    const inCanvas = (b) => b.l >= 2 && b.r <= W - 2 && b.t >= 1 && b.b <= H - 2;
+    // Prefer a slot that is on-canvas AND collides with nothing; if none
+    // exists, take the first that is merely on-canvas, so a label is never
+    // clipped even when the plot is crowded.
+    const clear = candidates.find((c) => inCanvas(boxFor(label, x, y, c)) && !obstacles.some((o) => overlaps(boxFor(label, x, y, c), o)));
+    const chosen = clear ?? candidates.find((c) => inCanvas(boxFor(label, x, y, c))) ?? candidates[0];
+    obstacles.push(boxFor(label, x, y, chosen));
+    placement.set(p.model, chosen);
+  }
+
   for (const p of pts) {
     const x = sx(xOf(p));
     const y = sy(p.adjusted);
-    let dx = p.dx ?? 12;
-    const dy = p.dy ?? 4;
-    let anchor = p.anchor ?? "start";
     const label = String(p.label ?? p.model);
-    const w = estLabelW(label);
-    if (anchor === "start" && x + dx + w > W - 4) {
-      anchor = "end";
-      dx = -Math.abs(dx);
-    } else if (anchor === "end" && x + dx - w < 4) {
-      anchor = "start";
-      dx = Math.abs(dx);
-    }
+    const chosen = placement.get(p.model);
     out.push(`<circle cx="${x}" cy="${y}" r="6" fill="${p.color}" stroke="#ffffff" stroke-width="1.5"/>`);
-    out.push(`<text x="${x}" y="${y - 15}" text-anchor="middle" font-size="15" font-weight="600" fill="${INK}">${p.adjusted}</text>`);
     out.push(
-      `<text x="${x + dx}" y="${y + dy}" text-anchor="${anchor}" font-size="${LABEL_FS}" font-weight="600" fill="${p.color}">${esc(label)}</text>`
+      `<text x="${x + chosen.dx}" y="${y + chosen.dy}" text-anchor="${chosen.anchor}" font-size="${LABEL_FS}" font-weight="600" fill="${p.color}">${esc(label)}</text>`
     );
   }
 
