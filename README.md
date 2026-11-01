@@ -6,11 +6,8 @@ a rule from a handful of examples instead of copying their surface; and
 every step is provably legal and the chain ends on the target.
 No human scoring, no LLM judges, no runtime dependencies.
 
-Useful for model selection because they catch complementary failures: a
-model that copies examples instead of inferring rules (See's surface-fit axis), or
-one whose code is correct for five steps but breaks at thirty (Do's chain-length
-gradient). The score is mechanical, the workload is fixed and bounded, and every
-run is cheaply repeatable.
+Useful for model selection because they isolate and catch complementary failure modes that broad evals blur together. Monkey See (induction) catches surface-copying - does the model infer the rule? Monkey Do (sustained deduction) catches long-horizon decay - is code correct for five steps but breaks at thirty? The score is mechanical, the workload is fixed and bounded, and every
+run is cheaply repeatable. Broad general-capability evals conflate skills. Narrow evals give actionable signal for selecting models for agentic work. 
 
 | Eval | Question | Score |
 |---|---|---|
