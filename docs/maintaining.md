@@ -4,7 +4,7 @@ Run `npm test`, `npm run self-test`, `npm run dry-run` and `npm run check-pool`
 before publishing changes. `npm run self-test:full` includes deterministic pool
 regeneration. CI runs the tests and gate on Node 20; full checks also run nightly.
 
-Active code and data live in `src/v2/`. `version.mjs` pins suite and generator
+The current release is 2.1.0. Active code and data live in `src/v2/`. `version.mjs` pins suite and generator
 versions, `pool.json` holds the versioned data, and `prompt-digests.json` pins all
 51 prompts. Prompt changes require a deliberate suite bump and new pins. Changes
 to data generation require a generator bump and `npm run gen-pool`. Read
@@ -16,7 +16,9 @@ Check `git log -1` before assuming HEAD is unchanged. Run model cohorts sequenti
 No report writer may silently overwrite evidence.
 
 `npm run acceptance -- --strong MODEL --weak MODEL` collects three repeats of each
-model. It checks completeness and at most two points of observed spread on each
+model. It requires exactly two correctly identified, current-suite/current-pool reports,
+three repeats each, all 51 distinct prompt calls per repeat, no API failures,
+and summaries matching the recorded repeat scores. It checks at most two points of observed spread on each
 axis. It does not enforce the expected ranking or certify general validity. Reports
 are saved in the printed temporary directory; copy combined evidence into `results/`
 and commit it before publishing a cohort. Provider and effort settings must be

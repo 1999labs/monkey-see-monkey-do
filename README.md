@@ -6,7 +6,7 @@ classes. **Monkey Do** measures construction of general solvers for string-rewri
 systems. They are useful for inspecting specific failures. Their relationship to
 performance in agentic software engineering has not been validated.
 
-**Suite 2.0.0 is a new experiment.** Its examples, prompts, coverage and scoring
+**Suite 2.1.0 is a new experiment.** Its examples, prompts, coverage and scoring
 are incompatible with v1. Published v1 reports remain historical evidence; see
 [the v1 README](docs/legacy-v1.md) and [migration notes](docs/migration-v2.md).
 There are no model results for v2 yet.
@@ -34,19 +34,22 @@ SEE has six families: threshold arithmetic, modular arithmetic, conditional stri
 transforms, cyclic rotations, distinct order statistics, and array filtering with
 ordering. Each has two independently selected rule instances, 16 shown examples,
 and 50 distinct held-out inputs. Shown and held-out inputs never overlap within an
-instance. The prompt declares the candidate hypothesis class. Every scored prefix
-identifies exactly one candidate in that class. This is a constrained induction task,
+instance. The prompt declares the candidate hypothesis class. Every 16-example prefix identifies exactly one candidate in that class.
+Prefixes through eight examples retain at least two plausible candidates.
+Held-out inputs independently distinguish the target from every incorrect candidate. This is a constrained induction task,
 not a claim that finite examples uniquely determine an arbitrary program.
 
-The 2-example level is diagnostic only. Levels 4, 8 and 16 contribute equally to
-accuracy, with equal weight for each family and instance. **SEE = 50 × mean
+Levels 2, 4 and 8 are diagnostic only: reports include accuracy and the number
+of candidates consistent with the examples. Level 16 contributes to accuracy,
+with equal weight for each family and instance. **SEE = 50 × mean
 held-out accuracy.** Non-throwing rate and the shown-minus-held-out gap are reported
 separately. Incorrect or uncallable programs retain every case in the denominator.
 
 DO has three systems: branching growth, reversible commuting swaps, and overlapping
 reductions. Each has four chains at shortest distances 5, 10, 20, 30 and 50: **60
 chains total**. One model call produces a solver per system; each invocation gets a
-fresh JavaScript context. **DO = 50 × mean solved fraction**, balanced across the
+fresh JavaScript context. Returned values are serialized within the execution
+timeout before the host inspects them. **DO = 50 × mean solved fraction**, balanced across the
 three systems and five bands. A legal prefix earns zero. Any valid complete path
 within the published execution limits earns full credit.
 
@@ -83,6 +86,8 @@ the pool byte for byte. The reference dry-run computes every DO solution from
 | `npm run audit` | Per-instance naive baseline counts |
 | `npm run acceptance -- --strong MODEL --weak MODEL` | Three repeats each; evidence completeness and ≤2-point spread |
 
+Acceptance requires exactly two matching current-version reports with three
+complete repeats each; missing reports and forwarded help/override flags fail.
 The acceptance labels do not prescribe a ranking. Passing validates operational
 repeatability on this suite, not scientific validity or usefulness for a downstream
 task. All existing v1 commands are available with the `legacy:` prefix for historical
@@ -91,6 +96,9 @@ reproduction; see [migration](docs/migration-v2.md).
 ## Limitations
 
 - Six declared rule classes and three rewrite systems remain narrow coverage.
+- Early examples are deliberately selected to preserve ambiguity through level 8.
+  The 8-to-16 transition tests response to added identifying evidence; it is not
+  a natural random-example sample-efficiency estimate.
 - A DO score describes a generated program, not the model performing each derivation.
   Length, branching, algorithm choice and execution budget all affect the score.
 - Public fixed data may be recalled. Prompt hashes and version labels do not detect

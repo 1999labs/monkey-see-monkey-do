@@ -26,3 +26,14 @@ Use a separate checkout of the original commit for byte-exact original environme
 
 No hosted models were called to establish this release. Offline oracle checks verify
 harness behavior; new model cohorts must be measured and published separately.
+
+## 2.1.0 audit corrections
+
+The 2.0.0 source and pool remain available at commit 5539990. In 2.1.0, scored
+SEE examples are level 16 only; levels 2/4/8 preserve ambiguity and remain
+reported diagnostics. Held-out witnesses distinguish every wrong declared rule.
+The pool/generator and prompts are versioned anew; do not merge prior results.
+Return values are detached under the VM timeout. Acceptance validates actual
+complete reports and rejects command overrides. Reports record effective API
+budgets and configured overrides. Regression tests exercise the current
+acceptance module as well as the historical compatibility path.

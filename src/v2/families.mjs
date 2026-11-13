@@ -4,9 +4,10 @@
 // or the index of the selected candidate.
 const candidate = (source) => ({ source, fn: Function(`return (${source});`)() });
 const numbers = Array.from({ length: 241 }, (_, i) => i - 120);
-const strings = ["", "a", "B", "ae", "xyz", ...Array.from({ length: 240 }, (_, i) => {
+const strings = ["", ...Array.from({ length: 600 }, (_, i) => {
   const letters = "abcdefghijklmnopqrstuvwxyz";
-  return letters[i % 26] + letters[Math.floor(i / 26)] + "m" + letters[(i * 7 + 5) % 26];
+  const length = 1 + Math.floor(i / 26) % 12;
+  return Array.from({length}, (_,j)=>letters[(i + j*7 + Math.floor(i/312)) % 26]).join("");
 })];
 const arrays = (rng) => {
   const out = [[], [0], [1, 1], [-1, 0], [2, 2, 1], [0, 0, 0]];

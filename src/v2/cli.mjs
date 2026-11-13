@@ -6,6 +6,7 @@ import { runSuite,loadPool,buildPool,POOL_FILE,prompts,SUITE_VERSION } from './s
 import { familyById } from './families.mjs';
 import { hash,mean } from './util.mjs';
 import { gate } from './gate.mjs';
+import { generationBudgets } from './generation.mjs';
 export const LIMITATIONS=[
  'SEE measures rule identification within six declared finite hypothesis classes. Uniqueness is guaranteed only within those classes; this is not unrestricted abstraction.',
  'DO measures generated solver programs across three formal systems. Chain length, branching and search strategy are confounded; this does not measure the model executing a long chain of thought.',
@@ -51,7 +52,7 @@ try {
    for(let i=0;i<args.runs;i++)runs.push(await runSuite(config,{pool,mode,dryRun,log:s=>console.log(`Run ${i+1}/${args.runs}: ${s}`)}));
    const summarize=axis=>{const scores=runs.map(r=>r[axis]?.total??null),valid=scores.filter(x=>x!==null);return {scores,completedRuns:valid.length,totalRuns:runs.length,mean:valid.length===runs.length?mean(valid):null,min:valid.length?Math.min(...valid):null,max:valid.length?Math.max(...valid):null};};
    const report={schema:'monkey-report@2',suiteVersion:SUITE_VERSION,timestamp:new Date().toISOString(),model:dryRun?'reference-offline':args.model,dryRun,poolSha256:pool.sha256,
-    generation:{endpoint:config?.endpoint??null,provider:config?.provider??null,reasoningEffort:config?.reasoningEffort??null,seed:config?.seed??null,temperature:config?temperatureStatus(config):null,keySource,executionTimeoutMs:{see:1000,do:3000}},
+    generation:{budgets:generationBudgets(config),runtime:{node:process.version,platform:process.platform,arch:process.arch},endpoint:config?.endpoint??null,provider:config?.provider??null,reasoningEffort:config?.reasoningEffort??null,seed:config?.seed??null,temperature:config?temperatureStatus(config):null,keySource,executionTimeoutMs:{see:1000,do:3000}},
     summary:{see:mode!=='do'?summarize('see'):null,do:mode!=='see'?summarize('do'):null},runs,limitations:LIMITATIONS};
    console.log(JSON.stringify(report.summary,null,2));
    const saved=write(report,mode==='all'?'combined':mode,args.out);console.log(`Saved ${saved}`);

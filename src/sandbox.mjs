@@ -156,7 +156,7 @@ const SILENT_CONSOLE_SCRIPT = new vm.Script(SILENT_CONSOLE, { filename: "silent-
  * a separate script, so hoisted and already-initialised functions are still
  * found. The throw is reported in `topLevelError`, never scored.
  */
-export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entry = "f", isolateCalls = false } = {}) => {
+export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entry = "f", isolateCalls = false, detachOutput = false } = {}) => {
   const withoutFences = extractCode(rawCode, entry);
   if (!withoutFences) return { ok: false, error: "empty response" };
 
@@ -185,7 +185,7 @@ export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entr
     try {
       script.runInContext(context, { timeout: timeoutMs });
     } catch (err) {
-      topLevelError = String(err && err.message);
+      topLevelError = (detachOutput ? "candidate execution failed (including timeout)" : String(err && err.message));
       if (!attempt.probe) {
         firstErrors.push(`${attempt.label}: ${topLevelError}`);
         continue;
@@ -195,7 +195,7 @@ export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entr
       try {
         vm.runInContext(attempt.probe, context, { timeout: timeoutMs });
       } catch (err) {
-        firstErrors.push(`${attempt.label}: ${String(err && err.message)}`);
+        firstErrors.push(`${attempt.label}: ${(detachOutput ? "candidate execution failed (including timeout)" : String(err && err.message))}`);
         continue;
       }
     }
@@ -207,8 +207,8 @@ export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entr
         // shared mode it gets the compiled context, bounded by DO's per-board
         // recompile.
         call: isolateCalls
-          ? makeIsolatedCaller({ script, probe: attempt.probe }, timeoutMs)
-          : makeSharedCaller(sandbox, context, timeoutMs),
+          ? makeIsolatedCaller({ script, probe: attempt.probe }, timeoutMs, detachOutput)
+          : makeSharedCaller(sandbox, context, timeoutMs, detachOutput),
         removed,
         label: attempt.label,
         topLevelError,
@@ -218,6 +218,27 @@ export const compileCandidate = (rawCode, { timeoutMs = DEFAULT_TIMEOUT_MS, entr
   }
 
   return { ok: false, error: firstErrors.join(" | ") || "could not compile", removed };
+};
+
+// V2 only: serialize while the VM timeout is active, then parse a primitive
+// string in the host. Never inspect a candidate-owned object outside the VM.
+const candidateCall = (literals, detach) => detach ? `
+  (() => {
+    try {
+      return JSON.stringify(__fn(${literals}), function (key, value) {
+        if (typeof value === "number" && !Number.isFinite(value)) throw new Error("nonfinite output");
+        if (["undefined", "function", "symbol", "bigint"].includes(typeof value)) throw new Error("unsupported output");
+        return value;
+      });
+    } catch { return null; }
+  })();
+` : `__out = __fn(${literals});`;
+const detachedResult = (value, detach) => {
+  if (!detach) return { ok: true, value };
+  // Type inspection is safe even if model code replaced JSON.stringify.
+  if (typeof value !== "string" || value.length > 1000000) return { ok: false, error: "invalid or oversized serialized output" };
+  try { return { ok: true, value: JSON.parse(value) }; }
+  catch { return { ok: false, error: "invalid serialized output" }; }
 };
 
 // vm surfaces a timeout as a generic Error with this exact message.
@@ -230,18 +251,19 @@ const isVmTimeout = (err) => Boolean(err && /Script execution timed out/i.test(e
  * script so the timeout applies to the call itself, and so a candidate that
  * mutates its arguments cannot corrupt the host's task data.
  */
-const makeSharedCaller = (sandbox, context, timeoutMs) => {
+const makeSharedCaller = (sandbox, context, timeoutMs, detachOutput) => {
   return (...args) => {
     const literals = args.map((a) => JSON.stringify(a === undefined ? null : a)).join(", ");
-    const script = new vm.Script(`__out = __fn(${literals});`, { filename: "call.js" });
-    sandbox.__out = undefined;
+    const script = new vm.Script(candidateCall(literals, detachOutput), { filename: "call.js" });
+    if (!detachOutput) sandbox.__out = undefined;
     try {
-      script.runInContext(context, { timeout: timeoutMs });
+      const result = script.runInContext(context, { timeout: timeoutMs });
+      if (detachOutput) return detachedResult(result, true);
     } catch (err) {
-      if (isVmTimeout(err)) return { ok: false, timedOut: true, error: `timed out after ${timeoutMs}ms` };
-      return { ok: false, timedOut: false, error: String(err && err.message) };
+      if (!detachOutput && isVmTimeout(err)) return { ok: false, timedOut: true, error: `timed out after ${timeoutMs}ms` };
+      return { ok: false, timedOut: false, error: (detachOutput ? "candidate execution failed (including timeout)" : String(err && err.message)) };
     }
-    return { ok: true, value: sandbox.__out };
+    return detachedResult(sandbox.__out, detachOutput);
   };
 };
 
@@ -257,11 +279,11 @@ const makeSharedCaller = (sandbox, context, timeoutMs) => {
  * as at compile time: recorded, not scored, and the probe still runs — a
  * function defined before the throw remains callable.
  */
-const makeIsolatedCaller = ({ script, probe }, timeoutMs) => {
+const makeIsolatedCaller = ({ script, probe }, timeoutMs, detachOutput) => {
   const probeScript = probe ? new vm.Script(probe, { filename: "probe.js" }) : null;
   return (...args) => {
     const literals = args.map((a) => JSON.stringify(a === undefined ? null : a)).join(", ");
-    const callScript = new vm.Script(`__out = __fn(${literals});`, { filename: "call.js" });
+    const callScript = new vm.Script(candidateCall(literals, detachOutput), { filename: "call.js" });
 
     const sandbox = {};
     const context = vm.createContext(sandbox, { name: "monkey-see-candidate" });
@@ -271,32 +293,33 @@ const makeIsolatedCaller = ({ script, probe }, timeoutMs) => {
     try {
       script.runInContext(context, { timeout: timeoutMs });
     } catch (err) {
-      topLevelError = String(err && err.message);
+      topLevelError = (detachOutput ? "candidate execution failed (including timeout)" : String(err && err.message));
       // A bare-expression body assigns __fn directly; if even that threw, there
       // is nothing to fall back to. At compile time such an attempt was
       // rejected, so reaching here means the body throws only sometimes — a
       // failed case, not a harness error.
-      if (!probeScript) return { ok: false, timedOut: isVmTimeout(err), error: topLevelError };
+      if (!probeScript) return { ok: false, timedOut: !detachOutput && isVmTimeout(err), error: topLevelError };
     }
     if (probeScript) {
       try {
         probeScript.runInContext(context, { timeout: timeoutMs });
       } catch (err) {
-        return { ok: false, timedOut: isVmTimeout(err), error: String(err && err.message) };
+        return { ok: false, timedOut: !detachOutput && isVmTimeout(err), error: (detachOutput ? "candidate execution failed (including timeout)" : String(err && err.message)) };
       }
     }
     if (typeof sandbox.__fn !== "function") {
       return { ok: false, timedOut: false, error: topLevelError ?? "no callable found" };
     }
 
-    sandbox.__out = undefined;
+    if (!detachOutput) sandbox.__out = undefined;
     try {
-      callScript.runInContext(context, { timeout: timeoutMs });
+      const result = callScript.runInContext(context, { timeout: timeoutMs });
+      if (detachOutput) return detachedResult(result, true);
     } catch (err) {
-      if (isVmTimeout(err)) return { ok: false, timedOut: true, error: `timed out after ${timeoutMs}ms` };
-      return { ok: false, timedOut: false, error: String(err && err.message) };
+      if (!detachOutput && isVmTimeout(err)) return { ok: false, timedOut: true, error: `timed out after ${timeoutMs}ms` };
+      return { ok: false, timedOut: false, error: (detachOutput ? "candidate execution failed (including timeout)" : String(err && err.message)) };
     }
-    return { ok: true, value: sandbox.__out };
+    return detachedResult(sandbox.__out, detachOutput);
   };
 };
 

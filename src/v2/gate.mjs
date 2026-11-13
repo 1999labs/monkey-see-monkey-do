@@ -13,7 +13,9 @@ export async function gate({full=false}={}) {
   check(new Set(shown).size===16&&new Set(held).size===50,'unique examples');
   check(held.every(x=>!shown.includes(x)),`shown/held-out overlap: ${t.id}`);
   check(t.shown.every(x=>equal(truth(x.input),x.output)),`shown truth: ${t.id}`);
-  for(const l of [4,8,16]) check(family.candidates.filter(c=>t.shown.slice(0,l).every(x=>equal(c.fn(x.input),x.output))).length===1,`identifiability: ${t.id}/${l}`);
+  for(const l of [16]) check(family.candidates.filter(c=>t.shown.slice(0,l).every(x=>equal(c.fn(x.input),x.output))).length===1,`identifiability: ${t.id}/${l}`);
+  check(family.candidates.filter(c=>t.shown.slice(0,8).every(x=>equal(c.fn(x.input),x.output))).length>1,`informative transition: ${t.id}`);
+  check(family.candidates.every((c,i)=>i===t.target||t.heldOut.some(x=>!equal(c.fn(x),truth(x)))),`held-out discrimination: ${t.id}`);
   const scored=scoreSee(t,4,`const f=${family.candidates[t.target].source};`);
   check(scored.correct===50&&scored.threw===0,`reference SEE: ${t.id}`);
  }

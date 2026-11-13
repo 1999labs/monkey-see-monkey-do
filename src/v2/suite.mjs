@@ -65,15 +65,32 @@ export function buildPool(seed=DATA_SEED) {
   const targets=shuffle(family.candidates.map((_,i)=>i),rng).slice(0,2);
   for(const [instance,target] of targets.entries()) {
    const domain=shuffle(unique(family.domain(rng)),rng), truth=family.candidates[target].fn;
+   // Reserve independent held-out witnesses against every incorrect rule.
+   // This prevents the shown set from consuming all boundary/length evidence.
+   const witnesses=[];
+   let untested=family.candidates.filter((_,i)=>i!==target);
+   while(untested.length) {
+    const ranked=[...domain].sort((a,b)=>untested.filter(c=>!equal(c.fn(b),truth(b))).length-untested.filter(c=>!equal(c.fn(a),truth(a))).length);
+    const input=ranked[0];
+    if(!untested.some(c=>!equal(c.fn(input),truth(input)))) throw Error(`No held-out witness: ${family.id}`);
+    witnesses.push(input);untested=untested.filter(c=>equal(c.fn(input),truth(input)));
+   }
+   const available=domain.filter(x=>!witnesses.some(w=>equal(w,x)));
+   // Keep a plausible alternative through eight examples. Choose evidence
+   // within that shared region that eliminates other alternatives first.
+   const rivals=family.candidates.filter((_,i)=>i!==target).map(c=>({c,shared:available.filter(x=>equal(c.fn(x),truth(x)))})).filter(x=>x.shared.length>=8);
+   if(!rivals.length) throw Error(`No ambiguous prefix: ${family.id}`);
+   const rival=shuffle(rivals,rng)[0];
    const shown=[];let remaining=[...family.candidates];
    for(let i=0;i<16;i++) {
-    const available=domain.filter(x=>!shown.some(s=>equal(s.input,x)));
-    available.sort((a,b)=>remaining.filter(c=>equal(c.fn(a),truth(a))).length-remaining.filter(c=>equal(c.fn(b),truth(b))).length);
-    const input=available[0],output=truth(input);
+    const choices=(i<8?rival.shared:available).filter(x=>!shown.some(s=>equal(s.input,x)));
+    choices.sort((a,b)=>remaining.filter(c=>equal(c.fn(a),truth(a))).length-remaining.filter(c=>equal(c.fn(b),truth(b))).length);
+    const input=choices[0],output=truth(input);
     shown.push({input,output});remaining=remaining.filter(c=>equal(c.fn(input),output));
-    if(i===3&&remaining.length!==1) throw Error(`Unidentified rule: ${family.id}`);
    }
-   const heldOut=domain.filter(x=>!shown.some(s=>equal(s.input,x))).slice(0,50);
+   if(remaining.length!==1) throw Error(`Unidentified rule: ${family.id}`);
+   const rest=domain.filter(x=>!shown.some(s=>equal(s.input,x))&&!witnesses.some(w=>equal(w,x)));
+   const heldOut=[...witnesses,...rest].slice(0,50);
    see.push({id:`${family.id}-${instance+1}`,family:family.id,target,shown,heldOut});
   }
  }
@@ -128,7 +145,7 @@ export function equalOutput(actual, expected) {
  return expected.every((value, i) => Object.hasOwn(actual, i) && equalOutput(actual[i], value));
 }
 export function scoreSee(task,level,text) {
- const compiled=compileCandidate(text,{entry:'f',isolateCalls:true});
+ const compiled=compileCandidate(text,{entry:'f',isolateCalls:true,detachOutput:true});
  const truth=familyById[task.family].candidates[task.target].fn;
  const cases=[...task.shown.slice(0,level),...task.heldOut.map(input=>({input,output:truth(input)}))];
  const rows=cases.map(({input,output})=>{
@@ -136,10 +153,10 @@ export function scoreSee(task,level,text) {
   catch {return {correct:false,threw:true};}
  });
  const seen=rows.slice(0,level),held=rows.slice(level);
- return {seenCorrect:seen.filter(r=>r.correct).length,seenTotal:level,correct:held.filter(r=>r.correct).length,total:held.length,threw:held.filter(r=>r.threw).length,compileError:compiled.ok?null:compiled.error};
+ return {compatibleCandidates:familyById[task.family].candidates.filter(c=>task.shown.slice(0,level).every(x=>equal(c.fn(x.input),x.output))).length,seenCorrect:seen.filter(r=>r.correct).length,seenTotal:level,correct:held.filter(r=>r.correct).length,total:held.length,threw:held.filter(r=>r.threw).length,compileError:compiled.ok?null:compiled.error};
 }
 export function scoreDo(system,chains,text) {
- const compiled=compileCandidate(text,{entry:'solve',isolateCalls:true,timeoutMs:3000});
+ const compiled=compileCandidate(text,{entry:'solve',isolateCalls:true,detachOutput:true,timeoutMs:3000});
  return chains.map(c=>{
   try {const r=runCandidate(compiled,c.start,c.target);const v=r.ok?verify(system,c.start,c.target,r.value):{solved:false,legal:0,invalid:true};return {id:c.id,length:c.length,...v,error:r.ok?null:r.error};}
   catch(e){return {id:c.id,length:c.length,solved:false,legal:0,invalid:true,error:String(e.message)};}
@@ -153,7 +170,7 @@ export function aggregateSee(rows) {
   robustness:failed?null:mean(scored.map(r=>1-r.threw/r.total)),
   gzMean:failed?null:100*mean(scored.map(r=>r.seenCorrect/r.seenTotal-r.correct/r.total)),
   callFailures:rows.filter(r=>r.callFailure).length,
-  perLevel:Object.fromEntries(LEVELS.map(l=>{const rs=rows.filter(r=>r.level===l);return [l,{scored:SCORED_LEVELS.includes(l),accuracy:rs.some(r=>r.callFailure)?null:mean(rs.map(r=>r.correct/r.total))}];})),
+  perLevel:Object.fromEntries(LEVELS.map(l=>{const rs=rows.filter(r=>r.level===l);return [l,{scored:SCORED_LEVELS.includes(l),meanCompatibleCandidates:mean(rs.map(r=>r.compatibleCandidates??null)),accuracy:rs.some(r=>r.callFailure)?null:mean(rs.map(r=>r.correct/r.total))}];})),
   perFamily:Object.fromEntries([...new Set(scored.map(r=>r.family))].map(f=>{const rs=scored.filter(r=>r.family===f);return [f,rs.some(r=>r.callFailure)?null:mean(rs.map(r=>r.correct/r.total))];}))};
 }
 export function aggregateDo(rows) {

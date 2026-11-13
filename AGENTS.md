@@ -1,9 +1,10 @@
-# Current suite: 2.0.0
+# Current suite: 2.1.0
 
 Default npm commands use `src/v2/`. Read `docs/migration-v2.md` and current
 `docs/calibration.md` before making changes. SEE has 12 instances across six
 declared classes; DO has 60 chains across three systems. Both score out of 50;
-there is no adjusted total. Active prompt pins are `src/v2/prompt-digests.json`.
+there is no adjusted total. SEE scores level 16 only; earlier levels are
+ambiguity diagnostics. Wrong candidate rules must fail held-out witnesses. Active prompt pins are `src/v2/prompt-digests.json`.
 `npm run dry-run` independently searches every chain and must solve 60/60.
 Run `npm test`, `npm run self-test`, and `npm run check-pool`.
 
