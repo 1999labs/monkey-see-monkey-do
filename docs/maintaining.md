@@ -1,111 +1,28 @@
-# Maintaining the suite
+# Maintaining suite 2
 
-| Command | What it does |
-|---|---|
-| `npm test` | Unit and end-to-end tests (no network; the CLI tests use a stubbed fetch) |
-| `npm run self-test` | The 114-check gate every runner enforces before it will score anything |
-| `npm run self-test:full` | Self-test plus a byte-for-byte regeneration of the chain pool (minutes) |
-| `npm run gen-pool` | Regenerates `src/do/chain/pool.json` from seed `0xC0FFEE` |
-| `npm run check-pool` | Regenerates in memory and compares with the file byte for byte |
-| `npm run prompts` | Prints every prompt with its SHA-256 and whether it matches the recorded digest |
-| `npm run acceptance -- --strong <model> --weak <model>` | The publication gate; add `--quick` to rehearse |
-| `npm run diagnose -- -m <model>` | Runs each SEE task several times and saves raw responses, to tell endpoint noise from harness bugs |
-| `node bin/chart.mjs <cohort>.json [<out>.svg]` | Regenerates a cohort chart from its JSON report data |
-| `python3 scripts/build-cohort.py` | Assembles a cohort JSON from the committed combined reports |
-| `python3 scripts/recalc-adjusted.py` | Re-stamps every combined report's 1.1.0 adjusted reading from its stored components |
+Run `npm test`, `npm run self-test`, `npm run dry-run` and `npm run check-pool`
+before publishing changes. `npm run self-test:full` includes deterministic pool
+regeneration. CI runs the tests and gate on Node 20; full checks also run nightly.
 
-Every push and pull request runs `npm test` and `npm run self-test` on Node 20 via
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Pool regeneration is deliberately
-off that path because it takes minutes, so `check-pool` and `self-test:full` run nightly and on
-demand from the Actions tab instead. There are no dependencies to install, so CI only
-checks out and runs Node.
+Active code and data live in `src/v2/`. `version.mjs` pins suite and generator
+versions, `pool.json` holds the versioned data, and `prompt-digests.json` pins all
+51 prompts. Prompt changes require a deliberate suite bump and new pins. Changes
+to data generation require a generator bump and `npm run gen-pool`. Read
+`calibration.md` before changing any experiment-defining parameter.
 
-Changing a prompt changes its digest: update `src/prompt-digests.mjs` and bump the suite version, deliberately.
-Changing the chain pool: bump `GENERATOR_VERSION` in `src/do/chain/pool.mjs`, run
-`npm run gen-pool`, and run `npm run check-pool`; loading a pool built by a different
-generator fails loudly.
+Commit combined model reports with their cohort evidence. Keep raw per-eval reports
+local. Do not delete unexplained files in `results/`; other sessions may own them.
+Check `git log -1` before assuming HEAD is unchanged. Run model cohorts sequentially.
+No report writer may silently overwrite evidence.
 
-Every number the suite asserts (the naive baseline at every sample level, the
-per-level GZ band, the chain-engagement random baseline, the empty-array
-clawback pin, the reference solver in dry-run vs real-mode, the chain
-pool's shape, and the adjusted total's weights) is recorded in
-[`calibration.md`](calibration.md), with the commands that re-derive
-each one. Read it before changing a held-out set, the chain pool, the
-BFS cap, or the adjusted weights.
+`npm run acceptance -- --strong MODEL --weak MODEL` collects three repeats of each
+model. It checks completeness and at most two points of observed spread on each
+axis. It does not enforce the expected ranking or certify general validity. Reports
+are saved in the printed temporary directory; copy combined evidence into `results/`
+and commit it before publishing a cohort. Provider and effort settings must be
+recorded and comparable. The names strong and weak are historical CLI vocabulary.
 
-## The publication gate
-
-`npm run acceptance` runs every criterion below and writes
-`results/acceptance-<date>-<time>.json`. `--quick` rehearses on a subset and can never
-report a pass.
-
-| Criterion | Requirement |
-|---|---|
-| Discriminates strong from weak | A known-strong model outscores a 7B model on both evals |
-| Naive baseline lands in band | 20–45% on every SEE task |
-| Reference solver wins every chain | The dry-run path plays all 50 chains and scores 50/50 |
-| Chain-naive baseline floors at 0 | An empty-array submission scores 0/50 DO with `chainEngagementRate = 0` and the adjusted figure floors at 0 |
-| Variance is low | Three runs at `temperature: 0` differ by ≤ 2 points |
-| Self-test passes | Every self-test check (114 checks at suite 1.1.0) |
-
-If any criterion fails, the eval is not published. An eval that does not
-discriminate is worse than no eval, because it manufactures false confidence.
-
-## What gets committed
-
-Only the **combined** report is committed: `results/combined-<model>-<date>-<time>.json`. It is
-the evidence for every number the cohort tables and charts print, and a chart whose
-source reports are absent cannot be audited. The time component (UTC) keeps a same-day
-re-run from silently overwriting earlier evidence. The per-eval reports stay local and are
-regenerated by the next run. `AGENTS.md` at the repo root carries the full working
-conventions (one evidence-writing session at a time, commit evidence promptly, never
-blanket-delete in `results/`).
-
-## Repository layout
-
-```
-monkey-see-monkey-do/
-├── config/models.example.json   model registry template
-├── AGENTS.md                    working conventions for agent sessions
-├── docs/calibration.md          every asserted number, and how it was measured
-├── docs/scoring-detail.md       the full scoring machinery this file summarizes
-├── docs/scoring-models.md       providers, keys, custom registries, OpenRouter pinning
-├── results/combined-*.json      committed: the evidence for every published score
-├── docs/ollama-local-models.*   committed cohort JSON + chart, derived from results/
-├── src/
-│   ├── adapters/                openai.mjs, responses.mjs, anthropic.mjs, ollama.mjs, registry.mjs
-│   ├── sandbox.mjs              node:vm execution, per-call timeout, code extraction
-│   ├── cli.mjs                  shared runner plumbing, temperature rule, self-test gate
-│   ├── key.mjs                  API key resolution, shared by both evals
-│   ├── fingerprint.mjs          response hashing and reproducibility, shared by both evals
-│   ├── self-test.mjs            the checks that must pass before any score is recorded,
-│   │                            and the `npm run self-test` entry point
-│   ├── prompt-digests.mjs       recorded SHA-256 of every prompt
-│   ├── report.mjs               JSON reports and the limitations they carry
-│   ├── adjusted.mjs             the adjusted total: folds GZ_mean and chain-engagement rate into
-│   │                            one figure, reported beside SEE + DO and never inside them
-│   ├── run-all.mjs              both evals, one model, combined report
-│   ├── see/                     SEE only: reference.mjs (ground truth), tasks/*.json,
-│   │                            tasks.mjs, prompt, score, run-levels, run
-│   └── do/                      DO only — the chain eval files live entirely under chain/:
-│       └── chain/
-│           ├── rules.mjs        5 rewrite rules over 7 symbols {A,B,C,D,X,Y,Z}
-│           ├── reference.mjs    the BFS reference solver (dry-run 50/50,
-│           │                     real-mode 45/50 with MAX_STATES=50000)
-│           ├── generator.mjs    chain pool generator (seed 0xC0FFEE, 5 bands)
-│           ├── pool.mjs         chain pool loader / GENERATOR_VERSION stamp / sha256
-│           ├── pool.json        50 chains, sha256 dc98e89e5541b9d8…, seed 0xC0FFEE
-│           ├── prompt.mjs       chain DO prompt + digest pin + canary
-│           ├── run.mjs          the chain DO model-path runner
-│           ├── score.mjs        per-chain full/partial/empty + chainEngagementRate
-│           └── dry-run.mjs      the chain DO dry-run entry point
-├── bin/                         command-line entry points, one per npm script:
-│                                gen-chain-pool, acceptance, diagnose, providers,
-│                                show-prompts, chart (cohort JSON → SVG)
-├── scripts/                     re-derivation scripts for baseline + cohort numbers
-└── tests/                       node:test suites
-```
-
-`src/see/` and `src/do/` hold only what is private to their own eval. Anything both
-evals need (key resolution, response fingerprinting, the sandbox, reporting, the adjusted
-total) lives at the top of `src/`, so neither eval's folder reaches into the other's.
+V1 engines and commands are historical compatibility paths. Use `legacy:` commands
+only for explicitly labeled historical reproduction. Current charts need a v2-aware
+consumer of separate SEE and DO summaries; the legacy adjusted-score chart is not
+such a consumer.

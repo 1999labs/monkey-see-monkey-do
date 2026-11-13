@@ -1,3 +1,5 @@
+// Frozen v1 digest exports for historical runners. Current v2 pins live in src/v2/prompt-digests.json.
+export { SUITE_VERSION as CURRENT_SUITE_VERSION } from "./v2/version.mjs";
 // Recorded SHA-256 of every prompt, exactly as sent (no trailing newline).
 //
 // These are pinned so that a digest mismatch means the

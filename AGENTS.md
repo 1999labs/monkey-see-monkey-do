@@ -1,3 +1,16 @@
+# Current suite: 2.0.0
+
+Default npm commands use `src/v2/`. Read `docs/migration-v2.md` and current
+`docs/calibration.md` before making changes. SEE has 12 instances across six
+declared classes; DO has 60 chains across three systems. Both score out of 50;
+there is no adjusted total. Active prompt pins are `src/v2/prompt-digests.json`.
+`npm run dry-run` independently searches every chain and must solve 60/60.
+Run `npm test`, `npm run self-test`, and `npm run check-pool`.
+
+The remaining instructions below describe the historical v1 implementation;
+its commands now require the `legacy:` prefix. Evidence preservation, provider
+pinning, failure labeling, sequential cohort runs and no-overwrite rules still apply.
+
 # Working in this repository
 
 Two automated model evals with no dependencies and no build step. Monkey See scores
