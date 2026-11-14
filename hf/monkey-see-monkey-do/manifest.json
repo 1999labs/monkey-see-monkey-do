@@ -1,0 +1,66 @@
+{
+  "algorithm": "sha256",
+  "scope": "All package files except manifest.json itself",
+  "files": [
+    {
+      "path": "data/do_chains.jsonl",
+      "bytes": 101074,
+      "sha256": "e6b5667bfa53d4c79c0dade86c2f0461f0989de49058cb25687295a0466c1f19"
+    },
+    {
+      "path": "data/do_systems.jsonl",
+      "bytes": 8618,
+      "sha256": "ba94be5c6e106ec3dfe6c6939e2c8501011b6c1ec70ed2eb4124479c56ef8a18"
+    },
+    {
+      "path": "data/see_prompts.jsonl",
+      "bytes": 41593,
+      "sha256": "128dbc4fc8527ec4a60516c0a1211f97b2720bd2ffaf45d79e84f75e5be1df39"
+    },
+    {
+      "path": "data/see_tasks.jsonl",
+      "bytes": 55231,
+      "sha256": "09e471aafc64806905fec00c9892bffe24bb85699cc5688039e84400bcbaa452"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1072,
+      "sha256": "41e3e6b12f277cc4e29fe926760b7b969143808c716d891ad13a30dd2eb779fc"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 3215,
+      "sha256": "b3a5a752af6402d328b69e70401795c90c13934edc514d6524f3a07b9e1da677"
+    },
+    {
+      "path": "README.md",
+      "bytes": 11503,
+      "sha256": "117bf6bbb5aa82fd3f98af0b27abf3895e1ac512deae64708a1541d2f9afd249"
+    },
+    {
+      "path": "rules.json",
+      "bytes": 8142,
+      "sha256": "0a8055153920b67930505a0f358c6069fe4d218bd11282495e9751f6df8b1f43"
+    },
+    {
+      "path": "source/pool.json",
+      "bytes": 212717,
+      "sha256": "1b86f5d3d2627ffee2e28438e7be4a18119435b95b38becd0cd084bcd41723a9"
+    },
+    {
+      "path": "source/prompt-digests.json",
+      "bytes": 4738,
+      "sha256": "f2463956eef76be5d1059dd2ef18470b7050c2bba97709b927217f0f2c0f165e"
+    },
+    {
+      "path": "UPLOAD.md",
+      "bytes": 1593,
+      "sha256": "d2ce3441babf02d903acb8a7d9d0f1c9bb2eda5a052c39a2c373b76f4b6f6184"
+    },
+    {
+      "path": "verify.mjs",
+      "bytes": 4336,
+      "sha256": "49cdf46b9e1b9b5e344e6b0f0dc8ecd4979053ab3d3d927c41443758792f1258"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "dataset_id": "noahmclaughlin/monkey-see-monkey-do",
+  "suite_version": "2.1.0",
+  "hugging_face_revision": "986a9628c900ef961560c60d031ad8d6d6bf8166",
+  "hugging_face_url": "https://huggingface.co/datasets/noahmclaughlin/monkey-see-monkey-do",
+  "source_commit": "6b1a6be1975561240edfd4dffab77236b036798e",
+  "pool_sha256": "aaa29189f284bb9624a5fc45649c13ac8e8adc625540614c9e93744324508ae6",
+  "exporter_sha256": "300f3ee2e68bc89d78c5b72a834b2354e59f25cb8678e26e7893e1b3ea14b84e",
+  "manifest_sha256": "cac122707fe536e01166ba0afdbf5cbbc0dfd0d0b6d40fa511c196d92a9bc185",
+  "package_directory": "hf/monkey-see-monkey-do",
+  "verification": "Downloaded exact Hub revision and passed standalone package/reference verification."
+}

@@ -1,0 +1,279 @@
+{
+  "suite_version": "2.1.0",
+  "see": [
+    {
+      "family_id": "threshold",
+      "input_type": "integer",
+      "hypothesis_class": "f(n) is n*n for n <= t, and n*n-c otherwise. t is one of -3, 0, 3; c is one of 7, 11.",
+      "candidates": [
+        {
+          "index": 0,
+          "function_js": "n => n <= -3 ? n*n : n*n-7"
+        },
+        {
+          "index": 1,
+          "function_js": "n => n <= -3 ? n*n : n*n-11"
+        },
+        {
+          "index": 2,
+          "function_js": "n => n <= 0 ? n*n : n*n-7"
+        },
+        {
+          "index": 3,
+          "function_js": "n => n <= 0 ? n*n : n*n-11"
+        },
+        {
+          "index": 4,
+          "function_js": "n => n <= 3 ? n*n : n*n-7"
+        },
+        {
+          "index": 5,
+          "function_js": "n => n <= 3 ? n*n : n*n-11"
+        }
+      ],
+      "naive_baseline_js": "n => n*n"
+    },
+    {
+      "family_id": "modular",
+      "input_type": "integer",
+      "hypothesis_class": "f(n) is n+b when n is divisible by d, and n-b otherwise. d is one of 2, 3, 4; b is one of 1, 3.",
+      "candidates": [
+        {
+          "index": 0,
+          "function_js": "n => n % 2 === 0 ? n+1 : n-1"
+        },
+        {
+          "index": 1,
+          "function_js": "n => n % 2 === 0 ? n+3 : n-3"
+        },
+        {
+          "index": 2,
+          "function_js": "n => n % 3 === 0 ? n+1 : n-1"
+        },
+        {
+          "index": 3,
+          "function_js": "n => n % 3 === 0 ? n+3 : n-3"
+        },
+        {
+          "index": 4,
+          "function_js": "n => n % 4 === 0 ? n+1 : n-1"
+        },
+        {
+          "index": 5,
+          "function_js": "n => n % 4 === 0 ? n+3 : n-3"
+        }
+      ],
+      "naive_baseline_js": "n => n+1"
+    },
+    {
+      "family_id": "conditional-string",
+      "input_type": "string",
+      "hypothesis_class": "If the first character (case insensitive) is in a selected group, transform the string; otherwise return it unchanged. The group is one of aeiou, abc, xyz. The transform either uppercases the first character or reverses the entire string. Empty strings are unchanged.",
+      "candidates": [
+        {
+          "index": 0,
+          "function_js": "s => s.length && \"aeiou\".includes(s[0].toLowerCase()) ? s[0].toUpperCase()+s.slice(1) : s"
+        },
+        {
+          "index": 1,
+          "function_js": "s => s.length && \"aeiou\".includes(s[0].toLowerCase()) ? [...s].reverse().join(\"\") : s"
+        },
+        {
+          "index": 2,
+          "function_js": "s => s.length && \"abc\".includes(s[0].toLowerCase()) ? s[0].toUpperCase()+s.slice(1) : s"
+        },
+        {
+          "index": 3,
+          "function_js": "s => s.length && \"abc\".includes(s[0].toLowerCase()) ? [...s].reverse().join(\"\") : s"
+        },
+        {
+          "index": 4,
+          "function_js": "s => s.length && \"xyz\".includes(s[0].toLowerCase()) ? s[0].toUpperCase()+s.slice(1) : s"
+        },
+        {
+          "index": 5,
+          "function_js": "s => s.length && \"xyz\".includes(s[0].toLowerCase()) ? [...s].reverse().join(\"\") : s"
+        }
+      ],
+      "naive_baseline_js": "s => s.length ? s[0].toUpperCase()+s.slice(1) : s"
+    },
+    {
+      "family_id": "rotation",
+      "input_type": "string",
+      "hypothesis_class": "Rotate the string cyclically by k positions, either left or right. k is one of 1, 2, 3. Reduce k modulo string length; empty strings are unchanged.",
+      "candidates": [
+        {
+          "index": 0,
+          "function_js": "s => { if (!s.length) return s; const k=1%s.length; return s.slice(k)+s.slice(0,k); }"
+        },
+        {
+          "index": 1,
+          "function_js": "s => { if (!s.length) return s; const k=1%s.length; return k ? s.slice(-k)+s.slice(0,-k) : s; }"
+        },
+        {
+          "index": 2,
+          "function_js": "s => { if (!s.length) return s; const k=2%s.length; return s.slice(k)+s.slice(0,k); }"
+        },
+        {
+          "index": 3,
+          "function_js": "s => { if (!s.length) return s; const k=2%s.length; return k ? s.slice(-k)+s.slice(0,-k) : s; }"
+        },
+        {
+          "index": 4,
+          "function_js": "s => { if (!s.length) return s; const k=3%s.length; return s.slice(k)+s.slice(0,k); }"
+        },
+        {
+          "index": 5,
+          "function_js": "s => { if (!s.length) return s; const k=3%s.length; return k ? s.slice(-k)+s.slice(0,-k) : s; }"
+        }
+      ],
+      "naive_baseline_js": "s => s.slice(1)+s.slice(0,1)"
+    },
+    {
+      "family_id": "distinct-rank",
+      "input_type": "array of integers",
+      "hypothesis_class": "Return the kth distinct value in ascending or descending order. k is one of 1, 2, 3. Return null if fewer than k distinct values exist.",
+      "candidates": [
+        {
+          "index": 0,
+          "function_js": "a => { const d=[...new Set(a)].sort((x,y)=>1*(x-y)); return d.length < 1 ? null : d[0]; }"
+        },
+        {
+          "index": 1,
+          "function_js": "a => { const d=[...new Set(a)].sort((x,y)=>-1*(x-y)); return d.length < 1 ? null : d[0]; }"
+        },
+        {
+          "index": 2,
+          "function_js": "a => { const d=[...new Set(a)].sort((x,y)=>1*(x-y)); return d.length < 2 ? null : d[1]; }"
+        },
+        {
+          "index": 3,
+          "function_js": "a => { const d=[...new Set(a)].sort((x,y)=>-1*(x-y)); return d.length < 2 ? null : d[1]; }"
+        },
+        {
+          "index": 4,
+          "function_js": "a => { const d=[...new Set(a)].sort((x,y)=>1*(x-y)); return d.length < 3 ? null : d[2]; }"
+        },
+        {
+          "index": 5,
+          "function_js": "a => { const d=[...new Set(a)].sort((x,y)=>-1*(x-y)); return d.length < 3 ? null : d[2]; }"
+        }
+      ],
+      "naive_baseline_js": "a => a.length < 2 ? null : [...a].sort((x,y)=>y-x)[1]"
+    },
+    {
+      "family_id": "filter-order",
+      "input_type": "array of integers",
+      "hypothesis_class": "Keep only values divisible by d, preserving duplicates. d is one of 2, 3, 4. Return them either in their original order or sorted numerically ascending.",
+      "candidates": [
+        {
+          "index": 0,
+          "function_js": "a => a.filter(x=>x%2===0)"
+        },
+        {
+          "index": 1,
+          "function_js": "a => a.filter(x=>x%2===0).sort((x,y)=>x-y)"
+        },
+        {
+          "index": 2,
+          "function_js": "a => a.filter(x=>x%3===0)"
+        },
+        {
+          "index": 3,
+          "function_js": "a => a.filter(x=>x%3===0).sort((x,y)=>x-y)"
+        },
+        {
+          "index": 4,
+          "function_js": "a => a.filter(x=>x%4===0)"
+        },
+        {
+          "index": 5,
+          "function_js": "a => a.filter(x=>x%4===0).sort((x,y)=>x-y)"
+        }
+      ],
+      "naive_baseline_js": "a => a.filter(x=>x%2===0)"
+    }
+  ],
+  "do": [
+    {
+      "id": "growth",
+      "rules": [
+        {
+          "id": "R1",
+          "from": "A",
+          "to": "xB"
+        },
+        {
+          "id": "R2",
+          "from": "B",
+          "to": "yA"
+        },
+        {
+          "id": "R3",
+          "from": "A",
+          "to": "zA"
+        },
+        {
+          "id": "R4",
+          "from": "B",
+          "to": "wB"
+        }
+      ]
+    },
+    {
+      "id": "swaps",
+      "rules": [
+        {
+          "id": "R1",
+          "from": "AB",
+          "to": "BA"
+        },
+        {
+          "id": "R2",
+          "from": "BA",
+          "to": "AB"
+        },
+        {
+          "id": "R3",
+          "from": "CD",
+          "to": "DC"
+        },
+        {
+          "id": "R4",
+          "from": "DC",
+          "to": "CD"
+        }
+      ]
+    },
+    {
+      "id": "reduction",
+      "rules": [
+        {
+          "id": "R1",
+          "from": "AA",
+          "to": "A"
+        },
+        {
+          "id": "R2",
+          "from": "BB",
+          "to": "B"
+        },
+        {
+          "id": "R3",
+          "from": "AB",
+          "to": "C"
+        },
+        {
+          "id": "R4",
+          "from": "AC",
+          "to": "C"
+        },
+        {
+          "id": "R5",
+          "from": "CB",
+          "to": "C"
+        }
+      ]
+    }
+  ]
+}

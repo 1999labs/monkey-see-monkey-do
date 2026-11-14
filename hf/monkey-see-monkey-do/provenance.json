@@ -1,0 +1,101 @@
+{
+  "schema": "monkey-hf-package@1",
+  "dataset_id": "noahmclaughlin/monkey-see-monkey-do",
+  "suite_version": "2.1.0",
+  "generator_version": "2.1.0",
+  "seed": 12648430,
+  "seed_hex": "0xC0FFEE",
+  "source_repository": "https://github.com/1999labs/monkey-see-monkey-do",
+  "source_commit": "6b1a6be1975561240edfd4dffab77236b036798e",
+  "source_commit_time": "2026-11-13T03:11:40-05:00",
+  "pool_sha256": "aaa29189f284bb9624a5fc45649c13ac8e8adc625540614c9e93744324508ae6",
+  "pool_hash_algorithm": "SHA-256 of JSON.stringify(pool without sha256), not file bytes",
+  "source_files": [
+    {
+      "path": "LICENSE",
+      "sha256": "41e3e6b12f277cc4e29fe926760b7b969143808c716d891ad13a30dd2eb779fc",
+      "bytes": 1072
+    },
+    {
+      "path": "src/v2/version.mjs",
+      "sha256": "e652f563fc69e8aa6d7eefd7b22d4bdb6c249adc7217040ab6f839c7c803487d",
+      "bytes": 302
+    },
+    {
+      "path": "src/v2/suite.mjs",
+      "sha256": "439ede8c1009653954af38e498eddd0b41ed016ce32aff55c2bdf5304565e19c",
+      "bytes": 13194
+    },
+    {
+      "path": "src/v2/families.mjs",
+      "sha256": "ed0a6a8a1e914b27659d77bf1aa77103471fe4178119e5ae97a3c0d7f3b9987d",
+      "bytes": 3876
+    },
+    {
+      "path": "src/v2/util.mjs",
+      "sha256": "740d03f4c1b3a0fc9aa4595d945372c25ecbf8a31c89c95d6f50bf7c969de548",
+      "bytes": 912
+    },
+    {
+      "path": "src/v2/pool.json",
+      "sha256": "1b86f5d3d2627ffee2e28438e7be4a18119435b95b38becd0cd084bcd41723a9",
+      "bytes": 212717
+    },
+    {
+      "path": "src/v2/prompt-digests.json",
+      "sha256": "f2463956eef76be5d1059dd2ef18470b7050c2bba97709b927217f0f2c0f165e",
+      "bytes": 4738
+    },
+    {
+      "path": "src/v2/gate.mjs",
+      "sha256": "016f1f6871bcf4c1ff4b4a6924abe432af13ddd45e78c808f83c6440a63609d5",
+      "bytes": 2654
+    },
+    {
+      "path": "src/sandbox.mjs",
+      "sha256": "53f7df7d41ae8259acc24624ce71d5eb5255d346534b0e32d7dab58d71f201eb",
+      "bytes": 18066
+    },
+    {
+      "path": "docs/calibration.md",
+      "sha256": "420f9de495b45e0de38d4aed1dafba1f214f8fbb36e0c922de227ea7b8d69b54",
+      "bytes": 2943
+    },
+    {
+      "path": "docs/scoring-detail.md",
+      "sha256": "81b415db25ceba2d599d1a004e19285a3fc8cb0198e51f23ccc0161333e743e9",
+      "bytes": 3371
+    }
+  ],
+  "exporter_sha256": "300f3ee2e68bc89d78c5b72a834b2354e59f25cb8678e26e7893e1b3ea14b84e",
+  "validation": {
+    "self_test": "passed",
+    "full_regeneration": true,
+    "checks": 267
+  },
+  "counts": {
+    "see_tasks": 12,
+    "see_prompts": 48,
+    "shown_examples": 192,
+    "held_out_examples": 600,
+    "do_chains": 60,
+    "do_systems": 3,
+    "see_families": 6
+  },
+  "scored_see_levels": [
+    16
+  ],
+  "diagnostic_see_levels": [
+    2,
+    4,
+    8
+  ],
+  "transformations": [
+    "SEE mixed-type input/output values encoded as JSON strings",
+    "Held-out reference outputs derived from the selected reference function",
+    "Prompt text and hashes preserved exactly",
+    "DO recorded legal reference paths preserved exactly"
+  ],
+  "privacy": "Synthetic task data only; no model responses, credentials or user records included",
+  "generated_at_policy": "No wall-clock export time: identical source and exporter produce identical bytes"
+}
